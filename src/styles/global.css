@@ -1,0 +1,1 @@
+:root { font-family: system-ui, sans-serif; color: #182230; background: #f7f8fa; } * { box-sizing: border-box; } body { margin: 0; min-width: 320px; } .app-layout { max-width: 1200px; margin: auto; padding: 48px 24px; } h1 { font-size: 28px; } p { color: #667085; }

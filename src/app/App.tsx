@@ -23,6 +23,7 @@ import {
   CircleAlert,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { createPortal } from "react-dom";
 import "./app.css";
 const datasets = ["GPQA", "MMMU-Pro", "AutomationBench"];
 const descriptions = [
@@ -31,12 +32,121 @@ const descriptions = [
   "面向通用自动化与工具使用能力的 Agent 评测集（公开任务）。",
 ];
 const menus = [
+  { id: "home", label: "首页", icon: Layers },
   { id: "console", label: "控制台", icon: Home },
   { id: "config", label: "测试配置", icon: SlidersHorizontal },
   { id: "tasks", label: "任务管理", icon: ClipboardList },
   { id: "reports", label: "报告管理", icon: ChartNoAxesColumnIncreasing },
   { id: "leaderboard", label: "测评榜单", icon: Trophy },
 ];
+
+function DatasetSummary({
+  items,
+  preferred,
+}: {
+  items: string[];
+  preferred?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const ordered =
+    preferred && items.includes(preferred)
+      ? [preferred, ...items.filter((d) => d !== preferred)]
+      : items;
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", close);
+    return () => document.removeEventListener("keydown", close);
+  }, [open]);
+  const filtered = ordered.filter((d) =>
+    d.toLowerCase().includes(query.toLowerCase()),
+  );
+  return (
+    <div className="dataset-summary">
+      {ordered.slice(0, 2).map((d, i) => (
+        <span
+          key={d}
+          title={d}
+          className={`badge dataset-tag ${i === 1 ? "dataset-second" : ""}`}
+        >
+          {d}
+        </span>
+      ))}
+      {items.length > 2 && (
+        <button
+          className="dataset-more"
+          aria-label={`查看全部 ${items.length} 个数据集`}
+          aria-haspopup="dialog"
+          onClick={() => {
+            setQuery("");
+            setOpen(true);
+          }}
+        >
+          <span className="dataset-desktop-count">+{items.length - 2}</span>
+          <span className="dataset-mobile-count">+{items.length - 1}</span>
+        </button>
+      )}
+      {items.length === 2 && (
+        <button
+          className="dataset-more dataset-mobile-more"
+          aria-label="查看全部 2 个数据集"
+          onClick={() => {
+            setQuery("");
+            setOpen(true);
+          }}
+        >
+          +1
+        </button>
+      )}
+      {open &&
+        createPortal(
+          <div className="dataset-overlay" onClick={() => setOpen(false)}>
+            <section
+              className="dataset-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-label="完整数据集列表"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="spread">
+                <h3>
+                  测评数据集 <Badge>共 {items.length} 个</Badge>
+                </h3>
+                <button autoFocus onClick={() => setOpen(false)}>
+                  关闭
+                </button>
+              </div>
+              <label className="search">
+                <Search size={16} />
+                <input
+                  aria-label="搜索数据集"
+                  placeholder="搜索数据集名称"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+              </label>
+              <ul>
+                {filtered.map((d) => (
+                  <li key={d}>
+                    {d}
+                    {d === preferred && <Badge>当前筛选</Badge>}
+                  </li>
+                ))}
+              </ul>
+              {!filtered.length && (
+                <div className="empty">未找到匹配的数据集</div>
+              )}
+            </section>
+          </div>,
+          document.body,
+        )}
+    </div>
+  );
+}
+
 function Card({
   title,
   children,
@@ -129,7 +239,7 @@ const reports = [26, 25, 24, 23, 22, 21].map((n, i) => ({
   date: `2026-11-${i < 2 ? "09" : i < 4 ? "08" : "07"} ${["14:30", "11:20", "17:40", "10:15", "16:50", "10:30"][i]}`,
 }));
 export function App() {
-  const [page, setPage] = useState(location.hash.slice(1) || "console");
+  const [page, setPage] = useState(location.hash.slice(1) || "home");
   const [reportId, setReportId] = useState("RPT-023");
   const [toast, setToast] = useState("");
   const go = (p: string, id?: string) => {
@@ -139,7 +249,7 @@ export function App() {
     window.scrollTo(0, 0);
   };
   useEffect(() => {
-    const fn = () => setPage(location.hash.slice(1) || "console");
+    const fn = () => setPage(location.hash.slice(1) || "home");
     window.addEventListener("hashchange", fn);
     return () => window.removeEventListener("hashchange", fn);
   }, []);
@@ -205,6 +315,7 @@ export function App() {
               {
                 (
                   {
+                    home: "从一次测评开始，让模型能力清晰可见。",
                     console: "配置模型，开启新一轮测评。",
                     config: "按模型与数据集分别维护测试参数。",
                     tasks: "追踪每一次测评，定位每一个问题。",
@@ -223,6 +334,7 @@ export function App() {
             </button>
           )}
         </header>
+        {page === "home" && <Overview go={go} />}
         {page === "console" && <Console go={go} notify={setToast} />}
         {page === "config" && <Config go={go} notify={setToast} />}
         {
@@ -746,9 +858,7 @@ function Tasks({ go }: { go: (p: string, id?: string) => void }) {
                       {r.version} <Badge tone="neutral">v1.3</Badge>
                     </td>
                     <td>
-                      {r.datasets.map((d) => (
-                        <Badge key={d}>{d}</Badge>
-                      ))}
+                      <DatasetSummary items={r.datasets} preferred={dataset} />
                     </td>
                     <td>
                       <Badge
@@ -1013,8 +1123,8 @@ function Reports({ go }: { go: (p: string, id?: string) => void }) {
                     </td>
                     <td>{r.version}</td>
                     <td>
-                      GPQA + MMMU-Pro +<br />
-                      AutomationBench<small>有效覆盖 3 / 3 · 示例</small>
+                      <DatasetSummary items={datasets} preferred={dataset} />
+                      <small>有效覆盖 3 / 3 · 示例</small>
                     </td>
                     <td>{r.date}</td>
                     <td>
@@ -1513,6 +1623,153 @@ function Leaderboard({ go }: { go: (p: string, id?: string) => void }) {
           <p>性能榜单：吞吐越高越好；延迟越低越好。按可比测试条件分别排名。</p>
         </Card>
       </div>
+    </div>
+  );
+}
+
+function Overview({ go }: { go: (p: string, id?: string) => void }) {
+  return (
+    <div className="stack overview">
+      <section className="overview-hero">
+        <div>
+          <span className="overview-eyebrow">AUTOMATED EVALUATION</span>
+          <h2>从模型接入，到洞察每一次表现。</h2>
+          <p>
+            统一管理模型测评、追踪执行过程，
+            <br />
+            在同一工作空间查看结果、分析差距与比较表现。
+          </p>
+          <div className="inline">
+            <button className="primary" onClick={() => go("console")}>
+              <Play size={17} />
+              开始测评
+            </button>
+            <button onClick={() => go("reports")}>
+              浏览测评报告
+              <ChevronRight size={16} />
+            </button>
+          </div>
+        </div>
+        <div className="hero-workflow">
+          <span className="muted">测评工作流</span>
+          {[
+            {
+              icon: SlidersHorizontal,
+              name: "接入与配置",
+              sub: "选择模型 · 独立数据集参数",
+            },
+            {
+              icon: Activity,
+              name: "执行与追踪",
+              sub: "任务进度 · 日志与关键轨迹",
+            },
+            {
+              icon: Sparkles,
+              name: "结果与洞察",
+              sub: "测评报告 · 基准对比 · 自动分析",
+            },
+          ].map((s, i) => (
+            <div className="workflow-step" key={s.name}>
+              <s.icon size={21} />
+              <div>
+                <b>{s.name}</b>
+                <small>{s.sub}</small>
+              </div>
+              <span className="muted">0{i + 1}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+      <div className="spread">
+        <h3>工作空间概览</h3>
+        <Badge>静态示例</Badge>
+      </div>
+      <div className="stats">
+        {[
+          { name: "接入模型", value: "2", icon: Layers },
+          { name: "测评任务", value: "24", icon: ClipboardList },
+          { name: "执行中", value: "2", icon: Activity },
+          { name: "测评报告", value: String(reports.length), icon: FileText },
+        ].map((s) => (
+          <Card key={s.name}>
+            <div className="stat-icon">
+              <s.icon />
+            </div>
+            <div>
+              <span className="muted">{s.name}</span>
+              <strong>{s.value}</strong>
+            </div>
+          </Card>
+        ))}
+      </div>
+      <div className="overview-lower">
+        <Card
+          title={
+            <div className="spread">
+              <span>最近报告</span>
+              <button className="link" onClick={() => go("reports")}>
+                查看全部
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          }
+        >
+          {reports.slice(0, 3).map((r) => (
+            <button
+              className="recent-report"
+              key={r.id}
+              onClick={() => go("detail", r.id)}
+            >
+              <div className="report-file">
+                <FileText size={22} />
+              </div>
+              <div>
+                <b>{r.model}</b>
+                <small>
+                  {r.id} · {r.version} · {r.date}
+                </small>
+              </div>
+              <Badge
+                tone={
+                  r.status === "分析成功"
+                    ? "green"
+                    : r.status === "分析失败"
+                      ? "orange"
+                      : "purple"
+                }
+              >
+                {r.status}
+              </Badge>
+              <ChevronRight size={16} />
+            </button>
+          ))}
+        </Card>
+        <Card title="快速入口">
+          <div className="quick-grid">
+            {menus
+              .filter((m) => ["config", "tasks", "leaderboard"].includes(m.id))
+              .map((m) => (
+                <button key={m.id} onClick={() => go(m.id)}>
+                  <m.icon size={22} />
+                  <div>
+                    <b>{m.label}</b>
+                    <small>
+                      {m.id === "config"
+                        ? "维护独立测评参数"
+                        : m.id === "tasks"
+                          ? "追踪任务与执行轨迹"
+                          : "按可比条件查看排名"}
+                    </small>
+                  </div>
+                  <ChevronRight size={15} />
+                </button>
+              ))}
+          </div>
+        </Card>
+      </div>
+      <Notice>
+        当前为前端静态预览。配置、任务、报告与分析均为示例，不会调用模型或执行真实测评。
+      </Notice>
     </div>
   );
 }

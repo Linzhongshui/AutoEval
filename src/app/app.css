@@ -1649,3 +1649,245 @@ td small .badge,
     font-size: var(--text-secondary);
   }
 }
+
+.dataset-summary {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: nowrap;
+  width: 230px;
+  max-width: 230px;
+}
+.dataset-tag {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  min-width: 0;
+  max-width: 110px;
+}
+.dataset-more {
+  flex-shrink: 0;
+  padding: 3px 7px;
+  font-size: 12px;
+  line-height: 1.5;
+  border: 1px solid #ded8ff;
+  color: var(--primary);
+  background: #f3f0ff;
+}
+.dataset-mobile-more {
+  display: none;
+}
+.dataset-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: #17142e50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.dataset-dialog {
+  width: 420px;
+  max-width: 100%;
+  max-height: 80vh;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 16px 64px #16122930;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.dataset-dialog .search {
+  flex: none;
+  min-width: 0;
+}
+.dataset-dialog ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow: auto;
+  max-height: 340px;
+}
+.dataset-dialog li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+@media (max-width: 600px) {
+  .dataset-summary {
+    width: 150px;
+    max-width: 150px;
+  }
+  .dataset-second {
+    display: none;
+  }
+  .dataset-mobile-more {
+    display: inline-flex;
+  }
+}
+.dataset-mobile-count {
+  display: none;
+}
+@media (max-width: 600px) {
+  .dataset-desktop-count {
+    display: none;
+  }
+  .dataset-mobile-count {
+    display: inline;
+  }
+}
+.overview-hero {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 48px;
+  background: #efedff;
+  border: 1px solid #e2dcff;
+  border-radius: 14px;
+  padding: 36px;
+}
+.overview-eyebrow {
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: #7164b8;
+  font-weight: 650;
+}
+.overview-hero h2 {
+  font-size: 29px;
+  border: 0;
+  padding: 0;
+  margin: 15px 0;
+  letter-spacing: -0.7px;
+  line-height: 1.5;
+}
+.overview-hero p {
+  color: #77728f;
+  line-height: 1.9;
+  margin: 0 0 25px;
+}
+.hero-workflow {
+  background: #ffffffa8;
+  border: 1px solid #ffffff;
+  border-radius: 10px;
+  padding: 18px 22px;
+}
+.workflow-step {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 15px 0;
+  border-bottom: 1px solid #e9e6f5;
+}
+.workflow-step:last-child {
+  border: 0;
+}
+.workflow-step > svg {
+  color: var(--primary);
+}
+.workflow-step > div {
+  flex: 1;
+}
+.workflow-step small {
+  display: block;
+  color: #89839e;
+  font-size: 11px;
+  margin-top: 3px;
+}
+.overview-lower {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr;
+  gap: 18px;
+}
+.recent-report {
+  display: flex;
+  width: 100%;
+  gap: 14px;
+  justify-content: flex-start;
+  padding: 17px 0;
+  border: 0;
+  border-bottom: 1px solid #eeeef6;
+  border-radius: 0;
+  background: none;
+  text-align: left;
+}
+.recent-report:last-child {
+  border: 0;
+}
+.recent-report > div:nth-child(2) {
+  flex: 1;
+}
+.recent-report small {
+  display: block;
+  color: #84899e;
+  font-size: 11px;
+  margin-top: 4px;
+}
+.recent-report > b {
+  font-size: 14px;
+}
+.report-file {
+  padding: 10px;
+  background: #f3f1ff;
+  border-radius: 8px;
+  color: var(--primary);
+}
+.quick-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.quick-grid button {
+  border: 0;
+  justify-content: flex-start;
+  text-align: left;
+  padding: 14px 10px;
+  background: #faf9ff;
+}
+.quick-grid button > svg:first-child {
+  color: var(--primary);
+}
+.quick-grid button > div {
+  flex: 1;
+}
+.quick-grid small {
+  display: block;
+  color: #84899e;
+  font-size: 11px;
+  margin-top: 4px;
+}
+@media (max-width: 1100px) {
+  .overview-hero {
+    gap: 22px;
+    padding: 25px;
+    grid-template-columns: 1fr;
+  }
+  .overview-hero h2 {
+    font-size: 26px;
+  }
+  .overview-lower {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 600px) {
+  .overview-hero {
+    padding: 20px;
+  }
+  .overview-hero h2 {
+    font-size: 23px;
+  }
+  .recent-report {
+    flex-wrap: wrap;
+  }
+  .recent-report > .badge {
+    margin-left: 56px;
+  }
+  .overview-hero p br {
+    display: none;
+  }
+}

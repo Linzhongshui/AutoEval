@@ -1395,10 +1395,257 @@ progress::-moz-progress-bar {
   height: auto;
 }
 .brand > span {
-  align-self: center;
-  margin-top: -5px;
+  align-self: flex-start;
+  padding-left: 30.3%;
+  margin-top: -6px;
+  font-size: 12px;
+  line-height: 20px;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  color: #737a94;
+  white-space: nowrap;
 }
 @media (max-width: 600px) {
-  .brand .brand-logo { width: 170px; }
-  .brand > span { align-self: flex-start; margin-left: 53px; }
+  .brand .brand-logo {
+    width: 170px;
+  }
+  .brand > span {
+    padding-left: 0;
+    margin-left: 51.5px;
+    font-size: 11px;
+  }
+}
+
+/* Categorized dataset directory: the only dataset selector in configuration. */
+.dataset-groups {
+  max-height: 560px;
+  overflow-y: auto;
+  margin-top: 20px;
+  padding-right: 4px;
+}
+.dataset-group {
+  margin-bottom: 14px;
+}
+.dataset-group summary {
+  cursor: pointer;
+  padding: 9px 5px;
+  font-weight: 600;
+  color: #505771;
+}
+.dataset-group summary .badge {
+  margin-left: 9px;
+}
+.dataset-branches {
+  margin: 3px 0 0 10px;
+  padding-left: 14px;
+  border-left: 1px solid #dcddee;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dataset-branches button {
+  width: 100%;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 11px 9px;
+  border: 0;
+  text-align: left;
+  background: transparent;
+  font-size: 13px;
+}
+.dataset-branches button > span:first-child {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.dataset-branches button:hover {
+  background: #f4f1ff;
+}
+.dataset-branches button.active {
+  background: #eae6ff;
+  color: var(--primary);
+  font-weight: 600;
+}
+.dataset-branches .badge {
+  font-size: 10px;
+  padding: 3px 5px;
+}
+@media (max-width: 900px) {
+  .dataset-directory {
+    grid-row: 1;
+  }
+  .dataset-groups {
+    max-height: 280px;
+  }
+}
+.pagination {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 16px 0;
+}
+.pagination > span {
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 13px;
+}
+.pagination button {
+  padding: 7px 12px;
+}
+
+/* Shared type scale: page 28, section 18, subsection 16, body 14, secondary 13. */
+:root {
+  --text-page: 28px;
+  --text-section: 18px;
+  --text-subsection: 16px;
+  --text-body: 14px;
+  --text-secondary: 13px;
+  --text-caption: 12px;
+  font-size: var(--text-body);
+  line-height: 1.6;
+}
+h1 {
+  font-size: var(--text-page);
+  font-weight: 700;
+  line-height: 1.4;
+  letter-spacing: -0.5px;
+}
+h2 {
+  font-size: var(--text-section);
+  font-weight: 600;
+  line-height: 1.5;
+}
+h3 {
+  font-size: var(--text-subsection);
+  font-weight: 600;
+  line-height: 1.5;
+}
+.sidebar nav a {
+  font-size: var(--text-subsection);
+  font-weight: 500;
+}
+.sidebar nav a.selected {
+  font-weight: 600;
+}
+.page-heading p {
+  font-size: var(--text-body);
+  line-height: 1.6;
+}
+.tabs button,
+.report-grid .tabs button {
+  font-size: var(--text-body);
+  font-weight: 500;
+  line-height: 1.6;
+}
+.tabs button.active {
+  font-weight: 600;
+}
+table,
+.console-grid td,
+.console-grid th {
+  font-size: var(--text-secondary);
+  line-height: 1.65;
+}
+th,
+.console-grid th {
+  font-weight: 600;
+}
+b,
+strong,
+.strong {
+  font-weight: 600;
+}
+.progress-row {
+  font-size: var(--text-body);
+  line-height: 1.6;
+}
+.progress-row b {
+  font-weight: 600;
+}
+.logs > div {
+  font-size: var(--text-body);
+  font-weight: 500;
+}
+.logs pre,
+.snapshot {
+  font-family: Consolas, "Cascadia Code", "Microsoft YaHei", monospace;
+  font-size: var(--text-secondary);
+  font-weight: 400;
+  line-height: 1.85;
+}
+.spread small,
+.metadata,
+.analysis > p,
+.analysis article p,
+.muted,
+.notice,
+.card-bottom,
+.summary p,
+.dataset-check {
+  font-size: var(--text-secondary);
+  line-height: 1.65;
+}
+.analysis h2 {
+  font-size: var(--text-section);
+}
+.analysis article h3 {
+  font-size: var(--text-body);
+  font-weight: 600;
+}
+.badge,
+.summary .badge,
+td small .badge,
+.analysis h2 .badge {
+  font-size: var(--text-caption);
+  line-height: 1.5;
+}
+.stats strong,
+.metric-stats strong {
+  font-size: 28px;
+  font-weight: 650;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+.estimate strong {
+  font-size: 24px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.launch {
+  font-size: var(--text-subsection);
+  font-weight: 500;
+}
+.breadcrumb,
+.workspace {
+  font-size: var(--text-secondary);
+}
+.page-foot,
+.sidebar-foot,
+.sidebar-foot small {
+  font-size: var(--text-caption);
+}
+.score b {
+  font-size: var(--text-subsection);
+}
+@media (max-width: 600px) {
+  :root {
+    --text-page: 24px;
+    --text-section: 17px;
+    --text-subsection: 15px;
+  }
+  .page-heading h1 {
+    font-size: var(--text-page);
+  }
+  .sidebar nav a {
+    font-size: var(--text-caption);
+  }
+  .stats strong,
+  .metric-stats strong {
+    font-size: 24px;
+  }
+  .tabs button,
+  .report-grid .tabs button {
+    font-size: var(--text-secondary);
+  }
 }

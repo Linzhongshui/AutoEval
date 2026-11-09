@@ -148,16 +148,20 @@ export function App() {
     const t = setTimeout(() => setToast(""), 3500);
     return () => clearTimeout(t);
   }, [toast]);
-  const title =
-    page === "detail"
+  const title = page.startsWith("task/")
+    ? "任务详情"
+    : page === "detail"
       ? "测评报告"
       : menus.find((m) => m.id === page)?.label || "控制台";
   return (
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">
-          <img className="brand-logo" src="/brand/autoeval-logo.svg" alt="AutoEval" />
-          <span>智能测评平台</span>
+          <img
+            className="brand-logo"
+            src="/brand/autoeval-logo.svg"
+            alt="AutoEval"
+          />
         </div>
         <div className="workspace">工作空间：示例评测空间</div>
         <nav>
@@ -166,7 +170,9 @@ export function App() {
               key={m.id}
               href={`#${m.id}`}
               className={
-                page === m.id || (page === "detail" && m.id === "reports")
+                page === m.id ||
+                (page.startsWith("task/") && m.id === "tasks") ||
+                (page === "detail" && m.id === "reports")
                   ? "selected"
                   : ""
               }
@@ -219,8 +225,17 @@ export function App() {
         </header>
         {page === "console" && <Console go={go} notify={setToast} />}
         {page === "config" && <Config go={go} notify={setToast} />}
-        {page === "tasks" && <Tasks go={go} />}
-        {page === "reports" && <Reports go={go} />}{" "}
+        {
+          <div hidden={page !== "tasks"}>
+            <Tasks go={go} />
+          </div>
+        }
+        {page.startsWith("task/") && (
+          <TaskDetail key={page} task={page.slice(5)} go={go} />
+        )}
+        <div hidden={page !== "reports"}>
+          <Reports go={go} />
+        </div>{" "}
         {page === "detail" && (
           <Detail id={reportId} go={go} notify={setToast} />
         )}{" "}
@@ -505,8 +520,10 @@ function Config({
       </Card>
       <div className="config-grid">
         <Card>
-          <Tabs items={datasets} value={dataset} onChange={setDataset} />
-          <Notice>每个数据集使用独立参数，切换数据集查看对应配置。</Notice>
+          <h2>
+            {dataset} <Badge>当前编辑</Badge>
+          </h2>
+          <Notice>每个数据集使用独立参数，请从右侧分类目录选择数据集。</Notice>
           <Card title="生成参数" className="inner-card">
             <div className="params">
               {["最大输出长度", "并发数", "temperature", "top_p"].map(
@@ -556,20 +573,35 @@ function Config({
             </Notice>
           )}
         </Card>
-        <Card title="配置结构">
+        <Card title="数据集配置" className="dataset-directory">
           <p>
             模型：<span className="purple-text">{model}</span>
           </p>
-          <div className="config-tree">
-            {datasets.map((d) => (
-              <button
-                key={d}
-                className={d === dataset ? "active" : ""}
-                onClick={() => setDataset(d)}
-              >
-                <span>{d}</span>
-                <Badge>{d === dataset ? "当前编辑" : "独立参数"}</Badge>
-              </button>
+          <div className="dataset-groups" aria-label="按类型选择数据集">
+            {[
+              { type: "科学问答", items: ["GPQA"] },
+              { type: "多模态理解", items: ["MMMU-Pro"] },
+              { type: "Agent 工作流", items: ["AutomationBench"] },
+            ].map((group) => (
+              <details className="dataset-group" key={group.type} open>
+                <summary>
+                  {group.type}
+                  <Badge tone="neutral">{group.items.length}</Badge>
+                </summary>
+                <div className="dataset-branches">
+                  {group.items.map((d) => (
+                    <button
+                      key={d}
+                      className={d === dataset ? "active" : ""}
+                      aria-pressed={d === dataset}
+                      onClick={() => setDataset(d)}
+                    >
+                      <span>{d}</span>
+                      {d === dataset && <Badge>当前编辑</Badge>}
+                    </button>
+                  ))}
+                </div>
+              </details>
             ))}
           </div>
         </Card>
@@ -601,18 +633,32 @@ function Config({
     </div>
   );
 }
+const taskRows = Array.from({ length: 24 }, (_, i) => ({
+  name: `EVAL-${String(25 - i).padStart(3, "0")}`,
+  model: i % 2 ? "Demo Vision B" : "Demo Vision A",
+  version: i % 2 ? "RC" : "Release",
+  state: i < 2 ? "执行中" : i === 3 || i === 8 ? "部分成功" : "成功",
+  progress: i === 0 ? "12%" : "68%",
+  datasets: i < 5 ? datasets : i % 2 ? datasets.slice(0, 2) : datasets.slice(1),
+  date: `2026-11-${String(9 - Math.floor(i / 6)).padStart(2, "0")} ${String(14 - Math.floor((i % 6) / 2)).padStart(2, "0")}:${i % 2 ? "15" : "10"}`,
+}));
 function Tasks({ go }: { go: (p: string, id?: string) => void }) {
-  const [task, setTask] = useState("EVAL-024");
-  const [tab, setTab] = useState("执行进度");
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 5;
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("全部状态");
   const [model, setModel] = useState("全部模型");
   const [dataset, setDataset] = useState("全部数据集");
-  const rows = [25, 24, 23, 22, 21].map((n, i) => ({
-    name: `EVAL-0${n}`,
-    model: i % 2 ? "Demo Vision B" : "Demo Vision A",
-    state: i < 2 ? "执行中" : i === 3 ? "部分成功" : "成功",
-  }));
+  const filtered = taskRows.filter(
+    (r) =>
+      r.name.toLowerCase().includes(search.toLowerCase()) &&
+      (status === "全部状态" || r.state === status) &&
+      (model === "全部模型" || r.model === model) &&
+      (dataset === "全部数据集" || r.datasets.includes(dataset)),
+  );
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const activePage = Math.min(currentPage, pageCount);
+  useEffect(() => setCurrentPage(1), [search, status, model, dataset]);
   return (
     <div className="stack">
       <div className="stats">
@@ -683,33 +729,24 @@ function Tasks({ go }: { go: (p: string, id?: string) => void }) {
               </tr>
             </thead>
             <tbody>
-              {rows
-                .filter(
-                  (r) =>
-                    r.name.toLowerCase().includes(search.toLowerCase()) &&
-                    (status === "全部状态" || r.state === status) &&
-                    (model === "全部模型" || r.model === model),
-                )
-                .map((r, i) => (
-                  <tr
-                    key={r.name}
-                    className={task === r.name ? "highlight" : ""}
-                  >
+              {filtered
+                .slice((activePage - 1) * pageSize, activePage * pageSize)
+                .map((r) => (
+                  <tr key={r.name}>
                     <td>
                       <button
                         className="link strong"
-                        onClick={() => setTask(r.name)}
+                        onClick={() => go(`task/${r.name}`)}
                       >
                         {r.name}
                       </button>
                     </td>
                     <td>{r.model}</td>
                     <td>
-                      {i % 2 ? "RC" : "Release"}{" "}
-                      <Badge tone="neutral">v1.3</Badge>
+                      {r.version} <Badge tone="neutral">v1.3</Badge>
                     </td>
                     <td>
-                      {datasets.map((d) => (
+                      {r.datasets.map((d) => (
                         <Badge key={d}>{d}</Badge>
                       ))}
                     </td>
@@ -723,13 +760,15 @@ function Tasks({ go }: { go: (p: string, id?: string) => void }) {
                               : "purple"
                         }
                       >
-                        {r.state}{" "}
-                        {r.state === "执行中" ? (i === 0 ? "12%" : "68%") : ""}
+                        {r.state} {r.state === "执行中" ? r.progress : ""}
                       </Badge>
                     </td>
-                    <td>2026-11-09 14:{10 + i * 5}</td>
+                    <td>{r.date}</td>
                     <td>
-                      <button className="link" onClick={() => setTask(r.name)}>
+                      <button
+                        className="link"
+                        onClick={() => go(`task/${r.name}`)}
+                      >
                         查看
                       </button>
                     </td>
@@ -737,20 +776,67 @@ function Tasks({ go }: { go: (p: string, id?: string) => void }) {
                 ))}
             </tbody>
           </table>
-          {!rows.some(
-            (r) =>
-              r.name.toLowerCase().includes(search.toLowerCase()) &&
-              (status === "全部状态" || r.state === status) &&
-              (model === "全部模型" || r.model === model),
-          ) && <div className="empty">没有符合条件的任务</div>}
+          {!filtered.length && <div className="empty">没有符合条件的任务</div>}
         </div>
       </Card>
+      <div className="pagination" aria-label="任务列表分页">
+        <span>
+          共 {filtered.length} 条 · 每页 {pageSize} 条
+        </span>
+        <button
+          disabled={activePage === 1}
+          onClick={() => setCurrentPage(activePage - 1)}
+        >
+          上一页
+        </button>
+        {Array.from({ length: pageCount }, (_, i) => (
+          <button
+            key={i}
+            aria-current={activePage === i + 1 ? "page" : undefined}
+            className={activePage === i + 1 ? "primary" : ""}
+            onClick={() => setCurrentPage(i + 1)}
+          >
+            {i + 1}
+          </button>
+        ))}
+        <button
+          disabled={activePage === pageCount}
+          onClick={() => setCurrentPage(activePage + 1)}
+        >
+          下一页
+        </button>
+      </div>
+    </div>
+  );
+}
+function TaskDetail({
+  task,
+  go,
+}: {
+  task: string;
+  go: (p: string, id?: string) => void;
+}) {
+  const [tab, setTab] = useState("执行进度");
+  const row = taskRows.find((r) => r.name === task);
+  if (!row)
+    return (
+      <Card>
+        <p>未找到该任务</p>
+        <button onClick={() => go("tasks")}>返回任务列表</button>
+      </Card>
+    );
+  return (
+    <div className="stack">
+      <button className="link back" onClick={() => go("tasks")}>
+        <ArrowLeft size={16} />
+        返回任务列表
+      </button>
       <Card
         title={
           <div className="spread">
             <span>{task} 执行详情</span>
             <small>
-              模型：Demo Vision A　 |　 出口版本：RC　 |　 配置：v1.3
+              模型：{row.model}　 |　 出口版本：{row.version}　 |　 配置：v1.3
             </small>
           </div>
         }
@@ -780,9 +866,12 @@ function Tasks({ go }: { go: (p: string, id?: string) => void }) {
           <pre className="snapshot">
             {JSON.stringify(
               {
-                modelId: "demo-vlm-001",
+                modelId:
+                  row.model === "Demo Vision A"
+                    ? "demo-vlm-001"
+                    : "demo-vlm-002",
                 version: "v1.3",
-                exportVersion: "RC",
+                exportVersion: row.version,
                 mode: "Lite",
                 datasets,
                 credentials: "已脱敏",
@@ -827,6 +916,9 @@ function Reports({ go }: { go: (p: string, id?: string) => void }) {
   const [dataset, setDataset] = useState("全部数据集");
   const [status, setStatus] = useState("全部分析状态");
   const [search, setSearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 5;
+  useEffect(() => setCurrentPage(1), [model, version, dataset, status, search]);
   const filtered = reports.filter(
     (r) =>
       (model === "全部模型" || r.model === model) &&
@@ -834,6 +926,8 @@ function Reports({ go }: { go: (p: string, id?: string) => void }) {
       (status === "全部分析状态" || r.status === status) &&
       `${r.id} ${r.task}`.toLowerCase().includes(search.toLowerCase()),
   );
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const activePage = Math.min(currentPage, pageCount);
   return (
     <div className="stack">
       <Card>
@@ -898,49 +992,54 @@ function Reports({ go }: { go: (p: string, id?: string) => void }) {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((r) => (
-                <tr key={r.id}>
-                  <td>
-                    <button
-                      className="link strong underline"
-                      onClick={() => go("detail", r.id)}
-                    >
-                      {r.id}
-                    </button>
-                    <small>任务：{r.task}</small>
-                  </td>
-                  <td>
-                    <b>{r.model}</b>
-                    <small>
-                      modelId：{r.modelId} <Badge tone="neutral">v1.3</Badge>
-                    </small>
-                  </td>
-                  <td>{r.version}</td>
-                  <td>
-                    GPQA + MMMU-Pro +<br />
-                    AutomationBench<small>有效覆盖 3 / 3 · 示例</small>
-                  </td>
-                  <td>{r.date}</td>
-                  <td>
-                    <Badge
-                      tone={
-                        r.status === "分析成功"
-                          ? "green"
-                          : r.status === "分析失败"
-                            ? "orange"
-                            : "purple"
-                      }
-                    >
-                      {r.status}
-                    </Badge>
-                  </td>
-                  <td>
-                    <button className="link" onClick={() => go("detail", r.id)}>
-                      查看报告
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {filtered
+                .slice((activePage - 1) * pageSize, activePage * pageSize)
+                .map((r) => (
+                  <tr key={r.id}>
+                    <td>
+                      <button
+                        className="link strong underline"
+                        onClick={() => go("detail", r.id)}
+                      >
+                        {r.id}
+                      </button>
+                      <small>任务：{r.task}</small>
+                    </td>
+                    <td>
+                      <b>{r.model}</b>
+                      <small>
+                        modelId：{r.modelId} <Badge tone="neutral">v1.3</Badge>
+                      </small>
+                    </td>
+                    <td>{r.version}</td>
+                    <td>
+                      GPQA + MMMU-Pro +<br />
+                      AutomationBench<small>有效覆盖 3 / 3 · 示例</small>
+                    </td>
+                    <td>{r.date}</td>
+                    <td>
+                      <Badge
+                        tone={
+                          r.status === "分析成功"
+                            ? "green"
+                            : r.status === "分析失败"
+                              ? "orange"
+                              : "purple"
+                        }
+                      >
+                        {r.status}
+                      </Badge>
+                    </td>
+                    <td>
+                      <button
+                        className="link"
+                        onClick={() => go("detail", r.id)}
+                      >
+                        查看报告
+                      </button>
+                    </td>
+                  </tr>
+                ))}
             </tbody>
           </table>
           {!filtered.length && <div className="empty">没有符合条件的报告</div>}
@@ -949,12 +1048,35 @@ function Reports({ go }: { go: (p: string, id?: string) => void }) {
           <span>
             <Info size={16} /> 分析中或分析失败时，仍可查看原始测评结果。
           </span>
-          <span>
-            共 {filtered.length} 条{" "}
-            <button className="primary page-number">1</button>
-          </span>
         </div>
       </Card>
+      <div className="pagination" aria-label="报告列表分页">
+        <span>
+          共 {filtered.length} 条 · 每页 {pageSize} 条
+        </span>
+        <button
+          disabled={activePage === 1}
+          onClick={() => setCurrentPage(activePage - 1)}
+        >
+          上一页
+        </button>
+        {Array.from({ length: pageCount }, (_, i) => (
+          <button
+            key={i}
+            aria-current={activePage === i + 1 ? "page" : undefined}
+            className={activePage === i + 1 ? "primary" : ""}
+            onClick={() => setCurrentPage(i + 1)}
+          >
+            {i + 1}
+          </button>
+        ))}
+        <button
+          disabled={activePage === pageCount}
+          onClick={() => setCurrentPage(activePage + 1)}
+        >
+          下一页
+        </button>
+      </div>
     </div>
   );
 }

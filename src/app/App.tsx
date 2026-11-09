@@ -1,3 +1,10 @@
+import { ReportView, reportDatasets } from "./ReportView";
+import {
+  Configurations,
+  EvaluationConsole,
+  DatasetExecution,
+  useProfiles,
+} from "./Workflow";
 import { useState, useEffect } from "react";
 import {
   Home,
@@ -7,30 +14,20 @@ import {
   Trophy,
   Info,
   CheckCircle2,
-  Clock3,
   Play,
   Search,
   Layers,
   Activity,
-  ArrowLeft,
   ExternalLink,
   Sparkles,
   FileText,
   ChevronRight,
-  Zap,
-  GraduationCap,
-  Image,
   CircleAlert,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import "./app.css";
 const datasets = ["GPQA", "MMMU-Pro", "AutomationBench"];
-const descriptions = [
-  "高难度研究生水平的科学问答评测集。",
-  "面向多模态理解的综合评测集（图文、表格、图表等）。",
-  "面向通用自动化与工具使用能力的 Agent 评测集（公开任务）。",
-];
 const menus = [
   { id: "home", label: "首页", icon: Layers },
   { id: "console", label: "控制台", icon: Home },
@@ -239,7 +236,8 @@ const reports = [26, 25, 24, 23, 22, 21].map((n, i) => ({
   date: `2026-11-${i < 2 ? "09" : i < 4 ? "08" : "07"} ${["14:30", "11:20", "17:40", "10:15", "16:50", "10:30"][i]}`,
 }));
 export function App() {
-  const [page, setPage] = useState(location.hash.slice(1) || "home");
+  const [profiles, setProfiles] = useProfiles();
+  const [page, setPage] = useState(location.hash.slice(1) || "console");
   const [reportId, setReportId] = useState("RPT-023");
   const [toast, setToast] = useState("");
   const go = (p: string, id?: string) => {
@@ -249,7 +247,7 @@ export function App() {
     window.scrollTo(0, 0);
   };
   useEffect(() => {
-    const fn = () => setPage(location.hash.slice(1) || "home");
+    const fn = () => setPage(location.hash.slice(1) || "console");
     window.addEventListener("hashchange", fn);
     return () => window.removeEventListener("hashchange", fn);
   }, []);
@@ -262,7 +260,9 @@ export function App() {
     ? "任务详情"
     : page === "detail"
       ? "测评报告"
-      : menus.find((m) => m.id === page)?.label || "控制台";
+      : page.startsWith("config/")
+        ? "配置维护"
+        : menus.find((m) => m.id === page)?.label || "控制台";
   return (
     <div className="shell">
       <aside className="sidebar">
@@ -282,7 +282,8 @@ export function App() {
               className={
                 page === m.id ||
                 (page.startsWith("task/") && m.id === "tasks") ||
-                (page === "detail" && m.id === "reports")
+                (page === "detail" && m.id === "reports") ||
+                (page.startsWith("config/") && m.id === "config")
                   ? "selected"
                   : ""
               }
@@ -335,8 +336,25 @@ export function App() {
           )}
         </header>
         {page === "home" && <Overview go={go} />}
-        {page === "console" && <Console go={go} notify={setToast} />}
-        {page === "config" && <Config go={go} notify={setToast} />}
+        {page === "console" && (
+          <EvaluationConsole profiles={profiles} notify={setToast} />
+        )}
+        {page === "config" && (
+          <Configurations
+            profiles={profiles}
+            setProfiles={setProfiles}
+            go={go}
+            notify={setToast}
+          />
+        )}
+        {page.startsWith("config/") && (
+          <Configurations
+            profiles={profiles}
+            setProfiles={setProfiles}
+            go={go}
+            notify={setToast}
+          />
+        )}
         {
           <div hidden={page !== "tasks"}>
             <Tasks go={go} />
@@ -366,385 +384,6 @@ export function App() {
     </div>
   );
 }
-function Console({
-  go,
-  notify,
-}: {
-  go: (p: string) => void;
-  notify: (s: string) => void;
-}) {
-  const [model, setModel] = useState("demo-vlm-001");
-  const [access, setAccess] = useState("API接入");
-  const [mode, setMode] = useState("Lite");
-  const [custom, setCustom] = useState(false);
-  const [selected, setSelected] = useState(datasets);
-  return (
-    <div className="console-grid">
-      <div className="stack">
-        <Card title="模型接入">
-          <Tabs
-            items={["API接入", "IP/Port拉起"]}
-            value={access}
-            onChange={setAccess}
-          />
-          {access === "API接入" ? (
-            <div className="form-grid">
-              <label>模型ID（modelId）</label>
-              <Select
-                options={["demo-vlm-001", "demo-vlm-002"]}
-                value={model}
-                onChange={setModel}
-              />
-              <label>模型名称</label>
-              <input
-                value={
-                  model.endsWith("001") ? "Demo Vision A" : "Demo Vision B"
-                }
-                readOnly
-              />
-              <label>API 地址</label>
-              <div className="inline">
-                <input defaultValue="https://api.example.com/v1/******" />
-                <Badge tone="neutral">未连接 · 静态示例</Badge>
-              </div>
-              <label>接口类型 / API Key</label>
-              <div className="inline">
-                <Select options={["OpenAI Compatible"]} />
-                <input
-                  type="password"
-                  placeholder="请输入 API Key"
-                  autoComplete="off"
-                />
-                <button
-                  onClick={() => notify("静态预览：暂未接入真实连接测试。")}
-                >
-                  测试连接
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="stack inset">
-              <Notice>仅演示入口，不会启动真实模型服务。</Notice>
-              <div className="inline">
-                <input aria-label="IP 地址" placeholder="IP 地址" />
-                <input aria-label="端口" placeholder="端口" />
-                <button
-                  onClick={() => notify("演示反馈：本页面未启动真实服务。")}
-                >
-                  演示拉起
-                </button>
-              </div>
-            </div>
-          )}
-        </Card>
-        <Card title="最新测试配置">
-          <div className="form-grid">
-            <label>配置版本</label>
-            <div className="inline">
-              <strong>v1.3</strong>
-              <Badge>{model.endsWith("001") ? "RC" : "Release"}</Badge>
-              <Badge tone="green">当前模型唯一最新配置</Badge>
-            </div>
-            <label>配置模式</label>
-            <div className="inline">
-              <label>
-                <input
-                  type="radio"
-                  checked={!custom}
-                  onChange={() => setCustom(false)}
-                />{" "}
-                默认配置
-              </label>
-              <label>
-                <input
-                  type="radio"
-                  checked={custom}
-                  onChange={() => setCustom(true)}
-                />{" "}
-                自定义配置
-              </label>
-            </div>
-          </div>
-          {custom && (
-            <Notice>本次任务临时配置，静态预览不保存或覆盖模型配置。</Notice>
-          )}
-          <div className="card-bottom">
-            <span>各数据集使用独立测试参数</span>
-            <button className="link" onClick={() => go("config")}>
-              查看 / 编辑测试配置
-            </button>
-          </div>
-        </Card>
-        <Card title="测评数据集">
-          <div className="inline mode-row">
-            <b>测评模式</b>
-            <Tabs items={["全量", "Lite"]} value={mode} onChange={setMode} />
-            <span className="muted">Lite 子集范围与样本量待配置。</span>
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>
-                    <input
-                      type="checkbox"
-                      aria-label="全选数据集"
-                      checked={selected.length === 3}
-                      onChange={(e) =>
-                        setSelected(e.target.checked ? datasets : [])
-                      }
-                    />
-                  </th>
-                  <th>数据集名称</th>
-                  <th>类型标签</th>
-                  <th>样本量</th>
-                  <th>说明</th>
-                </tr>
-              </thead>
-              <tbody>
-                {datasets.map((d, i) => (
-                  <tr key={d}>
-                    <td>
-                      <input
-                        aria-label={`选择 ${d}`}
-                        type="checkbox"
-                        checked={selected.includes(d)}
-                        onChange={(e) =>
-                          setSelected(
-                            e.target.checked
-                              ? [...selected, d]
-                              : selected.filter((x) => x !== d),
-                          )
-                        }
-                      />
-                    </td>
-                    <td>
-                      <b>{d}</b> {mode === "Lite" && <Badge>Lite</Badge>}
-                    </td>
-                    <td>
-                      <Badge tone={i === 0 ? "blue" : "purple"}>
-                        {["科学问答", "多模态", "Agent"][i]}
-                      </Badge>
-                    </td>
-                    <td>待配置</td>
-                    <td className="description">{descriptions[i]}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-        <Notice>参数按模型及数据集分别维护，所有配置和耗时均为示例。</Notice>
-      </div>
-      <Card title="任务摘要" className="summary">
-        <div className="summary-section">
-          <span>测评模型</span>
-          <h3>{model.endsWith("001") ? "Demo Vision A" : "Demo Vision B"}</h3>
-          <p>modelId：{model}</p>
-        </div>
-        <div className="summary-section">
-          <span>测试配置</span>
-          <h3>
-            v1.3 <Badge>{model.endsWith("001") ? "RC" : "Release"}</Badge>
-          </h3>
-        </div>
-        <div className="summary-section">
-          <span>测评数据集（{selected.length} 个）</span>
-          {selected.map((d) => (
-            <div className="dataset-check" key={d}>
-              <CheckCircle2 size={18} />
-              {d}
-              {mode === "Lite" && <Badge>Lite</Badge>}
-            </div>
-          ))}
-        </div>
-        {["测评预计耗时", "分析预计耗时"].map((t, i) => (
-          <div className="estimate" key={t}>
-            {i ? <ChartNoAxesColumnIncreasing /> : <Clock3 />}
-            <div>
-              {t}
-              <strong>{i ? "2–4分钟" : "25–40分钟"}</strong>
-            </div>
-            <Badge>估算示例</Badge>
-          </div>
-        ))}
-        <button
-          className="primary launch"
-          disabled={!selected.length}
-          onClick={() =>
-            notify("静态预览：尚未接入测评执行服务，不会创建真实任务。")
-          }
-        >
-          <Play size={18} />
-          发起测评
-        </button>
-        <small className="muted">当前仅展示界面，未连接模型或执行服务。</small>
-      </Card>
-    </div>
-  );
-}
-function Config({
-  go,
-  notify,
-}: {
-  go: (p: string) => void;
-  notify: (s: string) => void;
-}) {
-  const [dataset, setDataset] = useState("GPQA");
-  const [model, setModel] = useState("demo-vlm-001");
-  const initial = () =>
-    Object.fromEntries(
-      datasets.map((d, i) => [d, ["2048", String(60 - i * 20), "0.6", "0.95"]]),
-    );
-  const [values, setValues] = useState(initial);
-  const [dirty, setDirty] = useState(false);
-  return (
-    <div className="stack">
-      <Card title="测试模型">
-        <div className="model-row">
-          <div className="form-grid">
-            <label>模型名称</label>
-            <Select
-              options={["demo-vlm-001", "demo-vlm-002"]}
-              value={model}
-              onChange={(v) => {
-                setModel(v);
-                setValues(initial());
-                setDirty(false);
-              }}
-            />
-            <label>模型ID（modelId）</label>
-            <input readOnly value={model} />
-          </div>
-          <div>
-            <small>最新配置</small>
-            <h3>
-              v1.3 <Badge>{model.endsWith("001") ? "RC" : "Release"}</Badge>
-            </h3>
-          </div>
-          <div>
-            <small>配置状态</small>
-            <h3 className={dirty ? "orange-text" : "green-text"}>
-              {dirty ? "未保存" : "已保存 · 示例"}
-            </h3>
-          </div>
-        </div>
-      </Card>
-      <div className="config-grid">
-        <Card>
-          <h2>
-            {dataset} <Badge>当前编辑</Badge>
-          </h2>
-          <Notice>每个数据集使用独立参数，请从右侧分类目录选择数据集。</Notice>
-          <Card title="生成参数" className="inner-card">
-            <div className="params">
-              {["最大输出长度", "并发数", "temperature", "top_p"].map(
-                (l, i) => (
-                  <label key={l}>
-                    {l}
-                    <input
-                      type="number"
-                      min="0"
-                      step={i > 1 ? "0.05" : "1"}
-                      value={values[dataset][i]}
-                      onChange={(e) => {
-                        setValues({
-                          ...values,
-                          [dataset]: values[dataset].map((v, j) =>
-                            j === i ? e.target.value : v,
-                          ),
-                        });
-                        setDirty(true);
-                      }}
-                    />
-                  </label>
-                ),
-              )}
-            </div>
-          </Card>
-          <Card title="数据范围" className="inner-card">
-            <div className="inline">
-              <div>
-                评测范围
-                <p>
-                  <Badge>全量 / Lite 由控制台选择</Badge>
-                </p>
-              </div>
-              <div>
-                Lite 子集
-                <p>
-                  <input disabled value="待配置" readOnly />
-                </p>
-              </div>
-              <span className="muted">Lite 样本清单与数量待确认。</span>
-            </div>
-          </Card>
-          {dataset === "AutomationBench" && (
-            <Notice>
-              公开任务集；领域、工具集与最大步数待固定适配器版本后配置。
-            </Notice>
-          )}
-        </Card>
-        <Card title="数据集配置" className="dataset-directory">
-          <p>
-            模型：<span className="purple-text">{model}</span>
-          </p>
-          <div className="dataset-groups" aria-label="按类型选择数据集">
-            {[
-              { type: "科学问答", items: ["GPQA"] },
-              { type: "多模态理解", items: ["MMMU-Pro"] },
-              { type: "Agent 工作流", items: ["AutomationBench"] },
-            ].map((group) => (
-              <details className="dataset-group" key={group.type} open>
-                <summary>
-                  {group.type}
-                  <Badge tone="neutral">{group.items.length}</Badge>
-                </summary>
-                <div className="dataset-branches">
-                  {group.items.map((d) => (
-                    <button
-                      key={d}
-                      className={d === dataset ? "active" : ""}
-                      aria-pressed={d === dataset}
-                      onClick={() => setDataset(d)}
-                    >
-                      <span>{d}</span>
-                      {d === dataset && <Badge>当前编辑</Badge>}
-                    </button>
-                  ))}
-                </div>
-              </details>
-            ))}
-          </div>
-        </Card>
-      </div>
-      <div className="actions">
-        <span className="muted">
-          保存仅影响后续任务，历史任务保留配置快照。参数数值仅为示例。
-        </span>
-        <button className="link" onClick={() => go("console")}>
-          返回控制台
-        </button>
-        <button
-          onClick={() => {
-            setValues(initial());
-            setDirty(false);
-          }}
-        >
-          重置更改
-        </button>
-        <button
-          className="primary"
-          onClick={() =>
-            notify("静态预览：参数更改仅在当前页面保留，尚未保存至服务端。")
-          }
-        >
-          保存测试配置
-        </button>
-      </div>
-    </div>
-  );
-}
 const taskRows = Array.from({ length: 24 }, (_, i) => ({
   name: `EVAL-${String(25 - i).padStart(3, "0")}`,
   model: i % 2 ? "Demo Vision B" : "Demo Vision A",
@@ -757,20 +396,24 @@ const taskRows = Array.from({ length: 24 }, (_, i) => ({
 function Tasks({ go }: { go: (p: string, id?: string) => void }) {
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 5;
+  const [owner, setOwner] = useState("仅看我");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("全部状态");
   const [model, setModel] = useState("全部模型");
-  const [dataset, setDataset] = useState("全部数据集");
+  const [version, setVersion] = useState("全部版本");
   const filtered = taskRows.filter(
     (r) =>
+      (owner === "仅看我"
+        ? Number(r.name.slice(-3)) % 2 === 1
+        : Number(r.name.slice(-3)) % 2 === 0) &&
       r.name.toLowerCase().includes(search.toLowerCase()) &&
       (status === "全部状态" || r.state === status) &&
       (model === "全部模型" || r.model === model) &&
-      (dataset === "全部数据集" || r.datasets.includes(dataset)),
+      (version === "全部版本" || r.version === version),
   );
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const activePage = Math.min(currentPage, pageCount);
-  useEffect(() => setCurrentPage(1), [search, status, model, dataset]);
+  useEffect(() => setCurrentPage(1), [search, status, model, version, owner]);
   return (
     <div className="stack">
       <div className="stats">
@@ -796,6 +439,12 @@ function Tasks({ go }: { go: (p: string, id?: string) => void }) {
       </div>
       <div className="filters">
         <Select
+          label="人员"
+          options={["仅看我", "其他人员"]}
+          value={owner}
+          onChange={setOwner}
+        />
+        <Select
           label="模型"
           options={["全部模型", "Demo Vision A", "Demo Vision B"]}
           value={model}
@@ -808,10 +457,10 @@ function Tasks({ go }: { go: (p: string, id?: string) => void }) {
           onChange={setStatus}
         />
         <Select
-          label="数据集"
-          options={["全部数据集", ...datasets]}
-          value={dataset}
-          onChange={setDataset}
+          label="出口版本"
+          options={["全部版本", "RC", "Release"]}
+          value={version}
+          onChange={setVersion}
         />
         <label className="search">
           <Search size={18} />
@@ -858,7 +507,7 @@ function Tasks({ go }: { go: (p: string, id?: string) => void }) {
                       {r.version} <Badge tone="neutral">v1.3</Badge>
                     </td>
                     <td>
-                      <DatasetSummary items={r.datasets} preferred={dataset} />
+                      <DatasetSummary items={r.datasets} />
                     </td>
                     <td>
                       <Badge
@@ -926,97 +575,29 @@ function TaskDetail({
   task: string;
   go: (p: string, id?: string) => void;
 }) {
-  const [tab, setTab] = useState("执行进度");
   const row = taskRows.find((r) => r.name === task);
   if (!row)
     return (
       <Card>
-        <p>未找到该任务</p>
+        <p>未找到任务</p>
         <button onClick={() => go("tasks")}>返回任务列表</button>
       </Card>
     );
   return (
     <div className="stack">
       <button className="link back" onClick={() => go("tasks")}>
-        <ArrowLeft size={16} />
         返回任务列表
       </button>
-      <Card
-        title={
-          <div className="spread">
-            <span>{task} 执行详情</span>
-            <small>
-              模型：{row.model}　 |　 出口版本：{row.version}　 |　 配置：v1.3
-            </small>
-          </div>
-        }
-      >
-        <Tabs
-          items={["执行进度", "日志", "关键轨迹", "配置快照"]}
-          value={tab}
-          onChange={setTab}
-        />
-        {tab === "执行进度" ? (
-          <div className="task-columns">
-            <Card title="按数据集执行状态" className="inner-card">
-              {datasets.map((d, i) => (
-                <div className="progress-row" key={d}>
-                  <b>{d}</b>
-                  <span>{["完成", "执行中 68%", "待执行"][i]}</span>
-                  <progress max="100" value={[100, 68, 0][i]} />
-                  <span>{[100, 68, 0][i]}%</span>
-                </div>
-              ))}
-            </Card>
-            <Logs />
-          </div>
-        ) : tab === "日志" ? (
-          <Logs />
-        ) : tab === "配置快照" ? (
-          <pre className="snapshot">
-            {JSON.stringify(
-              {
-                modelId:
-                  row.model === "Demo Vision A"
-                    ? "demo-vlm-001"
-                    : "demo-vlm-002",
-                version: "v1.3",
-                exportVersion: row.version,
-                mode: "Lite",
-                datasets,
-                credentials: "已脱敏",
-                snapshot: "静态示例",
-              },
-              null,
-              2,
-            )}
-          </pre>
-        ) : (
-          <div className="trace">
-            <Badge>样本 #018 · 示例</Badge>
-            <h3>工具调用参数校验未通过</h3>
-            <p>输入：查询工作流并创建一条待办记录。</p>
-            <p>响应：调用 create_task，缺少必填参数 title。</p>
-            <Notice>断言未通过属于有效测评结果，不等于执行失败。</Notice>
-          </div>
-        )}
-        <div className="card-bottom">
-          <span className="muted">日志与进度为固定示例，不会实时执行。</span>
-          <button className="link" onClick={() => go("detail", "RPT-023")}>
-            查看关联报告
-          </button>
-        </div>
-      </Card>
-    </div>
-  );
-}
-function Logs() {
-  return (
-    <div className="logs">
-      <div>
-        <span className="dot" /> 执行日志（静态示例）
-      </div>
-      <pre>{`[14:10:03]  任务 EVAL-024 启动，初始化执行环境…\n[14:10:05]  加载模型：Demo Vision A（出口版本 RC）\n[14:10:08]  解析评测配置，数据集：GPQA、MMMU-Pro、AutomationBench\n[14:10:12]  开始执行数据集 GPQA…\n[14:12:37]  数据集 GPQA 执行完成，结果已记录。\n[14:12:39]  开始执行数据集 MMMU-Pro…\n[14:20:18]  MMMU-Pro 执行中：已完成 68%…`}</pre>
+      <DatasetExecution
+        task={task}
+        model={row.model}
+        version={row.version}
+        state={row.state}
+        items={row.datasets}
+      />
+      <button className="link" onClick={() => go("detail", "RPT-023")}>
+        查看关联报告
+      </button>
     </div>
   );
 }
@@ -1056,7 +637,7 @@ function Reports({ go }: { go: (p: string, id?: string) => void }) {
           />
           <Select
             label="数据集"
-            options={["全部数据集", ...datasets]}
+            options={["全部数据集", ...reportDatasets.map(d=>d.name)]}
             value={dataset}
             onChange={setDataset}
           />
@@ -1123,8 +704,11 @@ function Reports({ go }: { go: (p: string, id?: string) => void }) {
                     </td>
                     <td>{r.version}</td>
                     <td>
-                      <DatasetSummary items={datasets} preferred={dataset} />
-                      <small>有效覆盖 3 / 3 · 示例</small>
+                      <DatasetSummary
+                        items={reportDatasets.map((d) => d.name)}
+                        preferred={dataset}
+                      />
+                      <small>完整 6 / 部分 1 / 失败 1 · 示例</small>
                     </td>
                     <td>{r.date}</td>
                     <td>
@@ -1199,273 +783,18 @@ function Detail({
   go: (p: string, id?: string) => void;
   notify: (s: string) => void;
 }) {
-  const [tab, setTab] = useState("基准对比");
-  const r = reports.find((r) => r.id === id) || reports[3];
+  const report = reports.find((r) => r.id === id) || reports[3];
   return (
-    <div className="stack">
-      <button className="link back" onClick={() => go("reports")}>
-        <ArrowLeft size={16} />
-        返回报告列表
-      </button>
-      <Card>
-        <div className="inline metadata">
-          模型：<b>{r.model}</b>
-          <span>│</span>modelId：{r.modelId}
-          <span>│</span>出口版本：{r.version}
-          <span>│</span>配置：<b>v1.3</b>
-          <Badge>有效覆盖 3/3 · 示例</Badge>
-        </div>
-      </Card>
-      <div className="stats metric-stats">
-        {["GPQA", "MMMU-Pro", "Agent任务成功率", "输出吞吐"].map((s, i) => (
-          <Card key={s}>
-            <div className="stat-icon">
-              {i === 0 ? (
-                <GraduationCap />
-              ) : i === 1 ? (
-                <Image />
-              ) : i === 2 ? (
-                <Layers />
-              ) : (
-                <Zap />
-              )}
-            </div>
-            <div>
-              {s} <Info size={13} />
-              <strong>{["72.4%", "61.8%", "48.0%", "126 tok/s"][i]}</strong>
-            </div>
-          </Card>
-        ))}
-      </div>
-      <div className="report-grid">
-        <Card>
-          <Tabs
-            items={["精度结果", "性能结果", "Agent结果", "基准对比"]}
-            value={tab}
-            onChange={setTab}
-          />
-          <h2 className="section-heading">
-            {tab === "基准对比" ? "基准对比结果" : tab}
-          </h2>
-          {tab === "基准对比" || tab === "精度结果" ? (
-            <>
-              <div className="chart-legend">
-                <span className="legend purple" />
-                实测值（示例）
-                {tab === "基准对比" && (
-                  <>
-                    <span className="legend gray" />
-                    JSON基准（示例）
-                  </>
-                )}
-              </div>
-              <div className="bar-chart">
-                <div className="y-axis">
-                  100%<span>80%</span>
-                  <span>60%</span>
-                  <span>40%</span>
-                  <span>20%</span>
-                  <span>0%</span>
-                </div>
-                <div className="chart-plot">
-                  {datasets.map((d, i) => (
-                    <div className="bar-group" key={d}>
-                      <div className="bars">
-                        <div style={{ height: `${[72.4, 61.8, 48][i]}%` }}>
-                          <b>{[72.4, 61.8, 48][i]}%</b>
-                        </div>
-                        {tab === "基准对比" && (
-                          <div
-                            className="baseline"
-                            style={{ height: `${[68.1, 58.9, 41.6][i]}%` }}
-                          >
-                            <b>{[68.1, 58.9, 41.6][i]}%</b>
-                          </div>
-                        )}
-                      </div>
-                      <span>{d}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>评测指标</th>
-                      <th>实测值（示例）</th>
-                      <th>JSON基准</th>
-                      <th>差异</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {datasets.map((d, i) => (
-                      <tr key={d}>
-                        <td>
-                          <b>{d}</b>
-                        </td>
-                        <td>
-                          <b>{[72.4, 61.8, 48][i]}%</b>
-                        </td>
-                        <td>{[68.1, 58.9, 41.6][i]}%</td>
-                        <td className="green-text">
-                          +{[4.3, 2.9, 6.4][i]} pct
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <p className="muted chart-note">
-                基准版本：baseline-demo-v1 / 仅示例　 |　 单位：准确率 /
-                任务成功率（%）
-              </p>
-            </>
-          ) : tab === "性能结果" ? (
-            <>
-              <Notice>
-                以下为界面展示数据，不代表目标数据集已支持这些性能指标。
-              </Notice>
-              <div className="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>指标</th>
-                      <th>示例值</th>
-                      <th>口径</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[
-                      ["输出吞吐", "126 tok/s", "总输出 Token / 执行耗时"],
-                      ["首 Token 延迟", "182 ms", "P50 · 示例"],
-                      ["端到端延迟", "1,240 ms", "P50 · 示例"],
-                    ].map((row) => (
-                      <tr key={row[0]}>
-                        {row.map((c) => (
-                          <td key={c}>{c}</td>
-                        ))}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <p className="muted">
-                并发 60 / 输入 2048 / 输出 2048，仅为示例条件。
-              </p>
-            </>
-          ) : (
-            <>
-              <Notice>公开任务集结果，不等同于官方私有榜单。</Notice>
-              <div className="agent-result">
-                <strong>48.0%</strong>
-                <p>严格任务成功率 · 示例</p>
-                <Badge tone="orange">失败案例：工具调用参数缺失</Badge>
-              </div>
-              <button
-                className="link"
-                onClick={() =>
-                  notify(
-                    "样本 #018：create_task 缺少 title 字段，断言未通过。静态示例。",
-                  )
-                }
-              >
-                查看失败样本 #018
-              </button>
-            </>
-          )}
-        </Card>
-        <Card
-          title={
-            <div className="spread">
-              <span className="inline">
-                <Sparkles size={24} />
-                AutoEval Agent 自动分析
-              </span>
-              <Badge
-                tone={
-                  r.status === "分析成功"
-                    ? "green"
-                    : r.status === "分析失败"
-                      ? "orange"
-                      : "purple"
-                }
-              >
-                {r.status}
-              </Badge>
-            </div>
-          }
-          className="analysis"
-        >
-          <p className="muted">覆盖情况：3/3　 |　 分析耗时：2分18秒（示例）</p>
-          {r.status !== "分析成功" ? (
-            <div className="stack">
-              <Notice>
-                {r.status === "分析中"
-                  ? "分析中，原始测评结果可正常查看。"
-                  : "分析失败：分析服务请求超时（示例）。原始报告已保留。"}
-              </Notice>
-              {r.status === "分析失败" && (
-                <button
-                  onClick={() =>
-                    notify("静态预览：未调用分析服务，不会触发真实重试。")
-                  }
-                >
-                  重试分析
-                </button>
-              )}
-            </div>
-          ) : (
-            [
-              [
-                "主要差距集中于多模态推理。",
-                "MMMU-Pro 相比基准提升有限（+2.9 pct），复杂图文理解与推理仍有提升空间。",
-              ],
-              [
-                "工具调用任务存在参数错误。",
-                "部分任务因工具调用参数格式或字段值不符合要求而未通过断言。",
-              ],
-              [
-                "建议检查失败样本与生成配置。",
-                "优先分析 MMMU-Pro 与 Agent 的失败样本，并检查温度、最大输出长度与工具参数模板。",
-              ],
-            ].map((a, i) => (
-              <article key={a[0]}>
-                <span className="analysis-number">{i + 1}</span>
-                <div>
-                  <h3>{a[0]}</h3>
-                  <p>{a[1]}</p>
-                  <span className="muted">证据：</span>
-                  <button
-                    onClick={() =>
-                      notify(
-                        "样本 #018：工具调用缺少必填参数。此内容为静态示例。",
-                      )
-                    }
-                  >
-                    <FileText size={14} />
-                    样本#018
-                  </button>
-                  <button
-                    onClick={() =>
-                      notify(
-                        "轨迹 #042：输入 → 工具调用 → 参数校验失败。静态示例。",
-                      )
-                    }
-                  >
-                    <Activity size={14} />
-                    轨迹#042
-                  </button>
-                </div>
-              </article>
-            ))
-          )}
-          <div className="card-bottom">
-            <small>上述分析及证据均为静态示例。</small>
-          </div>
-        </Card>
-      </div>
-    </div>
+    <ReportView
+      key={id}
+      id={id}
+      model={report.model}
+      modelId={report.modelId}
+      version={report.version}
+      analysis={report.status}
+      go={go}
+      notify={notify}
+    />
   );
 }
 function Leaderboard({ go }: { go: (p: string, id?: string) => void }) {
@@ -1523,7 +852,7 @@ function Leaderboard({ go }: { go: (p: string, id?: string) => void }) {
         </div>
       </Card>
       <Notice>
-        仅展示同数据集、同配置口径的有效结果。当前所有排名均为示例。
+        仅展示同数据集、同配置口径的有效结果。榜单应来自受审批任务；审批人、准入条件及驳回流程待确认，当前排名仅为示例。
       </Notice>
       <Card className="table-card">
         <div className="table-wrap">
@@ -1661,7 +990,7 @@ function Overview({ go }: { go: (p: string, id?: string) => void }) {
             {
               icon: Activity,
               name: "执行与追踪",
-              sub: "任务进度 · 日志与关键轨迹",
+              sub: "任务进度 · 数据集 case 日志",
             },
             {
               icon: Sparkles,

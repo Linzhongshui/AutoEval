@@ -1,10 +1,50 @@
 # AutoEval Demo
 
+<p align="center">
+  <img src="./public/brand/autoeval-logo.svg" alt="AutoEval 智能测评平台" width="300" />
+</p>
+
 AutoEval 智能测评平台的前端静态原型，用于预览模型接入、测试配置、任务管理、报告分析与模型榜单的页面和交互。
 
 采用 React 19、TypeScript、Vite 6 和 Lucide React，包含五个一级菜单、独立任务详情及报告详情。使用正式 SVG 品牌素材，统一紫色主题、字体层级和响应式布局。
 
 > 当前版本仅提供本地示例数据与前端交互。模型连接、测评执行、配置保存、报告生成和自动分析尚未接入后端；页面中的分数、耗时、日志、进度与分析结论均不代表真实测评结果。
+
+## 页面预览
+
+以下截图来自当前本地运行的静态 Demo，桌面视口为 1440 × 1000，截图保留页面完整内容。图中数据均为示例。
+
+### 首页
+
+![首页](./docs/screenshots/00-home.png)
+
+### 控制台
+
+![控制台](./docs/screenshots/01-console.png)
+
+### 测试配置
+
+![测试配置](./docs/screenshots/02-config.png)
+
+### 任务管理
+
+![任务管理](./docs/screenshots/03-tasks.png)
+
+### 任务详情
+
+![任务详情](./docs/screenshots/04-task-detail.png)
+
+### 报告管理
+
+![报告管理](./docs/screenshots/05-reports.png)
+
+### 报告详情
+
+![报告详情](./docs/screenshots/06-report-detail.png)
+
+### 测评榜单
+
+![测评榜单](./docs/screenshots/07-leaderboard.png)
 
 ## 快速开始
 
@@ -98,4 +138,4 @@ vite.config.ts            Vite 配置
 
 当前代码已通过 TypeScript 类型检查和 Vite 生产构建，尚未配置自动化测试脚本。
 
-浏览器截图对照及完整交互验收仍待完成：此前内置浏览器环境缺少运行文件，具体阻塞记录见 [design-qa.md](./design-qa.md)。构建通过不等于视觉或业务验收通过。
+已使用本地 Chrome 无头模式采集以上八个页面的实际截图，采集期间未发现页面运行时错误。完整交互验收及与设计原图的逐项视觉对照仍待完成；此前检查记录见 [design-qa.md](./design-qa.md)。构建和截图采集通过不等于业务验收通过。

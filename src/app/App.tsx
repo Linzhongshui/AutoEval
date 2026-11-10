@@ -33,7 +33,7 @@ const datasets = ["GPQA", "MMMU-Pro", "AutomationBench"];
 const menus = [
   { id: "home", label: "首页", icon: Layers },
   { id: "console", label: "控制台", icon: Home },
-  { id: "config", label: "测试配置", icon: SlidersHorizontal },
+  { id: "config", label: "测评配置", icon: SlidersHorizontal },
   { id: "tasks", label: "任务管理", icon: ClipboardList },
   { id: "reports", label: "报告管理", icon: ChartNoAxesColumnIncreasing },
   { id: "leaderboard", label: "测评榜单", icon: Trophy },
@@ -339,7 +339,11 @@ export function App() {
         </header>
         {page === "home" && <Overview go={go} />}
         {page === "console" && (
-          <EvaluationConsole profiles={profiles} notify={setToast} />
+          <EvaluationConsole
+            profiles={profiles}
+            setProfiles={setProfiles}
+            notify={setToast}
+          />
         )}
         {page === "config" && (
           <Configurations
@@ -1133,4 +1137,3 @@ function Overview({ go }: { go: (p: string, id?: string) => void }) {
     </div>
   );
 }
-

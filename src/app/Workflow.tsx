@@ -258,7 +258,7 @@ export function Configurations({
     },
     (_, i) => ({
       id: `official-${officialVersion}-${i}`,
-      name: `Demo Vision ${String.fromCharCode(65 + i)} 测试配置`,
+      name: `Demo Vision ${String.fromCharCode(65 + i)} 测评配置`,
       model: `Demo Vision ${String.fromCharCode(65 + i)}`,
       modelId: `demo-vlm-${String(i + 1).padStart(3, "0")}`,
       source: "固定仓库",
@@ -370,7 +370,7 @@ export function Configurations({
         </div>
         <p className="muted">
           {kind === "标准配置"
-            ? `当前版本 ${officialVersion} · 包含 ${officialRows.length} 个模型的测试配置 · 仅供查看`
+            ? `当前版本 ${officialVersion} · 包含 ${officialRows.length} 个模型的测评配置 · 仅供查看`
             : "自定义配置由创建者维护，版本名称由创建者定义。"}
         </p>
         <div className="table-wrap">
@@ -677,9 +677,11 @@ export function Configurations({
 }
 export function EvaluationConsole({
   profiles,
+  setProfiles,
   notify,
 }: {
   profiles: Profile[];
+  setProfiles: (p: Profile[]) => void;
   notify: (s: string) => void;
 }) {
   const [model, setModel] = useState("demo-vlm-001");
@@ -763,12 +765,28 @@ export function EvaluationConsole({
   const [draftParams, setDraftParams] = useState(params);
   const [saved, setSaved] = useState(false);
   const [view, setView] = useState<string | null>(null);
+  const [saveAsNew, setSaveAsNew] = useState(false);
+  const [newConfigName, setNewConfigName] = useState("");
+  const [newVersionName, setNewVersionName] = useState("");
   const [api, setApi] = useState(true);
+  const [datasetSearch, setDatasetSearch] = useState("");
+  const visibleDatasets = names.filter((d) =>
+    d.toLowerCase().includes(datasetSearch.toLowerCase()),
+  );
   return (
-    <div className="console-grid">
-      <div className="stack">
-        <section className="card">
-          <h2>模型接入</h2>
+    <div className="console-grid console-workflow">
+      <div className="card console-configuration">
+        <header className="console-configuration-heading">
+          <h2>发起测评</h2>
+          <p>选择模型、确认配置和数据集，完成本次测评设置。</p>
+          <span className="console-demo-note">
+            静态演示：不会连接模型或创建真实任务。
+          </span>
+        </header>
+        <section className="console-step">
+          <h3 className="console-step-title">
+            <span className="step-number">1</span>模型与服务
+          </h3>
           <div className="tabs">
             <button
               className={api ? "active" : ""}
@@ -798,18 +816,27 @@ export function EvaluationConsole({
                 <option>demo-vlm-001</option>
                 <option>demo-vlm-002</option>
               </select>
-              <label>API 地址</label>
-              <input placeholder="https://api.example.com/v1" />
-              <label>API Key</label>
-              <input type="password" placeholder="请输入 API Key" />
-              <label>接口类型</label>
-              <select>
-                <option>OpenAI Compatible</option>
-              </select>
-              <span>未连接</span>
-              <button onClick={() => notify("静态预览：未接入真实连接测试。")}>
-                测试连接
-              </button>
+              <details open className="console-service-details">
+                <summary>
+                  服务配置 <span>未连接</span>
+                </summary>
+                <div className="form-grid">
+                  <label>API 地址</label>
+                  <input placeholder="https://api.example.com/v1" />
+                  <label>API Key</label>
+                  <input type="password" placeholder="请输入 API Key" />
+                  <label>接口类型</label>
+                  <select>
+                    <option>OpenAI Compatible</option>
+                  </select>
+                  <span>未连接</span>
+                  <button
+                    onClick={() => notify("静态预览：未接入真实连接测试。")}
+                  >
+                    测试连接
+                  </button>
+                </div>
+              </details>
             </div>
           ) : (
             <div className="stack">
@@ -821,33 +848,43 @@ export function EvaluationConsole({
             </div>
           )}
         </section>
-        <section className="card stack">
-          <h2>测试配置</h2>
-          <div className="inline">
-            {["标准配置", "自定义配置"].map((m, i) => (
-              <label key={m}>
-                <input
-                  type="radio"
-                  checked={custom === !!i}
-                  onChange={() => {
-                    setCustom(!!i);
-                    if (i)
-                      chooseCustom(customKey || customChoices[0]?.key || "");
-                    else {
-                      switchVersion(evaluationVersion);
-                      setSelected(names);
-                      setScopes(
-                        Object.fromEntries(names.map((d) => [d, "全量"])),
-                      );
-                    }
-                    setSaved(false);
-                  }}
-                />
-                {m}
-              </label>
-            ))}
+        <section className="console-step stack">
+          <h3 className="console-step-title">
+            <span className="step-number">2</span>测评配置
+          </h3>
+          <div className="console-config-fields">
+            <fieldset className="console-config-type">
+              <legend>配置类型</legend>
+              <div className="console-config-segments">
+                {["标准配置", "自定义配置"].map((m, i) => (
+                  <label key={m} className={custom === !!i ? "selected" : ""}>
+                    <input
+                      type="radio"
+                      name="console-config-type"
+                      checked={custom === !!i}
+                      onChange={() => {
+                        setCustom(!!i);
+                        if (i)
+                          chooseCustom(
+                            customKey || customChoices[0]?.key || "",
+                          );
+                        else {
+                          switchVersion(evaluationVersion);
+                          setSelected(names);
+                          setScopes(
+                            Object.fromEntries(names.map((d) => [d, "全量"])),
+                          );
+                        }
+                        setSaved(false);
+                      }}
+                    />
+                    {m}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
             <label className="evaluation-version-field">
-              <span>{custom ? "自定义配置" : "测评版本"}</span>
+              <span>{custom ? "自定义配置" : "配置版本"}</span>
               {custom ? (
                 <select
                   aria-label="自定义配置列表"
@@ -866,7 +903,7 @@ export function EvaluationConsole({
                 </select>
               ) : (
                 <select
-                  aria-label="测评版本"
+                  aria-label="配置版本"
                   value={evaluationVersion}
                   onChange={(e) => switchVersion(e.target.value)}
                 >
@@ -886,7 +923,7 @@ export function EvaluationConsole({
                 ? "自定义配置已保存到当前页面内存。"
                 : chosenCustom
                   ? `当前自定义配置：${chosenCustom.profile.name}，来源：${chosenCustom.profile.source}。选择后加载对应数据集与参数。`
-                  : "暂无自定义配置，请先在测试配置中创建。"
+                  : "暂无自定义配置，请先在测评配置中创建。"
               : `当前选择 ${evaluationVersion} 标准配置，官方参数只读。版本和参数均为本地示例。`}
           </Note>
           {custom && (
@@ -896,6 +933,9 @@ export function EvaluationConsole({
                 setDraft([...selected]);
                 setActive(selected[0] || "");
                 setDraftParams(structuredClone(params));
+                setSaveAsNew(false);
+                setNewConfigName("");
+                setNewVersionName("");
                 setDrawer(true);
               }}
             >
@@ -903,8 +943,38 @@ export function EvaluationConsole({
             </button>
           )}
         </section>
-        <section className="card">
-          <h2>测评数据集</h2>
+        <section className="console-step">
+          <h3 className="console-step-title">
+            <span className="step-number">3</span>测评数据集
+          </h3>
+          <div className="dataset-selection-toolbar">
+            <input
+              aria-label="搜索可选数据集"
+              placeholder="搜索数据集"
+              value={datasetSearch}
+              onChange={(e) => setDatasetSearch(e.target.value)}
+            />
+            <label>
+              <input
+                type="checkbox"
+                aria-label="全选当前数据集"
+                checked={
+                  visibleDatasets.length > 0 &&
+                  visibleDatasets.every((d) => selected.includes(d))
+                }
+                disabled={!visibleDatasets.length}
+                onChange={(e) =>
+                  setSelected(
+                    e.target.checked
+                      ? Array.from(new Set([...selected, ...visibleDatasets]))
+                      : selected.filter((d) => !visibleDatasets.includes(d)),
+                  )
+                }
+              />
+              全选当前
+            </label>
+            <span>已选 {selected.length} 个</span>
+          </div>
           <div className="table-wrap">
             <table>
               <thead>
@@ -913,12 +983,11 @@ export function EvaluationConsole({
                   <th>数据集类型</th>
                   <th>数据集</th>
                   <th>数据范围</th>
-                  <th>预计耗时</th>
                   <th>操作</th>
                 </tr>
               </thead>
               <tbody>
-                {names.map((d) => (
+                {visibleDatasets.map((d) => (
                   <tr key={d}>
                     <td>
                       <input
@@ -949,11 +1018,10 @@ export function EvaluationConsole({
                         <option>Lite</option>
                       </select>
                     </td>
-                    <td>暂无可靠估算</td>
                     <td>
                       <div className="inline">
                         <button className="link" onClick={() => setView(d)}>
-                          查看
+                          查看参数
                         </button>
                         <button
                           className="link"
@@ -962,10 +1030,13 @@ export function EvaluationConsole({
                             setDraft([...selected]);
                             setActive(d);
                             setDraftParams(structuredClone(params));
+                            setSaveAsNew(false);
+                            setNewConfigName("");
+                            setNewVersionName("");
                             setDrawer(true);
                           }}
                         >
-                          编辑
+                          编辑参数
                         </button>
                       </div>
                     </td>
@@ -974,13 +1045,16 @@ export function EvaluationConsole({
               </tbody>
             </table>
           </div>
+          {!visibleDatasets.length && (
+            <div className="empty">没有匹配的数据集</div>
+          )}
           <Note>
             每个数据集独立选择全量 / Lite；Lite 适用场景与具体样本范围待确认。
           </Note>
         </section>
       </div>
       <section className="card stack summary">
-        <h2>任务摘要</h2>
+        <h2>本次测评</h2>
         <h3>{model}</h3>
         <span>
           配置：{custom ? "自定义配置" : "标准配置"} ·{" "}
@@ -1009,6 +1083,31 @@ export function EvaluationConsole({
               : "同时执行多个数据集，并行上限与失败策略待确认。"}
           </p>
         </fieldset>
+        <section className="summary-scope">
+          <div className="spread">
+            <h3>测评范围</h3>
+            <strong>{selected.length} 个数据集</strong>
+          </div>
+          <p>
+            全量 {selected.filter((d) => scopes[d] === "全量").length} · Lite{" "}
+            {selected.filter((d) => scopes[d] === "Lite").length}
+          </p>
+          <details>
+            <summary>展开选择明细</summary>
+            <div className="summary-dataset-list">
+              {selected.map((d) => (
+                <div key={d}>
+                  <div className="spread">
+                    <b>{d}</b>
+                    <span>{scopes[d]}</span>
+                  </div>
+                  <small>预计耗时：暂无可靠估算</small>
+                </div>
+              ))}
+              {!selected.length && <p>尚未选择数据集</p>}
+            </div>
+          </details>
+        </section>
         <div className="total-duration" role="status" aria-live="polite">
           <div className="total-duration-heading">
             <span>测评预计总耗时</span>
@@ -1029,34 +1128,98 @@ export function EvaluationConsole({
           )}
           <small>不含排队及报告分析耗时。</small>
         </div>
-        {selected.map((d) => (
-          <div className="summary-section" key={d}>
-            <b>{d}</b>
-            <p>范围：{scopes[d]}</p>
-            <p>预计耗时：暂无可靠估算</p>
-          </div>
-        ))}
         <p>分析预计耗时：暂无可靠估算</p>
+        <div className="console-submit-status" role="status">
+          {!selected.length
+            ? "请至少选择一个数据集"
+            : custom && !chosenCustom
+              ? "请先选择自定义配置"
+              : "模型未连接，请先完成连接测试。"}
+          <small>当前为静态预览，连接测试与提交仅展示说明。</small>
+        </div>
         <button
           className="primary"
-          disabled={!selected.length}
+          disabled={!selected.length || (custom && !chosenCustom)}
           onClick={() => notify("静态预览：未创建真实任务。运行方式：" + run)}
         >
           发起测评
         </button>
       </section>
       {view && (
-        <div className="dataset-overlay">
-          <section className="dataset-dialog">
-            <h3>{view} 配置（只读）</h3>
-            <pre className="snapshot">
-              {JSON.stringify(
-                { ...params[view], scope: scopes[view] },
-                null,
-                2,
-              )}
-            </pre>
-            <button onClick={() => setView(null)}>关闭</button>
+        <div className="dataset-overlay" onClick={() => setView(null)}>
+          <section
+            className="dataset-dialog readable-config-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`${view} 数据集参数`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="spread">
+              <div>
+                <h3>{view} 数据集参数</h3>
+                <p className="muted">本次测评使用的参数，仅供查看。</p>
+              </div>
+              <span className="badge neutral">只读</span>
+            </div>
+            <div className="readable-config-scroll">
+              <dl className="readable-config-list">
+                {[
+                  [
+                    "测评范围",
+                    scopes[view],
+                    scopes[view] === "Lite"
+                      ? "使用部分样本进行测评；具体子集与样本数量待确认。"
+                      : "使用该配置所定义的完整样本范围。",
+                  ],
+                  [
+                    "回答长度上限",
+                    `${params[view].output.toLocaleString()} Token`,
+                    "限制每次回答最多生成多少内容。Token 是模型处理文字的计量单位，不等同于汉字数。",
+                  ],
+                  [
+                    "同时处理数量",
+                    `${params[view].concurrency} 个请求`,
+                    "最多同时向模型发送的请求数；实际处理能力取决于服务资源。",
+                  ],
+                  [
+                    "回答随机性",
+                    params[view].temperature,
+                    "控制生成内容的随机程度。通常数值越低，回答越稳定；效果取决于模型。",
+                  ],
+                  [
+                    "候选内容范围",
+                    params[view].top_p,
+                    "控制模型从多大概率范围内选择后续内容。数值越接近 1，候选范围通常越广。",
+                  ],
+                ].map(([label, value, help]) => (
+                  <div key={label}>
+                    <dt>{label}</dt>
+                    <dd>
+                      <strong>{value}</strong>
+                      <p>{help}</p>
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              <details className="raw-config-details">
+                <summary>查看原始配置（JSON）</summary>
+                <pre className="snapshot">
+                  {JSON.stringify(
+                    { ...params[view], scope: scopes[view] },
+                    null,
+                    2,
+                  )}
+                </pre>
+              </details>
+              <p className="config-example-note">
+                参数为本地示例，不代表推荐设置或真实执行结果。
+              </p>
+            </div>
+            <div className="readable-config-footer">
+              <button autoFocus onClick={() => setView(null)}>
+                关闭
+              </button>
+            </div>
           </section>
         </div>
       )}
@@ -1086,12 +1249,94 @@ export function EvaluationConsole({
               onChange={setDraftParams}
             />
           </div>
+          <div className="config-save-panel">
+            <h3>保存方式</h3>
+            <div className="inline">
+              <label>
+                <input
+                  type="radio"
+                  name="console-save-mode"
+                  checked={!saveAsNew}
+                  onChange={() => setSaveAsNew(false)}
+                />{" "}
+                仅用于本次测评
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="console-save-mode"
+                  checked={saveAsNew}
+                  onChange={() => setSaveAsNew(true)}
+                />{" "}
+                保存为新配置
+              </label>
+            </div>
+            {saveAsNew && (
+              <div className="config-save-fields">
+                <label>
+                  <span>配置名称 *</span>
+                  <input
+                    aria-label="新配置名称"
+                    required
+                    value={newConfigName}
+                    onChange={(e) => setNewConfigName(e.target.value)}
+                    placeholder="例如：多模态专项验证"
+                  />
+                </label>
+                <label>
+                  <span>版本名称 *</span>
+                  <input
+                    aria-label="新配置版本名称"
+                    required
+                    value={newVersionName}
+                    onChange={(e) => setNewVersionName(e.target.value)}
+                    placeholder="例如：初版"
+                  />
+                </label>
+              </div>
+            )}
+            <p className="config-save-help">
+              {saveAsNew
+                ? "加入测评配置的自定义列表并自动选用，不覆盖原配置。当前仅在页面内存保存，刷新后恢复。"
+                : "仅应用到本次测评，不修改已有配置。"}
+            </p>
+          </div>
           <div className="actions">
             <button onClick={() => setDrawer(false)}>取消</button>
             <button
-              disabled={!draft.length}
+              disabled={
+                !draft.length ||
+                (saveAsNew && (!newConfigName.trim() || !newVersionName.trim()))
+              }
               className="primary"
               onClick={() => {
+                if (saveAsNew) {
+                  const name = newConfigName.trim();
+                  const version = newVersionName.trim();
+                  if (profiles.some((p) => !p.official && p.name === name)) {
+                    notify("配置名称已存在，请更换名称。");
+                    return;
+                  }
+                  const id = `custom-${Date.now()}`;
+                  setProfiles([
+                    ...profiles,
+                    {
+                      id,
+                      name,
+                      source: "当前用户",
+                      modelId: model,
+                      model:
+                        model === "demo-vlm-001"
+                          ? "Demo Vision A"
+                          : "Demo Vision B",
+                      official: false,
+                      versions: [version],
+                      items: [...draft],
+                      data: { [version]: structuredClone(draftParams) },
+                    },
+                  ]);
+                  setCustomKey(id + "::" + version);
+                }
                 setSelected(draft);
                 setParams(draftParams);
                 setScopes({
@@ -1102,10 +1347,14 @@ export function EvaluationConsole({
                 });
                 setSaved(true);
                 setDrawer(false);
-                notify("配置已保存并返回控制台（仅当前页面内存）。");
+                notify(
+                  saveAsNew
+                    ? "已保存为新配置并自动选用（本地示例）。"
+                    : "已应用到本次测评，未修改原配置。",
+                );
               }}
             >
-              保存配置并返回
+              {saveAsNew ? "保存新配置并返回" : "应用并返回"}
             </button>
           </div>
         </ConfigurationDrawer>

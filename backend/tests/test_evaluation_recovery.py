@@ -13,6 +13,7 @@ from temporalio.common import WorkflowIDReusePolicy
 from temporalio.service import RPCError, RPCStatusCode
 
 from autoeval import case_history, evaluation_activity, reconciler
+from autoeval.audit import AuditEvent
 from autoeval.case_history import (
     AttemptEvidence,
     AttemptInput,
@@ -404,15 +405,27 @@ async def test_started_attempt_blocks_activity_and_reconciliation_without_model_
     assert await reconciler.reconcile_gpqa(
         harness.sessions, client, harness.settings, run.id
     ) == "unresolved"
+    assert await reconciler.reconcile_gpqa(
+        harness.sessions, client, harness.settings, run.id
+    ) == "unresolved"
     assert client.starts == []
     async with harness.sessions() as session:
         current = await session.get(EvaluationRun, run.id)
         assert current.state == "running"
-        assert current.projection_version == 1
+        assert current.projection_version == 2
         assert await session.scalar(select(ExecutionLease).where(ExecutionLease.run_id == run.id))
-        assert len(
-            (await session.scalars(select(RunEvent).where(RunEvent.run_id == run.id))).all()
-        ) == 1
+        events = (
+            await session.scalars(
+                select(RunEvent).where(RunEvent.run_id == run.id).order_by(RunEvent.seq)
+            )
+        ).all()
+        assert [event.type for event in events] == ["accepted", "execution_unresolved"]
+        assert events[-1].body["ownership_retained"] is True
+        audits = (
+            await session.scalars(select(AuditEvent).where(AuditEvent.run_id == run.id))
+        ).all()
+        assert [audit.action for audit in audits] == ["recovery.unresolved"]
+        assert audits[0].details["reason"] == "started_attempt"
 
 
 async def test_active_original_workflow_is_not_raced(recovery_harness):

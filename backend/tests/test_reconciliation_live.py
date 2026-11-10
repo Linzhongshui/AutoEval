@@ -66,6 +66,17 @@ async def test_recover_closed_workflow_without_restarting_job():
         assert (
             await reconcile_diagnostic(app.state.sessions, client, settings, run_id) == "unresolved"
         )
+        assert (
+            await reconcile_diagnostic(app.state.sessions, client, settings, run_id) == "unresolved"
+        )
+        detail = (await api.get(f"/api/autoeval/v1/diagnostics/runs/{run_id}")).json()["data"]
+        assert detail["execution_unresolved"] is True
+        assert detail["ownership_held"] is True
+        assert [event["type"] for event in detail["events"]].count("execution_unresolved") == 1
+        audits = (
+            await api.get("/api/autoeval/v1/audit-events", params={"run_id": str(run_id)})
+        ).json()["data"]
+        assert [event["action"] for event in audits].count("recovery.unresolved") == 1
         async with app.state.sessions() as session:
             assert await session.scalar(
                 select(ExecutionLease).where(ExecutionLease.run_id == run_id)

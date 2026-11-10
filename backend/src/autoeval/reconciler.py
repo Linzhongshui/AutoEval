@@ -10,6 +10,7 @@ from temporalio.common import WorkflowIDReusePolicy
 from temporalio.exceptions import WorkflowAlreadyStartedError
 from temporalio.service import RPCError, RPCStatusCode
 
+from autoeval.audit import record_audit
 from autoeval.case_history import CaseExecutionRecord
 from autoeval.config import get_settings
 from autoeval.contracts import JobRef
@@ -21,6 +22,41 @@ from autoeval.runs import DiagnosticResult, ExecutionLease
 from autoeval.workflows import GpqaExplorationWorkflow
 
 log = logging.getLogger(__name__)
+
+
+async def record_unresolved_once(session, row, *, reason: str, observed_state: str | None = None):
+    latest = await session.scalar(
+        select(RunEvent)
+        .where(RunEvent.run_id == row.id)
+        .order_by(RunEvent.seq.desc())
+        .limit(1)
+    )
+    if latest is not None and latest.type == "execution_unresolved":
+        return
+    row.projection_version += 1
+    details = {
+        "reason": reason,
+        "observed_state": observed_state,
+        "cleanup_pending": True,
+        "ownership_retained": True,
+    }
+    session.add(
+        RunEvent(
+            run_id=row.id,
+            seq=row.projection_version,
+            type="execution_unresolved",
+            body={**details, "reconciled": True},
+        )
+    )
+    record_audit(
+        session,
+        action="recovery.unresolved",
+        resource_id=str(row.id),
+        run_id=row.id,
+        outcome="unresolved",
+        request_id=f"reconcile:{row.id}",
+        details=details,
+    )
 
 
 async def reconcile_diagnostic(sessions, client, settings, run_id):
@@ -46,6 +82,9 @@ async def reconcile_diagnostic(sessions, client, settings, run_id):
         if row.cancel_requested_at and observation.state == "running":
             observation = await adapter.cancel(job, "reconcile-cancel:" + str(run_id))
         if observation.state not in {"succeeded", "failed", "cancelled"}:
+            await record_unresolved_once(
+                session, row, reason="observation_nonterminal", observed_state=observation.state
+            )
             return "unresolved"
         summary = await adapter.collect(job)
         # Resolve missing projections from observed execution, never replay submit.
@@ -109,6 +148,7 @@ async def reconcile_gpqa(sessions, client, settings, run_id):
             .limit(1)
         )
         if started is not None:
+            await record_unresolved_once(session, row, reason="started_attempt")
             return "unresolved"
     recovery_id = f"demo/recovery/gpqa/{run_id}"
     try:

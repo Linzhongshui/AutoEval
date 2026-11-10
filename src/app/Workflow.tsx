@@ -1126,6 +1126,8 @@ export function DatasetExecution({
   state: string;
   items: string[];
 }) {
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [datasetTab, setDatasetTab] = useState("执行概况");
   const [tab, setTab] = useState("执行进度");
   const [active, setActive] = useState(items[0]);
   const [filter, setFilter] = useState("全部结果");
@@ -1213,6 +1215,8 @@ export function DatasetExecution({
   const pages = Math.max(1, Math.ceil(filtered.length / 5));
   const current = Math.min(page, pages);
   const switchDataset = (name: string) => {
+    setDetailOpen(true);
+    setDatasetTab("执行概况");
     setActive(name);
     setFilter("全部结果");
     setQuery("");
@@ -1283,351 +1287,390 @@ export function DatasetExecution({
         </>
       ) : (
         <>
-          <section className="task-overview" aria-label="任务总览">
-            <div className="spread">
-              <h3>任务总览</h3>
-              <span className="muted">
-                汇总全部 {executions.length} 个数据集 · 不随下方选择变化
-              </span>
-            </div>
-            <div className="overall-execution">
-              <div>
-                <span>整体进度</span>
-                <strong>{overall}%</strong>
-                <progress max="100" value={overall} />
-              </div>
-              <span>
-                已完成数据集{" "}
-                <b>
-                  {executions.filter((d) => d.processed === 100).length} /{" "}
-                  {items.length}
-                </b>
-              </span>
-              <span>
-                实际耗时 <b>21 分钟</b>
-              </span>
-              <span>
-                最后更新 <b>14:20:18</b>
-              </span>
-            </div>
-            <div className="task-overview-stats">
-              {[
-                ["Case 总数", executions.length * 100, ""],
-                ["已处理", executions.reduce((n, d) => n + d.processed, 0), ""],
-                [
-                  "判分通过",
-                  executions.reduce((n, d) => n + d.passed, 0),
-                  "passed",
-                ],
-                [
-                  "判分未通过",
-                  executions.reduce((n, d) => n + d.failed, 0),
-                  "failed",
-                ],
-                ["执行异常", totalErrors, "error"],
-                [
-                  "待处理",
-                  executions.reduce((n, d) => n + d.pending, 0),
-                  "pending",
-                ],
-              ].map(([label, value, tone]) => (
-                <div key={label} className={`case-stat ${tone}`}>
-                  <span>{label}</span>
-                  <strong>{value}</strong>
-                </div>
-              ))}
-            </div>
-            <div className="table-wrap">
-              <table className="task-overview-table">
-                <thead>
-                  <tr>
-                    {[
-                      "数据集",
-                      "状态",
-                      "进度 / 已处理",
-                      "判分通过",
-                      "判分未通过",
-                      "执行异常",
-                      "耗时",
-                      "最后更新",
-                      "操作",
-                    ].map((h) => (
-                      <th key={h}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {executions.map((d) => (
-                    <tr key={d.name}>
-                      <td>
-                        <b>{d.name}</b>
-                      </td>
-                      <td>
-                        <span
-                          className={`case-status ${d.errors ? "error" : d.processed === 100 ? "passed" : d.processed ? "running" : "pending"}`}
-                        >
-                          {d.status}
-                        </span>
-                      </td>
-                      <td>
-                        {d.processed}% · {d.processed}/100
-                      </td>
-                      <td>{d.passed}</td>
-                      <td>{d.failed}</td>
-                      <td>{d.errors}</td>
-                      <td>{d.duration}</td>
-                      <td>{d.processed ? "14:20:18" : "—"}</td>
-                      <td>
-                        <button
-                          className="link"
-                          onClick={() => switchDataset(d.name)}
-                        >
-                          查看明细
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="task-overview-bottom">
-              <span>
-                任务异常：
-                {totalErrors
-                  ? `${totalErrors} 个 case 执行异常，详见对应数据集`
-                  : "无执行异常"}
-              </span>
-              <span>
-                报告状态：{running ? "待生成（测评进行中）" : "已生成（示例）"}
-              </span>
-              <span>预计总耗时：暂无可靠估算</span>
-            </div>
-          </section>
-          <div className="execution-body">
-            <aside className="execution-navigation">
-              {datasetTypes.map((group) => {
-                const children = executions.filter((d) =>
-                  group.items.includes(d.name),
-                );
-                return children.length ? (
-                  <div key={group.label}>
-                    <h3>{group.label}</h3>
-                    {children.map((d) => (
-                      <button
-                        key={d.name}
-                        className={
-                          selected.name === d.name ? "selected-dataset" : ""
-                        }
-                        onClick={() => switchDataset(d.name)}
-                      >
-                        <div className="spread">
-                          <b>{d.name}</b>
-                          <span
-                            className={`case-status ${d.status === "执行异常" ? "error" : d.processed === 100 ? "passed" : d.processed ? "running" : "pending"}`}
-                          >
-                            {d.status}
-                          </span>
-                        </div>
-                        <progress max="100" value={d.processed} />
-                        <div className="spread">
-                          <small>
-                            {d.processed}% · {d.duration}
-                          </small>
-                          <small>更新 {d.processed ? "14:20" : "—"}</small>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                ) : null;
-              })}
-            </aside>
-            <div className="stack case-content">
+          {!detailOpen && (
+            <section className="task-overview" aria-label="任务总览">
               <div className="spread">
-                <h3>{selected.name}</h3>
-                <span className="muted">{selected.status}</span>
-              </div>
-              <div className="execution-meta">
-                <span>
-                  已处理 <b>{selected.processed} / 100</b>
-                </span>
-                <span>
-                  耗时 <b>{selected.duration}</b>
-                </span>
-                <span>
-                  更新时间 <b>{selected.updated}</b>
+                <h3>任务总览</h3>
+                <span className="muted">
+                  共 {executions.length} 个数据集 · 点击查看执行详情
                 </span>
               </div>
-              <div className="case-statistics">
+              <div className="overall-execution">
+                <div>
+                  <span>整体进度</span>
+                  <strong>{overall}%</strong>
+                  <progress max="100" value={overall} />
+                </div>
+                <span>
+                  已完成数据集{" "}
+                  <b>
+                    {executions.filter((d) => d.processed === 100).length} /{" "}
+                    {items.length}
+                  </b>
+                </span>
+                <span>
+                  实际耗时 <b>21 分钟</b>
+                </span>
+                <span>
+                  最后更新 <b>14:20:18</b>
+                </span>
+              </div>
+              <div className="task-overview-stats">
                 {[
-                  ["判分通过", selected.passed, "passed"],
-                  ["判分未通过", selected.failed, "failed"],
-                  ["执行异常", selected.errors, "error"],
-                  ["待处理", selected.pending, "pending"],
-                ].map(([label, count, tone]) => (
+                  ["Case 总数", executions.length * 100, ""],
+                  [
+                    "已处理",
+                    executions.reduce((n, d) => n + d.processed, 0),
+                    "",
+                  ],
+                  [
+                    "判分通过",
+                    executions.reduce((n, d) => n + d.passed, 0),
+                    "passed",
+                  ],
+                  [
+                    "判分未通过",
+                    executions.reduce((n, d) => n + d.failed, 0),
+                    "failed",
+                  ],
+                  ["执行异常", totalErrors, "error"],
+                  [
+                    "待处理",
+                    executions.reduce((n, d) => n + d.pending, 0),
+                    "pending",
+                  ],
+                ].map(([label, value, tone]) => (
                   <div key={label} className={`case-stat ${tone}`}>
                     <span>{label}</span>
-                    <strong>{count}</strong>
+                    <strong>{value}</strong>
                   </div>
                 ))}
               </div>
-              {!selected.processed ? (
-                <div className="empty">尚未开始，暂无 case 结果或日志</div>
-              ) : (
-                <>
-                  <div className="filters">
-                    <select
-                      aria-label="case 结果筛选"
-                      value={filter}
-                      onChange={(e) => {
-                        setFilter(e.target.value);
-                        setPage(1);
-                        setExpanded(null);
-                      }}
-                    >
+              <div className="table-wrap">
+                <table className="task-overview-table">
+                  <thead>
+                    <tr>
                       {[
-                        "全部结果",
+                        "数据集",
+                        "状态",
+                        "进度 / 已处理",
                         "判分通过",
                         "判分未通过",
                         "执行异常",
-                        "待处理",
-                      ].map((f) => (
-                        <option key={f}>{f}</option>
+                        "耗时",
+                        "最后更新",
+                        "操作",
+                      ].map((h) => (
+                        <th key={h}>{h}</th>
                       ))}
-                    </select>
-                    <input
-                      aria-label="搜索 case"
-                      placeholder="搜索 case ID / 错误信息"
-                      value={query}
-                      onChange={(e) => {
-                        setQuery(e.target.value);
-                        setPage(1);
-                        setExpanded(null);
-                      }}
-                    />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {executions.map((d) => (
+                      <tr key={d.name}>
+                        <td>
+                          <b>{d.name}</b>
+                        </td>
+                        <td>
+                          <span
+                            className={`case-status ${d.errors ? "error" : d.processed === 100 ? "passed" : d.processed ? "running" : "pending"}`}
+                          >
+                            {d.status}
+                          </span>
+                        </td>
+                        <td>
+                          {d.processed}% · {d.processed}/100
+                        </td>
+                        <td>{d.passed}</td>
+                        <td>{d.failed}</td>
+                        <td>{d.errors}</td>
+                        <td>{d.duration}</td>
+                        <td>{d.processed ? "14:20:18" : "—"}</td>
+                        <td>
+                          <button
+                            className="link"
+                            onClick={() => switchDataset(d.name)}
+                          >
+                            查看明细
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="task-overview-bottom">
+                <span>
+                  任务异常：
+                  {totalErrors
+                    ? `${totalErrors} 个 case 执行异常，详见对应数据集`
+                    : "无执行异常"}
+                </span>
+                <span>
+                  报告状态：
+                  {running ? "待生成（测评进行中）" : "已生成（示例）"}
+                </span>
+                <span>预计总耗时：暂无可靠估算</span>
+              </div>
+            </section>
+          )}
+          {detailOpen && (
+            <div className="task-dataset-view">
+              <div className="report-navigation-bar">
+                <button
+                  className="link"
+                  onClick={() => {
+                    setDetailOpen(false);
+                    setExpanded(null);
+                  }}
+                >
+                  返回任务总览
+                </button>
+                <label>
+                  切换数据集
+                  <select
+                    aria-label="切换任务数据集"
+                    value={selected.name}
+                    onChange={(e) => switchDataset(e.target.value)}
+                  >
+                    {executions.map((d) => (
+                      <option key={d.name}>{d.name}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="execution-body task-single-dataset">
+                <div className="stack case-content">
+                  <div className="spread">
+                    <h3>{selected.name}</h3>
+                    <span className="muted">{selected.status}</span>
                   </div>
-                  <div className="table-wrap">
-                    <table>
-                      <thead>
-                        <tr>
-                          {[
-                            "Case ID",
-                            "执行状态",
-                            "判分结果",
-                            "耗时",
-                            "摘要",
-                            "操作",
-                          ].map((h) => (
-                            <th key={h}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filtered
-                          .slice((current - 1) * 5, current * 5)
-                          .map((c) => (
-                            <tr key={c.id}>
-                              <td>{c.id}</td>
-                              <td>
-                                {c.result === "待处理"
-                                  ? "待执行"
-                                  : c.result === "执行异常"
-                                    ? "执行异常"
-                                    : "已完成"}
-                              </td>
-                              <td>
-                                <span
-                                  className={`case-status ${c.result === "判分通过" ? "passed" : c.result === "判分未通过" ? "failed" : c.result === "执行异常" ? "error" : "pending"}`}
-                                >
-                                  {c.result === "执行异常" ||
-                                  c.result === "待处理"
-                                    ? "—"
-                                    : c.result}
-                                </span>
-                              </td>
-                              <td>{c.duration}</td>
-                              <td>{c.message}</td>
-                              <td>
-                                <button
-                                  className="link"
-                                  disabled={c.result === "待处理"}
-                                  onClick={() => setExpanded(c.id)}
-                                >
-                                  查看
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                      </tbody>
-                    </table>
-                    {!filtered.length && (
-                      <div className="empty">没有符合条件的 case</div>
-                    )}
-                  </div>
-                  <div className="pagination">
+                  <div className="execution-meta">
                     <span>
-                      共 {filtered.length} 条 · 第 {current} / {pages} 页
+                      已处理 <b>{selected.processed} / 100</b>
                     </span>
-                    <button
-                      disabled={current === 1}
-                      onClick={() => {
-                        setPage(current - 1);
-                        setExpanded(null);
-                      }}
-                    >
-                      上一页
-                    </button>
-                    <button
-                      disabled={current === pages}
-                      onClick={() => {
-                        setPage(current + 1);
-                        setExpanded(null);
-                      }}
-                    >
-                      下一页
-                    </button>
+                    <span>
+                      耗时 <b>{selected.duration}</b>
+                    </span>
+                    <span>
+                      更新时间 <b>{selected.updated}</b>
+                    </span>
                   </div>
-                  {expanded &&
-                    createPortal(
-                      <div
-                        className="case-drawer-backdrop"
-                        onClick={() => setExpanded(null)}
+                  <div className="case-statistics">
+                    {[
+                      ["判分通过", selected.passed, "passed"],
+                      ["判分未通过", selected.failed, "failed"],
+                      ["执行异常", selected.errors, "error"],
+                      ["待处理", selected.pending, "pending"],
+                    ].map(([label, count, tone]) => (
+                      <div key={label} className={`case-stat ${tone}`}>
+                        <span>{label}</span>
+                        <strong>{count}</strong>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="tabs">
+                    {["执行概况", "case 明细"].map((v) => (
+                      <button
+                        key={v}
+                        className={datasetTab === v ? "active" : ""}
+                        onClick={() => setDatasetTab(v)}
                       >
-                        <section
-                          className="case-drawer"
-                          role="dialog"
-                          aria-modal="true"
-                          aria-label="Case 详情"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <div className="spread">
-                            <h2>Case 详情</h2>
-                            <button autoFocus onClick={() => setExpanded(null)}>
-                              关闭
-                            </button>
-                          </div>
-                          <p className="muted">
-                            {task} / {selected.name} / {expanded}
-                          </p>
-                          <div className="logs">
-                            <div>{expanded} · 完整日志与输入响应（示例）</div>
-                            <pre>{`任务：${task} / 数据集：${selected.name}
+                        {v}
+                      </button>
+                    ))}
+                  </div>
+                  {datasetTab === "执行概况" && (
+                    <div className="dataset-execution-summary">
+                      <h3>执行状态</h3>
+                      <p>
+                        {selected.status} · 已处理 {selected.processed} / 100 个
+                        case
+                      </p>
+                      <progress max="100" value={selected.processed} />
+                      <p className="muted">
+                        {selected.errors
+                          ? `存在 ${selected.errors} 个执行异常，请进入 case 明细筛选排查。`
+                          : selected.processed === 0
+                            ? "等待前序数据集完成后开始执行。"
+                            : "暂未发现执行异常；判分未通过样本可在 case 明细中查看。"}
+                      </p>
+                      <button
+                        className="link"
+                        onClick={() => setDatasetTab("case 明细")}
+                      >
+                        查看 case 明细与日志
+                      </button>
+                    </div>
+                  )}
+                  {datasetTab === "case 明细" &&
+                    (!selected.processed ? (
+                      <div className="empty">
+                        尚未开始，暂无 case 结果或日志
+                      </div>
+                    ) : (
+                      <>
+                        <div className="filters">
+                          <select
+                            aria-label="case 结果筛选"
+                            value={filter}
+                            onChange={(e) => {
+                              setFilter(e.target.value);
+                              setPage(1);
+                              setExpanded(null);
+                            }}
+                          >
+                            {[
+                              "全部结果",
+                              "判分通过",
+                              "判分未通过",
+                              "执行异常",
+                              "待处理",
+                            ].map((f) => (
+                              <option key={f}>{f}</option>
+                            ))}
+                          </select>
+                          <input
+                            aria-label="搜索 case"
+                            placeholder="搜索 case ID / 错误信息"
+                            value={query}
+                            onChange={(e) => {
+                              setQuery(e.target.value);
+                              setPage(1);
+                              setExpanded(null);
+                            }}
+                          />
+                        </div>
+                        <div className="table-wrap">
+                          <table>
+                            <thead>
+                              <tr>
+                                {[
+                                  "Case ID",
+                                  "执行状态",
+                                  "判分结果",
+                                  "耗时",
+                                  "摘要",
+                                  "操作",
+                                ].map((h) => (
+                                  <th key={h}>{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {filtered
+                                .slice((current - 1) * 5, current * 5)
+                                .map((c) => (
+                                  <tr key={c.id}>
+                                    <td>{c.id}</td>
+                                    <td>
+                                      {c.result === "待处理"
+                                        ? "待执行"
+                                        : c.result === "执行异常"
+                                          ? "执行异常"
+                                          : "已完成"}
+                                    </td>
+                                    <td>
+                                      <span
+                                        className={`case-status ${c.result === "判分通过" ? "passed" : c.result === "判分未通过" ? "failed" : c.result === "执行异常" ? "error" : "pending"}`}
+                                      >
+                                        {c.result === "执行异常" ||
+                                        c.result === "待处理"
+                                          ? "—"
+                                          : c.result}
+                                      </span>
+                                    </td>
+                                    <td>{c.duration}</td>
+                                    <td>{c.message}</td>
+                                    <td>
+                                      <button
+                                        className="link"
+                                        disabled={c.result === "待处理"}
+                                        onClick={() => setExpanded(c.id)}
+                                      >
+                                        查看
+                                      </button>
+                                    </td>
+                                  </tr>
+                                ))}
+                            </tbody>
+                          </table>
+                          {!filtered.length && (
+                            <div className="empty">没有符合条件的 case</div>
+                          )}
+                        </div>
+                        <div className="pagination">
+                          <span>
+                            共 {filtered.length} 条 · 第 {current} / {pages} 页
+                          </span>
+                          <button
+                            disabled={current === 1}
+                            onClick={() => {
+                              setPage(current - 1);
+                              setExpanded(null);
+                            }}
+                          >
+                            上一页
+                          </button>
+                          <button
+                            disabled={current === pages}
+                            onClick={() => {
+                              setPage(current + 1);
+                              setExpanded(null);
+                            }}
+                          >
+                            下一页
+                          </button>
+                        </div>
+                        {expanded &&
+                          createPortal(
+                            <div
+                              className="case-drawer-backdrop"
+                              onClick={() => setExpanded(null)}
+                            >
+                              <section
+                                className="case-drawer"
+                                role="dialog"
+                                aria-modal="true"
+                                aria-label="Case 详情"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <div className="spread">
+                                  <h2>Case 详情</h2>
+                                  <button
+                                    autoFocus
+                                    onClick={() => setExpanded(null)}
+                                  >
+                                    关闭
+                                  </button>
+                                </div>
+                                <p className="muted">
+                                  {task} / {selected.name} / {expanded}
+                                </p>
+                                <div className="logs">
+                                  <div>
+                                    {expanded} · 完整日志与输入响应（示例）
+                                  </div>
+                                  <pre>{`任务：${task} / 数据集：${selected.name}
 Case：${expanded}
 输入：示例评测问题（完整内容占位，未连接真实样本）
 响应：${cases.find((c) => c.id === expanded)?.result === "执行异常" ? "无响应" : "示例模型作答"}
 判定：${cases.find((c) => c.id === expanded)?.message}
 凭据：***`}</pre>
-                          </div>
-                        </section>
-                      </div>,
-                      document.body,
-                    )}
-                </>
-              )}
-              <p className="muted">
-                判分未通过属于有效测评结果；请求超时等单独计为执行异常。当前数量、耗时和日志均为示例。
-              </p>
+                                </div>
+                              </section>
+                            </div>,
+                            document.body,
+                          )}
+                      </>
+                    ))}
+                  <p className="muted">
+                    判分未通过属于有效测评结果；请求超时等单独计为执行异常。当前数量、耗时和日志均为示例。
+                  </p>
+                </div>
+              </div>
             </div>
-          </div>
+          )}
         </>
       )}
     </section>

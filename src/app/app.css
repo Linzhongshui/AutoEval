@@ -2829,3 +2829,26 @@ td small .badge,
   border-bottom: 0;
   padding-bottom: 0;
 }
+.task-dataset-view {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.execution-body.task-single-dataset {
+  display: block;
+}
+.dataset-execution-summary {
+  border: 1px solid var(--border);
+  padding: 20px;
+  border-radius: 8px;
+  background: #fcfcff;
+}
+.dataset-execution-summary progress {
+  max-width: 700px;
+  display: block;
+  margin: 14px 0;
+}
+.task-overview {
+  border-bottom: 0;
+  padding-bottom: 0;
+}

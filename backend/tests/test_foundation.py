@@ -62,6 +62,26 @@ async def test_unconfigured_activities_cannot_fake_success():
         assert exc.value.non_retryable
 
 
+async def test_restore_rejects_non_scratch_targets_before_external_access(tmp_path):
+    from autoeval.backup import restore_backup
+
+    with pytest.raises(ValueError, match="database"):
+        await restore_backup(
+            Settings(environment="test", s3_bucket="autoeval-scratch-fixture"),
+            tmp_path / "unused.json",
+            "unused",
+        )
+    with pytest.raises(ValueError, match="bucket"):
+        await restore_backup(
+            Settings(
+                environment="test",
+                database_url="postgresql+asyncpg://autoeval:autoeval@127.0.0.1/autoeval_scratch_fixture",
+            ),
+            tmp_path / "unused.json",
+            "unused",
+        )
+
+
 def test_readiness_does_not_claim_success_when_dependencies_fail(monkeypatch):
     from unittest.mock import AsyncMock
 

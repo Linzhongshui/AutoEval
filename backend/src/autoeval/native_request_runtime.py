@@ -4,6 +4,8 @@ import fcntl
 import hashlib
 import json
 import os
+import re
+import shutil
 import subprocess
 import sys
 import time
@@ -30,6 +32,8 @@ def identity(pid):
 
 
 def status(folder):
+    if (folder / "cleanup.json").exists():
+        return json.loads((folder / "cleanup.json").read_text())
     if (folder / "exit.json").exists():
         return json.loads((folder / "exit.json").read_text())
     if not (folder / "job.json").exists():
@@ -103,6 +107,8 @@ def main():
     with (folder / ".lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         if action == "submit":
+            if (folder / "cleanup.json").exists():
+                raise ValueError("Cleaned native request cannot be submitted again")
             raw = sys.stdin.buffer.read(16 * 1024 * 1024 + 1)
             if len(raw) > 16 * 1024 * 1024:
                 raise ValueError("Native input too large")
@@ -142,6 +148,52 @@ def main():
                 except (OSError, BrokenPipeError):
                     # Keep the marker even when the handoff is uncertain.
                     pass
+        elif action == "cleanup":
+            proof = json.load(sys.stdin)
+            fields = ("request_sha256", "result_sha256", "archive_sha256")
+            if (
+                not isinstance(proof, dict)
+                or set(proof) != set(fields)
+                or any(
+                    not isinstance(proof[k], str) or not re.fullmatch(r"[0-9a-f]{64}", proof[k])
+                    for k in fields
+                )
+            ):
+                raise ValueError("Verified archive proof required")
+            observed = status(folder)
+            if observed["state"] == "cleaned":
+                if any(observed.get(k) != proof[k] for k in fields):
+                    raise ValueError("Cleanup proof differs from archived request")
+                print(json.dumps({**observed, "cleaned": True}))
+                return
+            if observed["state"] != "succeeded":
+                print(json.dumps({"state": observed["state"], "cleaned": False}))
+                return
+            if any(observed.get(k) != proof[k] for k in fields[:2]):
+                raise ValueError("Native cleanup receipt differs from archive proof")
+            if (folder / "spec_hash").read_text() != proof["request_sha256"]:
+                raise ValueError("Native submission marker differs from cleanup proof")
+            # result.json may already be gone after a crash during cleanup.
+            result_path = folder / "result.json"
+            if result_path.exists() and (
+                result_path.is_symlink()
+                or hashlib.sha256(result_path.read_bytes()).hexdigest() != proof["result_sha256"]
+            ):
+                raise ValueError("Native result changed before cleanup")
+            for path in folder.iterdir():
+                if path.name in {".lock", "spec_hash", "exit.json", "cleanup.json"}:
+                    continue
+                if path.resolve().parent != folder.resolve() and not path.is_symlink():
+                    raise ValueError("Cleanup path escapes owned job")
+                if path.is_dir() and not path.is_symlink():
+                    shutil.rmtree(path)
+                else:
+                    path.unlink()
+            receipt = {"state": "cleaned", **proof}
+            atomic_json(folder / "cleanup.json", receipt)
+            (folder / "exit.json").unlink(missing_ok=True)
+            print(json.dumps({**receipt, "cleaned": True}))
+            return
         elif action == "collect":
             observed = status(folder)
             if observed["state"] == "succeeded":

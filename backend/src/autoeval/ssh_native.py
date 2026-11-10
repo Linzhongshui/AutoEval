@@ -98,6 +98,9 @@ class SSHNativeTransport:
     async def lookup_request(self, submission_key):
         return await asyncio.to_thread(self.native_operation, "status", submission_key)
 
+    async def cleanup_request(self, submission_key, proof):
+        return await asyncio.to_thread(self.native_operation, "cleanup", submission_key, proof)
+
     def request_digest(self, payload):
         safe = {k: v for k, v in payload.items() if k != "api_key"}
         safe.update(

@@ -181,3 +181,82 @@ async def test_killed_remote_process_is_unknown_and_never_automatically_restarte
     assert observed["state"] == "unknown"
     with pytest.raises(RuntimeError, match="unconfirmed"):
         await transport.request(payload, key)
+
+
+async def test_native_cleanup_is_idempotent_owned_and_prevents_reexecution():
+    transport = prepared_transport()
+    key = str(uuid.uuid4())
+    payload = {"operation": "infer_gpqa_smoke", "api_key": "fixture-only"}
+    await transport.request(payload, key)
+    observed = await transport.collect_request(key, payload)
+    proof = {
+        "request_sha256": transport.request_digest(payload),
+        "result_sha256": observed["result_sha256"],
+        "archive_sha256": hashlib.sha256(b"verified-test-archive").hexdigest(),
+    }
+    sentinel = f"{transport.root}/customer-existing.txt"
+    with (
+        transport.control.connect() as client,
+        client.open_sftp() as sftp,
+        sftp.open(sentinel, "wb") as stream,
+    ):
+        stream.write(b"keep")
+    first = await transport.cleanup_request(key, proof)
+    assert first == {"state": "cleaned", **proof, "cleaned": True}
+    assert await transport.cleanup_request(key, proof) == first
+    assert (await transport.lookup_request(key))["state"] == "cleaned"
+    with pytest.raises(RuntimeError):
+        await transport.submit_request(payload, key)
+    with pytest.raises(RuntimeError):
+        await transport.cleanup_request(key, {**proof, "archive_sha256": "0" * 64})
+    with transport.control.connect() as client, client.open_sftp() as sftp:
+        assert set(sftp.listdir(f"{transport.root}/jobs/{key}")) == {
+            ".lock",
+            "spec_hash",
+            "cleanup.json",
+        }
+        with sftp.open(sentinel, "rb") as stream:
+            assert stream.read() == b"keep"
+        with sftp.open(transport.tool_root + "/counter.txt", "rb") as stream:
+            assert stream.read() == b"1"
+
+
+async def test_native_cleanup_rejects_unverified_result_and_unknown_job():
+    transport = prepared_transport()
+    key = str(uuid.uuid4())
+    proof = {k: "0" * 64 for k in ("request_sha256", "result_sha256", "archive_sha256")}
+    assert await transport.cleanup_request(key, proof) == {"state": "unknown"}
+    payload = {"operation": "infer_gpqa_smoke", "api_key": "fixture-only"}
+    await transport.request(payload, key)
+    observed = await transport.collect_request(key, payload)
+    with pytest.raises(RuntimeError):
+        await transport.cleanup_request(key, proof)
+    proof.update(
+        request_sha256=transport.request_digest(payload), result_sha256=observed["result_sha256"]
+    )
+    with (
+        transport.control.connect() as client,
+        client.open_sftp() as sftp,
+        sftp.open(f"{transport.root}/jobs/{key}/result.json", "wb") as stream,
+    ):
+        stream.write(b"tampered")
+    with pytest.raises(RuntimeError):
+        await transport.cleanup_request(key, proof)
+    assert (await transport.lookup_request(key))["state"] == "succeeded"
+
+
+async def test_native_cleanup_recovers_interrupted_deletion_from_terminal_receipt():
+    transport = prepared_transport()
+    key = str(uuid.uuid4())
+    payload = {"operation": "infer_gpqa_smoke", "api_key": "fixture-only"}
+    await transport.request(payload, key)
+    observed = await transport.collect_request(key, payload)
+    proof = {
+        "request_sha256": transport.request_digest(payload),
+        "result_sha256": observed["result_sha256"],
+        "archive_sha256": hashlib.sha256(b"verified-test-archive").hexdigest(),
+    }
+    # Crash window: result removed, terminal receipt and submission marker retained.
+    with transport.control.connect() as client, client.open_sftp() as sftp:
+        sftp.remove(f"{transport.root}/jobs/{key}/result.json")
+    assert (await transport.cleanup_request(key, proof))["cleaned"] is True

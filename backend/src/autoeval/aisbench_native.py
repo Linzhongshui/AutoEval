@@ -1,9 +1,11 @@
 """Operator-invoked native AISBench bridge. No API accepts source or Python paths."""
 
 import asyncio
+import base64
 import contextlib
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -66,6 +68,100 @@ def native_prepare(request):
             }
         )
     return {"source_sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "samples": rows}
+
+
+def native_prepare_mmmu(request):
+    from ais_bench.benchmark.datasets.mmmu_pro import MMMUProOptions10Dataset
+
+    path = Path(request["tsv_path"]).resolve(strict=True)
+    if path.stat().st_size > 8 * 1024 * 1024 * 1024:
+        raise ValueError("Dataset import exceeds current bridge limit")
+    dataset = MMMUProOptions10Dataset.load(str(path), is_cot=True)
+    image_root = (path.parent / "MMMU_Pro_options10_images").resolve()
+    rows = []
+    for sample in dataset:
+        content = sample["content"]
+        paths = re.findall(r"<AIS_IMAGE_START>(.*?)<AIS_CONTENT_TAG>", content)
+        if not paths:
+            raise ValueError("MMMU-Pro sample has no native image")
+        images = []
+        for image_path in paths:
+            source = Path(image_path).resolve(strict=True)
+            if source.parent != image_root:
+                raise ValueError("Native image escaped the dataset image directory")
+            raw = source.read_bytes()
+            digest = hashlib.sha256(raw).hexdigest()
+            images.append({"sha256": digest, "base64": base64.b64encode(raw).decode()})
+            content = content.replace(image_path, f"image:{digest}")
+        source_index = Path(paths[0]).stem.split("_")[0]
+        if not source_index.isdigit():
+            raise ValueError("MMMU-Pro source index is not stable")
+        native_sample = {"content": content, "answer": sample["answer"]}
+        rows.append(
+            {
+                "sample_id": f"mmmu_pro_options10:{source_index}",
+                "sha256": hashlib.sha256(
+                    canonical({"native_sample": native_sample, "images": images})
+                ).hexdigest(),
+                "native_sample": native_sample,
+                "images": images,
+            }
+        )
+    if len({row["sample_id"] for row in rows}) != len(rows):
+        raise ValueError("MMMU-Pro source indices are not unique")
+    return {"source_sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "samples": rows}
+
+
+def native_prompt_mmmu(request):
+    from ais_bench.benchmark.configs.datasets.mmmu_pro.mmmu_pro_options10_cot_gen import (
+        mmmu_pro_infer_cfg,
+    )
+    from ais_bench.benchmark.openicl.icl_prompt_template import MMPromptTemplate
+
+    sample = request["sample"]
+    if set(sample) != {"content", "answer"}:
+        raise ValueError("Invalid MMMU-Pro sample fields")
+    content = sample["content"]
+    for image in request["images"]:
+        raw = base64.b64decode(image["base64"], validate=True)
+        digest = hashlib.sha256(raw).hexdigest()
+        if digest != image["sha256"] or f"image:{digest}" not in content:
+            raise ValueError("MMMU-Pro image identity changed")
+        path = Path("/work/mmmu-runtime-images") / f"{digest}.jpg"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.exists() and hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+            raise ValueError("Materialized image identity changed")
+        path.write_bytes(raw)
+        content = content.replace(f"image:{digest}", str(path))
+    if re.search(r"image:[0-9a-f]{64}", content):
+        raise ValueError("MMMU-Pro sample has unresolved image references")
+    return MMPromptTemplate(template=mmmu_pro_infer_cfg["prompt_template"]["template"]).generate_item(
+        {"content": content}, output_field="answer"
+    )
+
+
+def native_score_mmmu(request):
+    from ais_bench.benchmark.datasets.mmmu_pro import MMMUProCotEvaluator
+    from ais_bench.benchmark.utils.postprocess.text_postprocessors import last_option_postprocess
+
+    predictions, references = request["predictions"], request["references"]
+    if not predictions or len(predictions) != len(references) or len(predictions) > 20000:
+        raise ValueError("Scoring requires a nonempty, aligned sample set")
+    if any(not isinstance(text, str) for text in predictions):
+        raise ValueError("Invalid native MMMU-Pro scoring inputs")
+    for reference in references:
+        choices, answer, category = json.loads(reference)
+        if not isinstance(choices, dict) or answer not in choices or not isinstance(category, str):
+            raise ValueError("Invalid native MMMU-Pro reference")
+    processed = [last_option_postprocess(text, options="ABCDEFGHIJ") for text in predictions]
+    return {
+        "native_result": MMMUProCotEvaluator().score(processed, references),
+        "processed_predictions": processed,
+        "diagnostics": {
+            "empty_outputs": [i for i, text in enumerate(predictions) if not text.strip()]
+        },
+        "scoring_rules_changed": False,
+    }
 
 
 def native_prompt(request):
@@ -149,6 +245,12 @@ def main():
             result = native_prepare(request)
         elif request["operation"] == "prompt_gpqa_0shot":
             result = {"prompt": native_prompt(request)}
+        elif request["operation"] == "prepare_mmmu_pro_options10":
+            result = native_prepare_mmmu(request)
+        elif request["operation"] == "prompt_mmmu_pro_options10_cot":
+            result = {"prompt": native_prompt_mmmu(request)}
+        elif request["operation"] == "score_mmmu_pro_options10_cot":
+            result = native_score_mmmu(request)
         elif request["operation"] == "infer_gpqa_smoke":
             result = asyncio.run(native_infer(request))
         else:

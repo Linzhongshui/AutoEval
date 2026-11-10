@@ -18,11 +18,13 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from autoeval.configuration import TestConfigItem, TestConfigVersion
 from autoeval.datasets import DatasetManifest, canonical_manifest, read_manifest
+from autoeval.execution_transport import frozen_ssh_resource
 from autoeval.models import Base, EvaluationRun, Outbox, Record, RunEvent, RunSnapshot
 from autoeval.profiles import ConfigDatasetBinding, EvaluationProfile
 from autoeval.registry import AssetVersion
 from autoeval.resources import ResourceBinding
 from autoeval.runs import ExecutionLease
+from autoeval.ssh_resources import SSHResourceBinding
 from autoeval.targets import TargetBinding
 
 
@@ -46,6 +48,7 @@ class SubmitEvaluation(BaseModel):
     resource_id: uuid.UUID
     run_mode: Literal["exploration"]
     max_model_requests: int = Field(ge=1, le=5)
+    resource_kind: Literal["docker_local", "customer_ssh"] = "docker_local"
 
 
 router = APIRouter(prefix="/api/autoeval/v1/runs", tags=["evaluation runs"])
@@ -94,7 +97,11 @@ async def submit(
     request: Request,
     idempotency_key: str = Header(min_length=1, max_length=256),
 ):
-    digest = hashlib.sha256(canonical_manifest(body.model_dump(mode="json"))).hexdigest()
+    # Preserve existing Docker idempotency hashes when the new selector is omitted.
+    request_body = body.model_dump(
+        mode="json", exclude={"resource_kind"} if body.resource_kind == "docker_local" else set()
+    )
+    digest = hashlib.sha256(canonical_manifest(request_body)).hexdigest()
     try:
         async with request.app.state.sessions() as session, session.begin():
             old = await session.scalar(
@@ -182,7 +189,10 @@ async def submit(
             ):
                 raise HTTPException(422, "Native sample bundle differs from manifest")
             target = await session.get(TargetBinding, body.target_id)
-            resource = await session.get(ResourceBinding, body.resource_id)
+            resource_type = (
+                SSHResourceBinding if body.resource_kind == "customer_ssh" else ResourceBinding
+            )
+            resource = await session.get(resource_type, body.resource_id)
             if target is None or resource is None:
                 raise HTTPException(404, "Target or resource not found")
             if (
@@ -190,6 +200,26 @@ async def submit(
                 or target.remote_model != "deepseek-flash"
             ):
                 raise HTTPException(422, "Pilot currently supports official deepseek-flash")
+            if body.resource_kind == "customer_ssh":
+                if not resource.native_tool_root:
+                    raise HTTPException(422, "SSH resource has no approved native tool root")
+                resource_spec = {
+                    "resource_kind": "customer_ssh",
+                    "ssh": frozen_ssh_resource(resource, request.app.state.settings),
+                }
+                allocation_key = (
+                    "ssh:"
+                    + hashlib.sha256(
+                        f"{resource.host}:{resource.port}:{resource.workdir}".encode()
+                    ).hexdigest()[:60]
+                )
+            else:
+                resource_spec = {
+                    "resource_kind": "docker_local",
+                    "container_id": resource.container_id,
+                    "image_id": resource.image_id,
+                }
+                allocation_key = resource.container_id
             frozen = {
                 "execution_origin": request.app.state.settings.evaluation_origin,
                 "schema_version": "gpqa-run.v1",
@@ -208,8 +238,8 @@ async def submit(
                 "base_url": target.base_url,
                 "remote_model": target.remote_model,
                 "resource_id": str(resource.id),
-                "container_id": resource.container_id,
-                "image_id": resource.image_id,
+                **resource_spec,
+                "allocation_key": allocation_key,
                 "max_model_requests": body.max_model_requests,
                 "generation": {"thinking": {"type": "disabled"}},
                 "gate_status": "not_applicable",
@@ -223,7 +253,7 @@ async def submit(
             )
             session.add(run)
             await session.flush()
-            session.add(ExecutionLease(container_id=resource.container_id, run_id=run.id))
+            session.add(ExecutionLease(container_id=allocation_key, run_id=run.id))
             session.add(
                 RunSnapshot(
                     run_id=run.id,

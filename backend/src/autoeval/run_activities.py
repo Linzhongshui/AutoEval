@@ -31,6 +31,8 @@ async def record_unresolved(sessions, run_id):
         row = await session.scalar(
             select(EvaluationRun).where(EvaluationRun.id == run_id).with_for_update()
         )
+        if row is None or row.state in {"completed", "failed", "cancelled"}:
+            return
         row.projection_version += 1
         session.add(
             RunEvent(

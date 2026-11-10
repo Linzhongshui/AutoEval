@@ -3,7 +3,7 @@ import { apiGet, apiPost } from "../services/api";
 
 type Config = { id: string; display_name: string; version_label: string; items: Record<string, { scope: string }>; profile_bindings: Record<string, string> };
 type Target = { id: string; remote_model: string; base_url: string };
-type Resource = { id: string; binding_key: string };
+type Resource = { id: string; binding_key: string; native_tool_root?: string | null };
 type Run = { id: string; state: string };
 type Detail = Run & { execution_unresolved: boolean; report: null | { id: string; validity: string; summary: Record<string, unknown> } };
 
@@ -11,6 +11,8 @@ export function EvaluationRuns() {
   const [configs, setConfigs] = useState<Config[]>([]);
   const [targets, setTargets] = useState<Target[]>([]);
   const [resources, setResources] = useState<Resource[]>([]);
+  const [sshResources, setSshResources] = useState<Resource[]>([]);
+  const [resourceKind, setResourceKind] = useState("docker_local");
   const [config, setConfig] = useState("");
   const [target, setTarget] = useState("");
   const [resource, setResource] = useState("");
@@ -23,8 +25,8 @@ export function EvaluationRuns() {
   const pending = useRef<{ hash: string; key: string } | null>(null);
   useEffect(() => {
     const controller = new AbortController();
-    Promise.all([apiGet<Config[]>("/test-configs?limit=200", controller.signal), apiGet<Target[]>("/target-bindings", controller.signal), apiGet<Resource[]>("/resources", controller.signal)])
-      .then(([c, t, r]) => { setConfigs(c.filter((row) => Object.keys(row.items).length === 1 && row.items.GPQA?.scope === "Lite" && row.profile_bindings?.GPQA)); setTargets(t.filter((row) => row.remote_model === "deepseek-flash")); setResources(r); })
+    Promise.all([apiGet<Config[]>("/test-configs?limit=200", controller.signal), apiGet<Target[]>("/target-bindings", controller.signal), apiGet<Resource[]>("/resources", controller.signal), apiGet<Resource[]>("/ssh-resources?limit=200", controller.signal)])
+      .then(([c, t, r, s]) => { setConfigs(c.filter((row) => Object.keys(row.items).length === 1 && row.items.GPQA?.scope === "Lite" && row.profile_bindings?.GPQA)); setTargets(t.filter((row) => row.remote_model === "deepseek-flash")); setResources(r); setSshResources(s.filter((row) => row.native_tool_root)); })
       .catch(() => { if (!controller.signal.aborted) setMessage("测评提交选项加载失败。"); });
     return () => controller.abort();
   }, []);
@@ -47,7 +49,7 @@ export function EvaluationRuns() {
   const submit = async () => {
     if (submitting.current) return;
     submitting.current = true; setBusy(true); setMessage("");
-    const payload = { config_version_id: config, target_id: target, resource_id: resource, run_mode: "exploration", max_model_requests: 5 };
+    const payload = { config_version_id: config, target_id: target, resource_id: resource, resource_kind: resourceKind, run_mode: "exploration", max_model_requests: 5 };
     const hash = JSON.stringify(payload);
     if (pending.current?.hash !== hash) pending.current = { hash, key: crypto.randomUUID() };
     try {
@@ -67,7 +69,8 @@ export function EvaluationRuns() {
     <p>使用固定原生AISBench路径，每次最多5个样本、每样本最多64输出tokens，无自动重测。配置须为GPQA单数据集、Lite、并发1、temperature=0、top_p=1；正式发布门禁不适用。</p>
     <label>探索配置 <select aria-label="探索配置" value={config} onChange={(event) => setConfig(event.target.value)}><option value="">请选择已绑定Profile的Lite配置</option>{configs.map((row) => <option key={row.id} value={row.id}>{row.display_name} · {row.version_label}</option>)}</select></label>
     <label>探索模型服务 <select aria-label="探索模型服务" value={target} onChange={(event) => setTarget(event.target.value)}><option value="">请选择官方DeepSeek目标</option>{targets.map((row) => <option key={row.id} value={row.id}>{row.remote_model} · {row.id.slice(0, 8)}</option>)}</select></label>
-    <label>探索执行资源 <select aria-label="探索执行资源" value={resource} onChange={(event) => setResource(event.target.value)}><option value="">请选择资源</option>{resources.map((row) => <option key={row.id} value={row.id}>{row.binding_key}</option>)}</select></label>
+    <label>探索资源接入方式<select aria-label="探索资源接入方式" value={resourceKind} onChange={(event) => { setResourceKind(event.target.value); setResource(""); }}><option value="docker_local">本机Docker</option><option value="customer_ssh">客户SSH服务器</option></select></label>
+    <label>探索执行资源 <select aria-label="探索执行资源" value={resource} onChange={(event) => setResource(event.target.value)}><option value="">请选择资源</option>{(resourceKind === "customer_ssh" ? sshResources : resources).map((row) => <option key={row.id} value={row.id}>{row.binding_key}</option>)}</select></label>
     <button disabled={busy || !config || !target || !resource} onClick={() => void submit()}>提交真实GPQA Lite测评</button>
     <p role="status">{message}</p>
     <label>已保存探索任务 <select aria-label="已保存探索任务" value={selected} onChange={(event) => { setSelected(event.target.value); setDetail(null); }}><option value="">请选择任务</option>{selected && !runs.some((row) => row.id === selected) && <option value={selected}>{selected}</option>}{runs.map((row) => <option key={row.id} value={row.id}>{row.id} · {row.state}</option>)}</select></label>

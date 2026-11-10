@@ -34,6 +34,8 @@ async def test_submit_deduplicate_partial_report_and_cancel(monkeypatch):
     settings = get_settings().model_copy(
         update={
             "evaluation_origin": "simulation",
+            "analysis_target_id": None,
+            "analysis_resource_id": None,
             "gpqa_workflow_queue": "test-wf-" + uuid.uuid4().hex,
             "gpqa_activity_queue": "test-io-" + uuid.uuid4().hex,
             "analysis_activity_queue": "test-analysis-" + uuid.uuid4().hex,
@@ -42,6 +44,7 @@ async def test_submit_deduplicate_partial_report_and_cancel(monkeypatch):
     )
     settings.analysis_workflow_queue = settings.gpqa_workflow_queue
     app = create_app(settings)
+    monkeypatch.setattr(evaluation_activity, "get_settings", lambda: settings)
     lock = json.loads((Path(__file__).parents[1] / "tool-locks/aisbench.json").read_text())
     calls = []
 

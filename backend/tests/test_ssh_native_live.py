@@ -26,7 +26,7 @@ counter=Path(__file__).with_name('counter.txt')
 count=int(counter.read_text())+1 if counter.exists() else 1
 counter.write_text(str(count))
 time.sleep(request.get('test_delay',0))
-print(json.dumps({'control_fixture':True,'model_called':False,'invocations':count}))
+print(json.dumps({'control_fixture':True,'model_called':False,'invocations':count,'workdir':str(Path.cwd())}))
 """
 
 
@@ -100,7 +100,12 @@ async def test_lost_ssh_ack_is_recovered_without_reexecuting_or_persisting_secre
         transport.lock_sha256,
     )
     result = await terminal_result(recovered, key)
-    assert result["result"] == {"control_fixture": True, "model_called": False, "invocations": 1}
+    assert result["result"] == {
+        "control_fixture": True,
+        "model_called": False,
+        "invocations": 1,
+        "workdir": f"{transport.root}/jobs/{key}",
+    }
     await recovered.submit_request({**payload, "api_key": "rotated-fixture-secret"}, key)
     assert (await recovered.collect_request(key))["result"]["invocations"] == 1
     with recovered.control.connect() as client, client.open_sftp() as sftp:

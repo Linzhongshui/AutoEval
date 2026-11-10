@@ -4,7 +4,7 @@ import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from temporalio.client import Client, WorkflowExecutionStatus
 from temporalio.common import WorkflowIDReusePolicy
 from temporalio.exceptions import WorkflowAlreadyStartedError
@@ -177,8 +177,10 @@ async def reconcile_gpqa(sessions, client, settings, run_id):
             .limit(1)
         )
         if started is not None:
-            await record_unresolved_once(session, row, reason="started_attempt")
-            return "unresolved"
+            snapshot = await session.scalar(select(RunSnapshot).where(RunSnapshot.run_id == run_id))
+            if snapshot.canonical_body.get("resource_kind") != "customer_ssh":
+                await record_unresolved_once(session, row, reason="started_attempt")
+                return "unresolved"
     recovery_id = f"demo/recovery/gpqa/{run_id}"
     try:
         recovery = await client.get_workflow_handle(recovery_id).describe()
@@ -226,7 +228,11 @@ async def serve():
             async with sessions() as session:
                 ids = await session.scalars(
                     select(EvaluationRun.id)
+                    .join(RunSnapshot, RunSnapshot.run_id == EvaluationRun.id)
                     .where(
+                        or_(EvaluationRun.trigger_scope == "local-operator:diagnostic",
+                            and_(EvaluationRun.trigger_scope == "local-operator:evaluation",
+                                 RunSnapshot.canonical_body["execution_origin"].astext == settings.evaluation_origin)),
                         EvaluationRun.state.not_in(["completed", "cancelled", "failed"]),
                         EvaluationRun.created_at < datetime.now(UTC) - timedelta(minutes=5),
                     )

@@ -501,3 +501,20 @@ async def test_reconciliation_entry_routes_evaluation_runs(recovery_harness):
         harness.sessions, client, harness.settings, run.id
     ) == "recovery_started"
     assert len(client.starts) == 1
+
+async def test_real_worker_never_resumes_a_simulated_model_request(recovery_harness, monkeypatch):
+    harness = recovery_harness
+    run, _ = await make_run(harness, sample_count=1)
+    harness.settings.evaluation_origin = "real"
+
+    def forbid_inference(*args, **kwargs):
+        raise AssertionError("A real Worker must not execute simulated requests")
+
+    monkeypatch.setattr(evaluation_activity, "invoke", forbid_inference)
+    result = await evaluation_activity.execute_gpqa_exploration(str(run.id), resume=True)
+    assert result["state"] == "unresolved"
+    async with harness.sessions() as session:
+        row = await session.get(EvaluationRun, run.id)
+        assert row.state == "running"
+        attempts = (await session.scalars(select(CaseExecutionRecord).where(CaseExecutionRecord.run_id == run.id))).all()
+        assert not attempts

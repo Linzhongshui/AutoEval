@@ -56,14 +56,14 @@ uv export --frozen --no-dev --no-emit-project --format requirements-txt --output
 
 ## 下一批实现边界
 
-1. 将已验证的SSH控制/SFTP与资源预检接入测评工作流，并验证断网恢复及客户真实环境。
+1. 补齐SSH原生临时结果的持久化清理状态、未知结果处置和客户真实环境验收。
 2. MMMU-Pro真实多模态推理与AutomationBench明确工具/数据契约及执行接入。
 3. 统一前端主流程与已接入区域，补齐正式Release的批准配置/范围/门禁规则。
 4. 生产身份、镜像封装、持久存储、监控及部署验收。
 
 Outbox按payload路由运行、恢复与分析工作流，使用稳定Workflow ID去重。CANCEL_RUN仍为schema占位，取消由运行行意图轮询消费。派发采用单行有界事务持锁；多副本生产前仍需验证锁竞争与派发容量。
 
-已完成有限GPQA模型生成联调和Docker OpenSSH协议验证，客户SSH测评工作流尚未完成。本地凭据引用不能替代生产密钥服务。已有开发操作审计，正式身份、最小权限及生产密钥服务尚未完成。
+已完成Docker和SSH的有限GPQA模型生成联调及本机OpenSSH恢复验证；客户生产环境尚未验收。本地凭据引用不能替代生产密钥服务。已有开发操作审计，正式身份、最小权限及生产密钥服务尚未完成。
 
 ## Docker诊断联调
 
@@ -166,6 +166,16 @@ SSHExecutor只开放固定framework_smoke和0—30秒持续时间，不接收任
 
 本机协议联调：可用`deploy/ssh-sim.Dockerfile`构建OpenSSH开发镜像，启动名为autoeval-ssh-sim、带autoeval.role=ssh-simulator标签的容器，仅映射127.0.0.1:2222:22；再从backend执行`uv run python ../deploy/setup_ssh_sim.py`。脚本生成本机专用客户端密钥并存于受保护.secrets，私钥不复制进容器。实际本轮使用已安装OpenSSH的独立Python开发容器验证；该Dockerfile构建尚未在受限网络中验收。
 
-AE_SSH_SIM_TEST=1启用真实SSH/SFTP专项，配合AE_BROWSER_URL和AE_CHROME_PATH可验证页面登记预检，不调用模型。资源预检成功不等于工具已接入：当前GPQA探索仍走Docker适配器，SSH测评工作流待下一批。
+AE_SSH_SIM_TEST=1启用真实SSH/SFTP专项，配合AE_BROWSER_URL和AE_CHROME_PATH可验证页面登记预检，不调用模型。填写native_tool_root后还需通过批准桥接代码、源码锁和原生Prompt预检，才会返回GPQA探索可用；仅连接成功不会返回可测评。
 
-SSH原生请求的持久化传输已作为独立模块加入：SSHNativeTransport要求批准的工具路径、桥接hash和源码锁hash，远程native_request_runtime仅接收固定GPQA推理操作，秘密仅走stdin。结果以稳定作业键查证并通过SFTP校验，未知状态不重发。当前尚未连接用户运行提交、Temporal及完整远程工具环境；这些协议测试不能替代SSH真实测评验收。
+SSHNativeTransport要求批准的工具路径、桥接hash和源码锁hash，远程native_request_runtime仅接收固定GPQA推理操作，秘密仅走stdin。结果以attempt UUID作为稳定作业键查证并通过SFTP校验，未知状态不重发。原生进程工作目录位于自有作业目录。
+
+## SSH的GPQA Lite探索
+
+登记SSH资源时可提供native_tool_root，目录中需部署与后台批准版本完全一致的bridge.py、lock.json、source/与site-packages/。后台分别冻结桥接和源码锁摘要，不能随意替换工具。工具安装不由页面自动执行；不新增客户常驻Agent。
+
+任务页选择客户SSH服务器，POST `/api/autoeval/v1/runs`使用resource_kind=customer_ssh和SSH资源UUID；其余配置、Lite预算与目标模型限制同Docker路径。省略resource_kind时继续按Docker处理，并保留既有幂等键摘要。SSH快照不包含凭据引用和API Key，不依赖Docker CLI或极光账号。
+
+原有gpqa Worker和Temporal工作流同时处理两种路径。SSH断连后按attempt UUID读取已持久化的远程结果、校验请求/结果摘要并归档；started attempt没有确认结果时保持占用，不重发。真实Worker拒绝模拟来源任务，对账器只扫描与运行环境匹配的测评及诊断任务。
+
+本机已验证一次真实SSH Lite1模型调用与浏览器报告刷新；这不代表Full或正式Release通过。AE_SSH_NATIVE_PIPELINE_TEST=1启用真实SSH/Temporal/S3与模拟模型边界的编排/恢复测试，不产生费用。SSH原生结果自动清理尚未完成，当前保留受控远程结果用于查证；不得递归清理客户执行目录。

@@ -1,6 +1,7 @@
 """Customer SSH resource registration and explicit pinned-key preflight."""
 
 import asyncio
+import json
 import uuid
 from typing import Literal
 
@@ -31,6 +32,7 @@ class SSHResourceBinding(Record, Base):
     workdir: Mapped[str] = mapped_column(String(512))
     auth_kind: Mapped[str] = mapped_column(String(16))
     credential_ref: Mapped[str] = mapped_column(String(32))
+    native_tool_root: Mapped[str | None] = mapped_column(String(512))
     __table_args__ = (UniqueConstraint("binding_key", "version"),)
 
 
@@ -50,6 +52,7 @@ class SSHResourceInput(BaseModel):
     workdir: str = Field(min_length=2, max_length=512)
     auth_kind: Literal["password", "private_key"]
     credential_ref: str = Field(pattern=r"^[0-9a-f]{32}$")
+    native_tool_root: str | None = Field(default=None, min_length=2, max_length=512)
 
 
 def connection_for(row, settings):
@@ -78,6 +81,7 @@ def resource_data(row):
         "workdir": row.workdir,
         "auth_kind": row.auth_kind,
         "provider_kind": "customer_ssh",
+        "native_tool_root": row.native_tool_root,
         "evaluation_ready": False,
     }
 
@@ -105,8 +109,10 @@ async def save_credential(body: SSHCredential, request: Request):
 @router.post("", status_code=201)
 async def register(body: SSHResourceInput, request: Request):
     try:
+        if body.native_tool_root is not None:
+            SSHConnection.absolute_directory(body.native_tool_root)
         SSHConnection(
-            **body.model_dump(exclude={"binding_key", "credential_ref"}),
+            **body.model_dump(exclude={"binding_key", "credential_ref", "native_tool_root"}),
             owner_id=uuid.uuid4(),
             credential=SecretStr("validation-only"),
         )
@@ -171,12 +177,43 @@ async def validate(binding_id: uuid.UUID, request: Request):
         def preflight():
             with adapter.connect() as client:
                 adapter.prepare(client)
+            ready = False
+            if row.native_tool_root:
+                from autoeval.execution_transport import frozen_ssh_resource
+                from autoeval.ssh_native import SSHNativeTransport
+
+                spec = frozen_ssh_resource(row, request.app.state.settings)
+                native = SSHNativeTransport(
+                    connection_for(row, request.app.state.settings),
+                    spec["tool_root"],
+                    spec["bridge_sha256"],
+                    spec["lock_sha256"],
+                )
+                result = native.invoke_local(
+                    {
+                        "operation": "prompt_gpqa_0shot",
+                        "sample": {
+                            "question": "Preflight fixture only",
+                            "A": "one",
+                            "B": "two",
+                            "C": "three",
+                            "D": "four",
+                            "answer": "A",
+                        },
+                    }
+                )
+                lock = json.loads(request.app.state.settings.aisbench_lock_path.read_text())
+                if result.get("tool_revision") != lock["revision"] or not result.get("prompt"):
+                    raise ValueError("Native tool preflight identity mismatch")
+                ready = True
             return {
                 "environment_ready": True,
                 "host_key_verified": True,
                 "sftp_ready": True,
-                "evaluation_ready": False,
-                "supported_jobs": ["framework_smoke"],
+                "evaluation_ready": ready,
+                "supported_jobs": ["framework_smoke", "gpqa_lite"]
+                if ready
+                else ["framework_smoke"],
             }
 
         data = await asyncio.to_thread(preflight)

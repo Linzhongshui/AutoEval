@@ -5,6 +5,7 @@ import subprocess
 import uuid
 from types import SimpleNamespace
 
+import paramiko
 from botocore.exceptions import BotoCoreError, ClientError
 from sqlalchemy import delete, select
 from temporalio import activity
@@ -21,6 +22,7 @@ from autoeval.datasets import canonical_manifest, read_manifest, write_manifest
 from autoeval.db import create_database
 from autoeval.domain import RunState, check_transition
 from autoeval.evaluations import EvaluationReport
+from autoeval.execution_transport import ssh_transport
 from autoeval.models import EvaluationRun, RunEvent, RunSnapshot
 from autoeval.native_smoke import invoke
 from autoeval.resources import inspect_executor
@@ -42,6 +44,30 @@ async def _verified_report(settings, report, identifier, snapshot):
     ):
         raise ValueError("Report evidence is inconsistent")
     return body
+
+
+def model_payload(frozen, sample, credential=""):
+    return {
+        "operation": "infer_gpqa_smoke",
+        "sample": sample,
+        "base_url": frozen["base_url"].rstrip("/"),
+        "model": frozen["remote_model"],
+        "max_tokens": frozen["parameters"]["output"],
+        "api_key": credential,
+    }
+
+
+async def heartbeat_request(transport, payload, attempt_id, run_id):
+    task = asyncio.create_task(transport.request(payload, str(attempt_id)))
+    try:
+        while not task.done():
+            await asyncio.wait({task}, timeout=10)
+            activity.heartbeat(run_id)
+        return await task
+    finally:
+        if not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
 
 
 @activity.defn
@@ -75,11 +101,16 @@ async def execute_gpqa_exploration(run_id: str, resume: bool = False):
             if existing_report is not None:
                 await _verified_report(settings, existing_report, identifier, snapshot)
                 return {"state": "unresolved", "ownership_retained": True}
+            if frozen.get("execution_origin", "unverified") != settings.evaluation_origin:
+                raise ValueError("Worker execution origin differs from frozen request")
             # Redelivery must never replay a potentially billable request. Only
             # evidence-based recovery may continue after an attempt was registered.
             if not resume and (existing_records or row.state != "accepted"):
                 return {"state": "unresolved"}
-            if any(record.state == "started" for record in existing_records):
+            if (
+                any(record.state == "started" for record in existing_records)
+                and frozen.get("resource_kind") != "customer_ssh"
+            ):
                 return {"state": "unresolved", "ownership_retained": True}
             initial_state = row.state
             cancelled = row.cancel_requested_at is not None or initial_state == "cancelling"
@@ -89,17 +120,27 @@ async def execute_gpqa_exploration(run_id: str, resume: bool = False):
                 row.state = "queued"
                 row.projection_version += 1
                 session.add(
-                    RunEvent(
-                        run_id=identifier, seq=row.projection_version, type="queued", body={}
-                    )
+                    RunEvent(run_id=identifier, seq=row.projection_version, type="queued", body={})
                 )
         if initial_state in {"accepted", "queued"}:
             await transition(sessions, identifier, "preparing")
-        identity = await asyncio.to_thread(
-            inspect_executor, settings.docker_executable, frozen["container_id"]
+        transport = (
+            await ssh_transport(sessions, settings, frozen)
+            if frozen.get("resource_kind") == "customer_ssh"
+            else None
         )
-        if not identity["running"] or identity["image_id"] != frozen["image_id"]:
-            raise ValueError("Executor identity changed")
+        if transport is None:
+            identity = await asyncio.to_thread(
+                inspect_executor, settings.docker_executable, frozen["container_id"]
+            )
+            if not identity["running"] or identity["image_id"] != frozen["image_id"]:
+                raise ValueError("Executor identity changed")
+
+        async def native_call(payload):
+            if transport is not None:
+                return await asyncio.to_thread(transport.invoke_local, payload)
+            return await asyncio.to_thread(invoke, settings, frozen["container_id"], payload)
+
         bundle = await asyncio.to_thread(
             read_manifest, settings, SimpleNamespace(**frozen["dataset_content"])
         )
@@ -109,7 +150,11 @@ async def execute_gpqa_exploration(run_id: str, resume: bool = False):
         expected_samples = {sample["sample_id"]: sample for sample in frozen["samples"]}
         for record in existing_records:
             expected = expected_samples.get(record.sample_id)
-            if record.dataset_key != "GPQA" or expected is None or record.sample_id in attempted_samples:
+            if (
+                record.dataset_key != "GPQA"
+                or expected is None
+                or record.sample_id in attempted_samples
+            ):
                 raise ValueError("Unexpected or ambiguous archived attempt")
             sample = members[record.sample_id]
             if (
@@ -118,6 +163,36 @@ async def execute_gpqa_exploration(run_id: str, resume: bool = False):
                 != expected["sha256"]
             ):
                 raise ValueError("Native sample identity changed")
+            if record.state == "started":
+                recovered = await transport.collect_request(
+                    str(record.id), model_payload(frozen, sample["native_sample"])
+                )
+                if recovered["state"] != "succeeded":
+                    raise RuntimeError("SSH native outcome remains unconfirmed")
+                result = recovered["result"]
+                prompt = await native_call(
+                    {"operation": "prompt_gpqa_0shot", "sample": sample["native_sample"]}
+                )
+                if (
+                    result.get("tool_revision") != frozen["tool"]["revision"]
+                    or result.get("prompt") != prompt["prompt"]
+                ):
+                    raise ValueError("Recovered native evidence identity differs from snapshot")
+                await finish_attempt(
+                    sessions,
+                    settings,
+                    record.id,
+                    AttemptEvidence(
+                        state=result["state"],
+                        prompt=result["prompt"],
+                        response=result["response"],
+                        finish_reason=result["finish_reason"],
+                        error_code=result["error_code"],
+                        usage=result.get("usage"),
+                    ),
+                )
+                async with sessions() as session:
+                    record = await session.get(CaseExecutionRecord, record.id)
             evidence = await asyncio.to_thread(read_manifest, settings, record)
             if (
                 evidence.get("schema_version") != "case-evidence.v1"
@@ -148,7 +223,8 @@ async def execute_gpqa_exploration(run_id: str, resume: bool = False):
             async with sessions() as session:
                 cancelled = (
                     cancelled
-                    or (await session.get(EvaluationRun, identifier)).cancel_requested_at is not None
+                    or (await session.get(EvaluationRun, identifier)).cancel_requested_at
+                    is not None
                 )
             if cancelled:
                 break
@@ -159,11 +235,8 @@ async def execute_gpqa_exploration(run_id: str, resume: bool = False):
                 != expected["sha256"]
             ):
                 raise ValueError("Native sample identity changed")
-            prompt = await asyncio.to_thread(
-                invoke,
-                settings,
-                frozen["container_id"],
-                {"operation": "prompt_gpqa_0shot", "sample": sample["native_sample"]},
+            prompt = await native_call(
+                {"operation": "prompt_gpqa_0shot", "sample": sample["native_sample"]}
             )
             if prompt["tool_revision"] != frozen["tool"]["revision"]:
                 raise ValueError("Native tool revision changed")
@@ -177,19 +250,17 @@ async def execute_gpqa_exploration(run_id: str, resume: bool = False):
                     operation_key="sample:" + expected["sample_id"],
                 ),
             )
-            result = await asyncio.to_thread(
-                invoke,
-                settings,
-                frozen["container_id"],
-                {
-                    "operation": "infer_gpqa_smoke",
-                    "sample": sample["native_sample"],
-                    "base_url": frozen["base_url"].rstrip("/"),
-                    "model": frozen["remote_model"],
-                    "max_tokens": frozen["parameters"]["output"],
-                    "api_key": credential,
-                },
+            payload = model_payload(frozen, sample["native_sample"], credential)
+            result = (
+                await heartbeat_request(transport, payload, attempt_id, run_id)
+                if transport is not None
+                else await asyncio.to_thread(invoke, settings, frozen["container_id"], payload)
             )
+            if transport is not None and (
+                result.get("tool_revision") != frozen["tool"]["revision"]
+                or result.get("prompt") != prompt["prompt"]
+            ):
+                raise ValueError("Native response differs from approved prompt/tool")
             await finish_attempt(
                 sessions,
                 settings,
@@ -200,6 +271,7 @@ async def execute_gpqa_exploration(run_id: str, resume: bool = False):
                     response=result["response"],
                     finish_reason=result["finish_reason"],
                     error_code=result["error_code"],
+                    usage=result.get("usage"),
                 ),
             )
             attempts.append(
@@ -223,10 +295,7 @@ async def execute_gpqa_exploration(run_id: str, resume: bool = False):
         scoring_status = "not_applicable"
         if predictions:
             try:
-                scoring = await asyncio.to_thread(
-                    invoke,
-                    settings,
-                    frozen["container_id"],
+                scoring = await native_call(
                     {
                         "operation": "score_gpqa_0shot",
                         "predictions": predictions,
@@ -241,7 +310,15 @@ async def execute_gpqa_exploration(run_id: str, resume: bool = False):
                 ):
                     raise ValueError("Invalid native metric")
                 scoring_status = "succeeded"
-            except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+            except (
+                OSError,
+                ValueError,
+                KeyError,
+                TypeError,
+                EOFError,
+                paramiko.SSHException,
+                subprocess.SubprocessError,
+            ):
                 scoring, scoring_status = None, "failed"
         validity = (
             "complete"
@@ -352,6 +429,8 @@ async def execute_gpqa_exploration(run_id: str, resume: bool = False):
         BotoCoreError,
         ClientError,
         subprocess.SubprocessError,
+        paramiko.SSHException,
+        EOFError,
     ):
         await record_unresolved(sessions, identifier)
         return {"state": "unresolved", "ownership_retained": True}

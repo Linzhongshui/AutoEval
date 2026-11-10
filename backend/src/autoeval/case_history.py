@@ -58,6 +58,12 @@ class AttemptInput(BaseModel):
     operation_key: str = Field(min_length=1, max_length=256)
 
 
+class TokenUsage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    input_tokens: int = Field(ge=0, le=1000000000)
+    output_tokens: int = Field(ge=0, le=1000000000)
+
+
 class AttemptEvidence(BaseModel):
     model_config = ConfigDict(extra="forbid")
     state: Literal["succeeded", "failed"]
@@ -65,6 +71,7 @@ class AttemptEvidence(BaseModel):
     response: str | None = Field(default=None, max_length=4 * 1024 * 1024)
     finish_reason: str | None = Field(default=None, max_length=128)
     error_code: str | None = Field(default=None, pattern=r"^[A-Z0-9_]{1,64}$")
+    usage: TokenUsage | None = None
     # Do not accept headers, credentials, arbitrary upstream exception bodies or URLs.
 
     @model_validator(mode="after")

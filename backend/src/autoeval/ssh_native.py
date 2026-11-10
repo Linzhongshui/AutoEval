@@ -60,6 +60,41 @@ class SSHNativeTransport:
             raise ValueError("Native operation is not enabled")
         return await asyncio.to_thread(self.native_operation, "submit", submission_key, payload)
 
+    def invoke_local(self, payload):
+        if payload.get("operation") not in {"prompt_gpqa_0shot", "score_gpqa_0shot"}:
+            raise ValueError("Only non-billable native preparation/scoring is supported here")
+        with self.control.connect() as client:
+            self.control.prepare(client)
+            with client.open_sftp() as sftp:
+                sftp.get_channel().settimeout(15)
+                for name, expected in [
+                    ("bridge.py", self.bridge_sha256),
+                    ("lock.json", self.lock_sha256),
+                ]:
+                    path = f"{self.tool_root}/{name}"
+                    if not stat.S_ISREG(sftp.lstat(path).st_mode):
+                        raise ValueError("Invalid native tool file")
+                    with sftp.open(path, "rb") as stream:
+                        raw = stream.read(4 * 1024 * 1024 + 1)
+                    if hashlib.sha256(raw).hexdigest() != expected:
+                        raise ValueError("Approved native tool checksum changed")
+            raw = self.control.command(
+                client,
+                [
+                    "env",
+                    f"PYTHONPATH={self.tool_root}/site-packages:{self.tool_root}/source",
+                    "python3",
+                    "-c",
+                    "import os,runpy,sys; os.chdir(sys.argv[1]); sys.argv=sys.argv[2:]; runpy.run_path(sys.argv[0],run_name='__main__')",
+                    self.root,
+                    f"{self.tool_root}/bridge.py",
+                    f"{self.tool_root}/source",
+                    f"{self.tool_root}/lock.json",
+                ],
+                json.dumps(payload).encode(),
+            )
+            return json.loads(raw)
+
     async def lookup_request(self, submission_key):
         return await asyncio.to_thread(self.native_operation, "status", submission_key)
 

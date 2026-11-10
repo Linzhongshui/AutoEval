@@ -59,6 +59,7 @@ def child(folder, raw):
             capture_output=True,
             timeout=100,
             env=environment,
+            cwd=folder,
             check=True,
         )
         if len(result.stdout) > 16 * 1024 * 1024:

@@ -150,7 +150,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "gpqa_exploration_enabled": True,
                 "analysis_enabled": analysis_is_configured(settings),
                 "aurora_enabled": False,
-                "customer_ssh_enabled": False,
+                "customer_ssh_enabled": True,
+                "customer_ssh_scope": "gpqa_lite_exploration",
             },
             "request_id": request.state.request_id,
         }

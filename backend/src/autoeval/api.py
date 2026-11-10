@@ -17,6 +17,7 @@ from autoeval.db import create_database
 from autoeval.profiles import router as profiles_router
 from autoeval.registry import router as registry_router
 from autoeval.resources import router as resources_router
+from autoeval.runs import router as runs_router
 from autoeval.targets import router as targets_router
 
 
@@ -37,6 +38,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(registry_router)
     app.include_router(targets_router)
     app.include_router(resources_router)
+    app.include_router(runs_router)
 
     @app.middleware("http")
     async def correlation(request: Request, call_next):

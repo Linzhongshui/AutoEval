@@ -1,5 +1,6 @@
 import { ReportView, reportDatasets } from "./ReportView";
 import { BackendConnection } from "../components/BackendConnection";
+import { DiagnosticTasks } from "../components/DiagnosticTasks";
 import { DatasetManifests } from "../components/DatasetManifests";
 import { ExecutionBindings } from "../components/ExecutionBindings";
 import {
@@ -369,6 +370,7 @@ export function App() {
         )}
         {
           <div hidden={page !== "tasks"}>
+            {page === "tasks" && <DiagnosticTasks />}
             <Tasks go={go} />
           </div>
         }

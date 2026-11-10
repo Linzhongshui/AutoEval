@@ -12,7 +12,7 @@ from temporalio.exceptions import WorkflowAlreadyStartedError
 from autoeval.config import get_settings
 from autoeval.db import create_database
 from autoeval.models import Outbox
-from autoeval.workflows import RunWorkflow
+from autoeval.workflows import DockerDiagnosticWorkflow, RunWorkflow
 
 log = logging.getLogger(__name__)
 
@@ -35,9 +35,12 @@ async def deliver_once(sessions, client) -> bool:
             log.error("Unsupported outbox intent id=%s kind=%s", row.id, row.kind)
             return True
         try:
+            workflow_entry = {
+                "docker_diagnostic": DockerDiagnosticWorkflow.run,
+            }.get(row.payload.get("workflow_kind"), RunWorkflow.run)
             await asyncio.wait_for(
                 client.start_workflow(
-                    RunWorkflow.run,
+                    workflow_entry,
                     str(row.run_id),
                     id=f"demo/run/{row.run_id}",
                     task_queue="demo.workflow.v1",

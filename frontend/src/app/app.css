@@ -3303,3 +3303,14 @@ td small .badge,
     padding: 18px;
   }
 }
+.diagnostic-tasks {
+  margin-bottom: 24px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: white;
+}
+.diagnostic-tasks summary { cursor: pointer; font-weight: 600; }
+.diagnostic-tasks label { display: block; margin: 12px 0; }
+.diagnostic-tasks select { max-width: 100%; margin-left: 8px; padding: 6px; }
+.diagnostic-tasks pre { overflow: auto; max-height: 240px; }

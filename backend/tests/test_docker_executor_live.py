@@ -64,3 +64,60 @@ async def test_actual_docker_cancel_and_unknown_key():
     assert (await adapter.status(job)).state == "cleaned"
     with pytest.raises(subprocess.CalledProcessError):
         await adapter.submit({"kind": "framework_smoke", "duration_seconds": 0}, job.submission_key)
+
+
+async def test_interrupted_cleanup_is_not_cleaned_and_can_resume():
+    adapter = await executor()
+    job = await adapter.submit(
+        {"kind": "framework_smoke", "duration_seconds": 0}, str(uuid.uuid4())
+    )
+    for _ in range(20):
+        if (await adapter.status(job)).state == "succeeded":
+            break
+        await asyncio.sleep(0.2)
+    else:
+        pytest.fail("Remote execution did not succeed")
+    fault_injection = """
+import importlib.util
+import sys
+from pathlib import Path
+from unittest.mock import patch
+
+spec = importlib.util.spec_from_file_location("runtime_under_test", sys.argv[1])
+runtime = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(runtime)
+key = sys.argv[2]
+sys.argv = ["job_runtime.py", "cleanup", key]
+original_unlink = Path.unlink
+calls = 0
+
+def interrupted_unlink(path):
+    global calls
+    calls += 1
+    if calls == 2:
+        raise OSError("injected cleanup interruption")
+    return original_unlink(path)
+
+try:
+    with patch("pathlib.Path.unlink", new=interrupted_unlink):
+        runtime.main()
+except OSError:
+    pass
+state = runtime.inspect_job(runtime.ROOT / key)
+assert state["state"] == "unknown", state
+assert state["cleanup_pending"] is True, state
+runtime.main()
+"""
+    await asyncio.to_thread(
+        adapter.command,
+        [
+            "exec",
+            adapter.container_id,
+            "python",
+            "-c",
+            fault_injection,
+            adapter.remote_dir + "/job_runtime.py",
+            job.submission_key,
+        ],
+    )
+    assert (await adapter.status(job)).state == "cleaned"

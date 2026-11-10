@@ -27,7 +27,10 @@ def identity(pid):
 
 def inspect_job(folder):
     if (folder / "cleanup.json").exists():
-        return {"state": "cleaned"}
+        cleanup = json.loads((folder / "cleanup.json").read_text())
+        if cleanup["state"] == "cleaned":
+            return {"state": "cleaned"}
+        return {"state": "unknown", "cleanup_pending": True}
     if (folder / "exit.json").exists():
         return json.loads((folder / "exit.json").read_text())
     if not (folder / "job.json").exists():
@@ -119,18 +122,26 @@ def main():
             if state["state"] == "running":
                 os.killpg(state["pid"], signal.SIGTERM)
         elif action == "cleanup":
-            state = inspect_job(folder)
-            if state["state"] == "cleaned":
+            cleanup_path = folder / "cleanup.json"
+            cleanup = json.loads(cleanup_path.read_text()) if cleanup_path.exists() else None
+            if cleanup is not None and cleanup["state"] == "cleaned":
                 print(json.dumps({"state": "cleaned", "cleaned": True}))
                 return
-            if state["state"] not in {"succeeded", "failed", "cancelled"}:
-                print(json.dumps({**state, "cleaned": False}))
-                return
-            observed_state = state["state"]
-            atomic_json(folder / "cleanup.json", {"state": "cleaned"})
+            if cleanup is None:
+                state = inspect_job(folder)
+                if state["state"] not in {"succeeded", "failed", "cancelled"}:
+                    print(json.dumps({**state, "cleaned": False}))
+                    return
+                observed_state = state["state"]
+                atomic_json(
+                    cleanup_path, {"state": "cleaning", "observed_state": observed_state}
+                )
+            else:
+                observed_state = cleanup["observed_state"]
             for path in folder.iterdir():
                 if path.name not in {".lock", "cleanup.json"}:
                     path.unlink()
+            atomic_json(cleanup_path, {"state": "cleaned"})
             print(
                 json.dumps(
                     {

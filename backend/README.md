@@ -1,16 +1,17 @@
-# AutoEval 后端基础架构
+# AutoEval 后端开发与联调
 
-当前为详设的第一批基础设施实现，**不是已完成的测评后台**。单团队、单工作空间，无项目/租户层。不读取极光内部服务，也不改动前端现有展示数据。
+单团队、单工作空间，无项目/租户层。已验证本机Docker的GPQA Lite探索闭环，尚未完成全部工具、SSH资源及生产验收。极光仍是独立资源提供方；原型示例与真实业务数据明确区分。
 
 ## 已实现
 
 - FastAPI应用工厂、lifespan资源回收、请求ID、统一异常和OpenAPI。
 - `/health/live`存活检查、`/health/ready`真实检查PostgreSQL/Temporal/S3 bucket；依赖不可用返回503。
-- `/api/autoeval/v1/system/capabilities`明确返回执行/分析/SSH/极光尚未启用。
-- SQLAlchemy执行基础模型与独立Alembic初始迁移：run、snapshot、event、outbox四表。
-- Temporal Workflow/IO/Result Worker入口；尚未实现的Activity明确抛出不可重试错误，不生成模拟成功。
-- START_RUN outbox投递器：稳定Workflow ID、拒绝ID复用、重复派发去重和延迟重试。
-- 只读reconciler发现滞留任务并记录告警，不推断远程状态、不自动释放资源。
+- `/api/autoeval/v1/system/capabilities`分别报告GPQA探索、分析配置与尚未启用的正式测评/SSH/极光。
+- 版本化模型、端点、配置、数据清单、Profile、运行快照、case证据、报告及审计，迁移当前至0017。
+- Temporal工作流、专用I/O/GPQA/分析Worker及Outbox；未知调用不盲目重发，未实现活动明确失败。
+- 真实报告、条件匹配的批准JSON基准、内部榜单、独立分析及引用证据校验；分析需显式配置独立目标/资源。
+- 对账器恢复诊断和已归档GPQA attempt；状态未确认保留占用，清理按所有权幂等执行并记录审计。
+- PostgreSQL/S3隔离scratch备份恢复演练；不覆盖现有数据库或桶，不宣称生产耐久性已验收。
 - Python 3.12隔离环境、uv.lock和带hash的容器依赖清单；Compose开发拓扑与Vite API代理。
 
 ## 本地运行（PowerShell）
@@ -38,7 +39,7 @@ docker compose --env-file deploy/.env -f deploy/compose.yaml --profile workers u
 
 PostgreSQL 5432；Temporal 7233、开发UI 8233；开发S3 9000；API 8000，仅绑定127.0.0.1。Temporal当前采用独立持久卷上的开发SQLite，**不是生产服务**；不共用业务数据库。正式环境需独立Temporal数据库/账号及真实身份，当前代码主动拒绝production环境使用local身份。
 
-容器镜像tag固定，但未在本环境拉取验证，生产前需验证并锁digest。当前机器已找到用户目录中的Docker Desktop。已验证容器PostgreSQL、Temporal和开发S3协议；完整后端镜像构建及真实测评仍待验证。
+开发基础镜像已拉取并验证PostgreSQL、Temporal和S3协议；生产前仍需锁定digest和完整软件环境。GPQA探索由主机Worker通过Docker CLI控制执行容器；通用后端Compose镜像不自动具备Docker控制能力。
 
 ## 开发检查
 
@@ -55,14 +56,14 @@ uv export --frozen --no-dev --no-emit-project --format requirements-txt --output
 
 ## 下一批实现边界
 
-1. 模型、数据、Profile、整套配置及默认指针API和迁移，替换页面预置状态。
-2. 正式测评run提交、工具适配及完整状态对账；诊断提交链路已实现，见下文。
-3. SSH指纹和凭据、远程作业查证、资源锁及所有权清理。
-4. case执行历史、原生产物、报告、基准、独立分析和榜单。
+1. 客户SSH适配、主机指纹、SFTP证据及Docker模拟SSH联调。
+2. MMMU-Pro真实多模态推理与AutomationBench明确工具/数据契约及执行接入。
+3. 统一前端主流程与已接入区域，补齐正式Release的批准配置/范围/门禁规则。
+4. 生产身份、镜像封装、持久存储、监控及部署验收。
 
-Outbox本批只投递START_RUN；CANCEL_RUN仅有schema占位，不消费。后续启用取消必须先实现工作流信号与状态查证。报告/分析outbox外键和去重需后续迁移，不能将report ID写入run外键。本批采用单行有界事务持锁派发，避免提前实现未经验证的租约claim；多副本上线前验证锁竞争并按详设演进claim机制。
+Outbox按payload路由运行、恢复与分析工作流，使用稳定Workflow ID去重。CANCEL_RUN仍为schema占位，取消由运行行意图轮询消费。派发采用单行有界事务持锁；多副本生产前仍需验证锁竞争与派发容量。
 
-尚无真实SSH执行或模型生成调用。已实现本地开发凭据引用与模型列表连通检测；本地文件凭据存储不能替代生产密钥服务。不含完整生产权限和审计。真实测评前必须补齐适配能力、预算和证据留存。
+已完成有限GPQA模型生成联调，真实SSH尚未实现。本地凭据引用不能替代生产密钥服务。已有开发操作审计，正式身份、最小权限及生产密钥服务尚未完成。
 
 ## Docker诊断联调
 
@@ -97,7 +98,7 @@ Docker守护进程代理异常而Windows HTTPS可达时，可用deploy/pull_imag
 
 样本内容hash由数据导入方生成；清单登记不验证原题是否存在或评分是否正确。Lite需scope=lite、不同manifest_key及parent_id=同版本Full清单UUID，samples为原清单中ID/hash完全相同的成员。已登记版本不覆盖；Full样本集改变须新建数据版本。清单顺序进入hash，影响执行身份。
 
-GET支持`?offset=0&limit=50`，next_offset=null为末页。页面目前最多显示200条，仍待统一完整分页交互；不能据当前显示范围推断数据缺失。对象存储缺失或完整性失败返回503，禁止静默使用空清单。
+GET支持`?offset=0&limit=50`，next_offset=null为末页。选择器可按分页继续加载，不再以首页200条作为完整数据。对象存储缺失或完整性失败返回503，禁止静默使用空清单。
 
 ## Profile与配置绑定
 
@@ -105,7 +106,7 @@ POST `/api/autoeval/v1/profiles`登记profile_key/version/dataset_name、full_ma
 
 创建配置时可提供`profile_bindings: {"GPQA": "Profile UUID"}`，必须覆盖items全部条目；按每条scope解析Full/Lite，缺失Lite拒绝。已有绑定的配置后续版本必须显式保留或替换绑定。配置页独立执行绑定面板支持此操作，普通参数编辑区缺少绑定时会提示后端冲突。
 
-GET `/api/autoeval/v1/test-configs/{id}/execution-spec`查看不可变配置、Profile与清单摘要，bindings_complete仅表示引用齐备；execution_enabled仍为false，工具验证尚未完成。运行提交未来需进一步冻结端点、资源和软件环境，不能直接将该规格当成已创建运行。
+GET `/api/autoeval/v1/test-configs/{id}/execution-spec`查看配置、Profile与清单摘要，bindings_complete仅表示引用齐备。GPQA探索提交还会校验固定原生工具契约并冻结端点、资源及数据包；读取配置规格本身不会创建运行，其他工具不能据绑定完整推断可执行。
 
 ## Case回溯
 
@@ -147,6 +148,12 @@ AE_GPQA_PIPELINE_TEST=1启用真实SQL/S3/Temporal、模拟模型边界专项；
 
 报告管理页已读取真实后端，GET `/api/autoeval/v1/reports?offset=0&limit=20`返回目录及next_offset，GET `/reports/{id}`读取详情，GET `/reports/{id}/evidence`校验S3正文。`#report/<UUID>`可刷新直达。原型示例报告明确折叠标记。
 
-execution_origin由服务端运行环境冻结，默认real；模拟测试应用显式设为simulation。历史来源不明的报告默认unverified。普通报告目录只展示real，不把模拟成绩当真实结果。历史来源核验只补充元数据/审计，不重写原始成绩或快照。自动分析尚未启用，不展示伪造分析。
+execution_origin由服务端运行环境冻结，默认real；模拟测试应用显式设为simulation。历史来源不明的报告默认unverified。普通报告目录只展示real，不把模拟成绩当真实结果。历史来源核验只补充元数据/审计，不重写原始成绩或快照。自动分析需要独立配置，未启用时不展示虚构结论。
+
+## 独立分析与恢复
+
+配置AE_ANALYSIS_TARGET_ID和AE_ANALYSIS_RESOURCE_ID后，报告事务会创建分析意图；启动`uv run python -m autoeval.worker analysis-workflow`、`uv run python -m autoeval.worker result`及dispatcher。分析输入冻结报告/快照摘要，模型引用只能使用服务端证据目录，失败重试不重测、不改报告。该功能可能产生模型费用，普通回归测试使用明确的模拟边界。
+
+reconciler可恢复已有归档GPQA attempt，绝不重放状态未知的生成请求；unknown会保留占用及审计，等待证据查证。诊断清理使用持久状态和所有权边界，不删除客户既有对象。`autoeval.backup`提供备份及空scratch目标恢复；不得将其开发演练当成生产RPO/RTO证明。
 
 AE_REPORTS_TEST=1启用已存在真实报告的只读目录/证据验证；搭配AE_BROWSER_URL及AE_CHROME_PATH可运行浏览器详情测试。它们不发出模型生成请求。

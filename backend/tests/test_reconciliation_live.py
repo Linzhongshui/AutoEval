@@ -6,6 +6,7 @@ import uuid
 
 import httpx
 import pytest
+from playwright.async_api import async_playwright, expect
 from sqlalchemy import select
 from temporalio.client import Client
 
@@ -109,3 +110,105 @@ async def test_recover_closed_workflow_without_restarting_job():
                 await session.scalar(select(ExecutionLease).where(ExecutionLease.run_id == run_id))
                 is None
             )
+
+
+@pytest.mark.skipif(not os.environ.get("AE_BROWSER_URL"), reason="Live browser required")
+async def test_browser_unknown_recovery_and_audit_are_consistent():
+    settings = get_settings()
+    client = await Client.connect(settings.temporal_address)
+    app = create_app()
+    async with (
+        app.router.lifespan_context(app),
+        httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as api,
+    ):
+        async with app.state.sessions() as session:
+            binding = await session.scalar(select(ResourceBinding).limit(1))
+            assert binding is not None
+        response = await api.post(
+            "/api/autoeval/v1/diagnostics/runs",
+            json={
+                "resource_binding_id": str(binding.id),
+                "kind": "framework_smoke",
+                "duration_seconds": 0,
+            },
+            headers={"Idempotency-Key": uuid.uuid4().hex},
+        )
+        assert response.status_code == 202
+        run_id = uuid.UUID(response.json()["data"]["run_id"])
+        async with app.state.sessions() as session, session.begin():
+            intent = await session.scalar(
+                select(Outbox).where(Outbox.run_id == run_id).with_for_update()
+            )
+            intent.state = "delivered"
+        handle = await client.start_workflow(
+            DockerDiagnosticWorkflow.run,
+            str(run_id),
+            id=f"demo/run/{run_id}",
+            task_queue="fault-injection-" + uuid.uuid4().hex,
+        )
+        await handle.terminate("Browser recovery acceptance fault injection")
+        assert await reconcile_diagnostic(app.state.sessions, client, settings, run_id) == "unresolved"
+        assert await reconcile_diagnostic(app.state.sessions, client, settings, run_id) == "unresolved"
+
+        async with async_playwright() as playwright:
+            browser = await playwright.chromium.launch(
+                executable_path=os.environ.get("AE_CHROME_PATH") or None, headless=True
+            )
+            try:
+                page = await browser.new_page()
+                page.set_default_timeout(15000)
+                await page.goto(os.environ["AE_BROWSER_URL"] + "/#tasks")
+                diagnostic = page.locator(".diagnostic-tasks")
+                select_run = diagnostic.get_by_label("已保存诊断任务", exact=True)
+                await expect(select_run.locator(f'option[value="{run_id}"]')).to_have_count(1)
+                await select_run.select_option(str(run_id))
+                await expect(diagnostic.get_by_test_id("diagnostic-state")).to_have_text(
+                    "诊断状态：accepted"
+                )
+                await expect(diagnostic.get_by_test_id("diagnostic-cleanup-state")).to_have_text(
+                    "清理状态：pending"
+                )
+                await expect(diagnostic.get_by_role("alert")).to_contain_text("资源占用已保留")
+                await expect(diagnostic.locator("li", has_text="execution_unresolved")).to_have_count(1)
+
+                adapter = DockerExecutor(
+                    settings.docker_executable, binding.container_id, binding.image_id
+                )
+                job = await adapter.submit(
+                    {"kind": "framework_smoke", "duration_seconds": 0}, str(run_id)
+                )
+                for _ in range(30):
+                    if (await adapter.status(job)).state == "succeeded":
+                        break
+                    await asyncio.sleep(0.2)
+                assert await reconcile_diagnostic(
+                    app.state.sessions, client, settings, run_id
+                ) == "completed"
+                assert await reconcile_diagnostic(
+                    app.state.sessions, client, settings, run_id
+                ) == "terminal"
+
+                await page.reload()
+                await expect(select_run.locator(f'option[value="{run_id}"]')).to_have_count(1)
+                await select_run.select_option(str(run_id))
+                await expect(diagnostic.get_by_test_id("diagnostic-state")).to_have_text(
+                    "诊断状态：completed"
+                )
+                await expect(diagnostic.get_by_test_id("diagnostic-cleanup-state")).to_have_text(
+                    "清理状态：completed"
+                )
+                await expect(diagnostic.get_by_role("alert")).to_have_count(0)
+                await expect(diagnostic.locator("li", has_text="execution_cleaned")).to_have_count(1)
+            finally:
+                await browser.close()
+
+        audits = (
+            await api.get("/api/autoeval/v1/audit-events", params={"run_id": str(run_id)})
+        ).json()["data"]
+        actions = [event["action"] for event in audits]
+        assert actions.count("recovery.unresolved") == 1
+        assert actions.count("execution.cleanup") == 1
+        async with app.state.sessions() as session:
+            assert await session.scalar(
+                select(ExecutionLease).where(ExecutionLease.run_id == run_id)
+            ) is None

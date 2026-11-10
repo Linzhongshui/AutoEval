@@ -13,6 +13,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Mapped, mapped_column
 
+from autoeval.audit import record_audit
 from autoeval.models import Base, EvaluationRun, Outbox, Record, RunEvent, RunSnapshot
 from autoeval.resources import ResourceBinding
 
@@ -99,6 +100,11 @@ async def submit(
             session.add(
                 RunEvent(run_id=run.id, seq=1, type="accepted", body={"diagnostic_only": True})
             )
+            record_audit(
+                session, action="diagnostic.submit", resource_id=str(run.id), run_id=run.id,
+                outcome="accepted", request_id=request.state.request_id,
+                details={"diagnostic_only": True},
+            )
             data = {"run_id": str(run.id), "state": "accepted", "diagnostic_only": True}
     except IntegrityError as exc:
         raise HTTPException(409, "Resource busy or concurrent request; retry same key") from exc
@@ -177,6 +183,11 @@ async def cancel(run_id: uuid.UUID, request: Request):
             accepted = row.state not in {"completed", "cancelled", "failed"}
             if accepted:
                 row.cancel_requested_at = datetime.now(UTC)
+            record_audit(
+                session, action="diagnostic.cancel", resource_id=str(row.id), run_id=row.id,
+                outcome="accepted" if accepted else "unchanged",
+                request_id=request.state.request_id, details={"accepted": accepted},
+            )
     except SQLAlchemyError as exc:
         raise HTTPException(503, "Run database unavailable") from exc
     return {"data": {"accepted": accepted}, "request_id": request.state.request_id}

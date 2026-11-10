@@ -12,6 +12,7 @@ from temporalio.client import Client
 
 from autoeval.analysis import analysis_is_configured
 from autoeval.analysis import router as analysis_router
+from autoeval.audit import router as audit_router
 from autoeval.case_history import router as case_history_router
 from autoeval.config import Settings, get_settings
 from autoeval.configuration import router as configuration_router
@@ -49,6 +50,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(evaluations_router)
     app.include_router(leaderboard_router)
     app.include_router(analysis_router)
+    app.include_router(audit_router)
     app.include_router(reports_router)
 
     @app.middleware("http")

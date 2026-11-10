@@ -68,3 +68,11 @@ async def test_diagnostic_submit_deduplicate_execute_and_cancel():
             assert data["gate_status"] == "not_applicable"
             events = data["events"]
             assert [e["seq"] for e in events] == list(range(1, len(events) + 1))
+            audit = await api.get(
+                "/api/autoeval/v1/audit-events", params={"run_id": run_id, "limit": 200}
+            )
+            assert audit.status_code == 200, audit.text
+            actions = [row["action"] for row in audit.json()["data"]]
+            assert actions.count("diagnostic.submit") == 1
+            assert actions.count("diagnostic.cancel") == (1 if cancel else 0)
+            assert all("credential" not in str(row).lower() for row in audit.json()["data"])

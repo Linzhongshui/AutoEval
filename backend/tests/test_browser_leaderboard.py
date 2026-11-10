@@ -12,19 +12,47 @@ def test_browser_real_leaderboard_groups_and_report_links():
         )
         try:
             page = browser.new_page()
-            page.goto(os.environ["AE_BROWSER_URL"] + "/#leaderboard")
-            expect(page.get_by_test_id("real-leaderboard")).to_be_visible()
+            base = os.environ["AE_BROWSER_URL"]
+            page.goto(base + "/#leaderboard")
+            leaderboard = page.get_by_test_id("real-leaderboard")
+            expect(leaderboard).to_be_visible()
             response = page.request.get(
-                os.environ["AE_BROWSER_URL"]
-                + "/api/autoeval/v1/leaderboard?dataset_key=GPQA&metric_name=accuracy"
+                base + "/api/autoeval/v1/leaderboard?dataset_key=GPQA&metric_name=accuracy"
             )
             assert response.status == 200
             groups = response.json()["data"]
             assert groups, "A verified complete real report is required"
+
+            expect(leaderboard.locator("table.leader-table")).to_have_count(len(groups))
+            expect(leaderboard.get_by_role("button", name="性能榜单", exact=True)).to_have_count(0)
             expected = sum(len(group["entries"]) for group in groups)
             expect(page.get_by_test_id("leaderboard-entry")).to_have_count(expected)
+            for index, group in enumerate(groups):
+                panel = page.get_by_test_id("leaderboard-group").nth(index)
+                comparison = group["comparison"]
+                expect(panel).to_contain_text(comparison["manifest_id"])
+                expect(panel).to_contain_text(comparison["manifest_sha256"])
+                expect(panel).to_contain_text(comparison["tool_revision"])
+                for key, value in comparison["parameters"].items():
+                    expected = f"{value:g}" if isinstance(value, (int, float)) else str(value)
+                    expect(panel).to_contain_text(key)
+                    expect(panel).to_contain_text(expected)
+                expect(panel.get_by_test_id("leaderboard-entry")).to_have_count(
+                    len(group["entries"])
+                )
+                for entry_index, entry in enumerate(group["entries"]):
+                    row = panel.get_by_test_id("leaderboard-entry").nth(entry_index)
+                    expect(row).to_contain_text(str(entry["rank"]).zfill(2))
+                    expect(row).to_contain_text(entry["remote_model"])
+                    expect(row).to_contain_text(f"{entry['value']:g}{group['unit']}")
+                    expect(row).to_contain_text(entry["created_at"])
+
+            page.set_viewport_size({"width": 390, "height": 844})
+            assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
             first_report = groups[0]["entries"][0]["report_id"]
-            page.get_by_role("button", name=f"来源报告 {first_report[:8]}", exact=True).click()
+            page.get_by_role(
+                "button", name=f"来源报告 {first_report[:8]}", exact=True
+            ).first.click()
             expect(page.get_by_test_id("real-report-detail")).to_be_visible()
         finally:
             browser.close()

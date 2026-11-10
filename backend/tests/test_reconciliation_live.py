@@ -3,6 +3,7 @@
 import asyncio
 import os
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import httpx
 import pytest
@@ -10,10 +11,11 @@ from playwright.async_api import async_playwright, expect
 from sqlalchemy import select
 from temporalio.client import Client
 
+from autoeval import reconciler
 from autoeval.api import create_app
 from autoeval.config import get_settings
 from autoeval.docker_executor import DockerExecutor
-from autoeval.models import Outbox
+from autoeval.models import EvaluationRun, Outbox, RunEvent, RunSnapshot
 from autoeval.reconciler import reconcile_diagnostic
 from autoeval.resources import ResourceBinding
 from autoeval.runs import ExecutionLease
@@ -212,3 +214,65 @@ async def test_browser_unknown_recovery_and_audit_are_consistent():
             assert await session.scalar(
                 select(ExecutionLease).where(ExecutionLease.run_id == run_id)
             ) is None
+
+
+async def test_background_reconciler_selects_terminal_run_with_lease(monkeypatch):
+    app = create_app()
+    run = EvaluationRun(
+        trigger_scope="local-operator:diagnostic",
+        idempotency_key=uuid.uuid4().hex,
+        request_hash="a" * 64,
+        run_mode="exploration",
+        created_by="recovery-test",
+        state="completed",
+        created_at=datetime.now(UTC) - timedelta(minutes=6),
+    )
+    container_id = uuid.uuid4().hex + uuid.uuid4().hex
+    async with app.router.lifespan_context(app):
+        async with app.state.sessions() as session, session.begin():
+            session.add(run)
+            await session.flush()
+            session.add(ExecutionLease(container_id=container_id, run_id=run.id))
+            session.add(RunEvent(run_id=run.id, seq=1, type="accepted", body={}))
+            session.add(
+                RunSnapshot(
+                    run_id=run.id,
+                    schema_version="diagnostic.v1",
+                    canonical_body={},
+                    sha256="b" * 64,
+                )
+            )
+        selected = []
+
+        async def observe(_sessions, _client, _settings, run_id):
+            selected.append(run_id)
+
+        class StopPolling(Exception):
+            pass
+
+        async def stop_polling(_seconds):
+            raise StopPolling
+
+        async def skip_ssh_cleanup(_sessions, _settings, _run_id):
+            return "deferred"
+
+        monkeypatch.setattr(reconciler, "reconcile_run", observe)
+        monkeypatch.setattr("autoeval.cleanup.reclaim", skip_ssh_cleanup)
+        monkeypatch.setattr(reconciler.asyncio, "sleep", stop_polling)
+        try:
+            with pytest.raises(StopPolling):
+                await reconciler.serve()
+        finally:
+            async with app.state.sessions() as session, session.begin():
+                lease = await session.get(ExecutionLease, container_id)
+                if lease is not None:
+                    await session.delete(lease)
+                events = await session.scalars(select(RunEvent).where(RunEvent.run_id == run.id))
+                for event in events:
+                    await session.delete(event)
+                snapshot = await session.scalar(
+                    select(RunSnapshot).where(RunSnapshot.run_id == run.id)
+                )
+                await session.delete(snapshot)
+                await session.delete(await session.get(EvaluationRun, run.id))
+    assert run.id in selected

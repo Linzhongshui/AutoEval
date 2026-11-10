@@ -247,11 +247,18 @@ async def serve():
                 ids = await session.scalars(
                     select(EvaluationRun.id)
                     .join(RunSnapshot, RunSnapshot.run_id == EvaluationRun.id)
+                    .outerjoin(ExecutionLease, ExecutionLease.run_id == EvaluationRun.id)
                     .where(
                         or_(EvaluationRun.trigger_scope == "local-operator:diagnostic",
                             and_(EvaluationRun.trigger_scope == "local-operator:evaluation",
                                  RunSnapshot.canonical_body["execution_origin"].astext == settings.evaluation_origin)),
-                        EvaluationRun.state.not_in(["completed", "cancelled", "failed"]),
+                        or_(
+                            EvaluationRun.state.not_in(["completed", "cancelled", "failed"]),
+                            and_(
+                                EvaluationRun.trigger_scope == "local-operator:diagnostic",
+                                ExecutionLease.run_id.is_not(None),
+                            ),
+                        ),
                         EvaluationRun.created_at < datetime.now(UTC) - timedelta(minutes=5),
                     )
                     .limit(100)

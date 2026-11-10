@@ -30,8 +30,22 @@ from autoeval.secrets import FileSecretStore
 from autoeval.targets import TargetBinding
 
 
+async def _verified_report(settings, report, identifier, snapshot):
+    body = await asyncio.to_thread(read_manifest, settings, report)
+    if (
+        body.get("schema_version") != "gpqa-report.v1"
+        or body.get("run_id") != str(identifier)
+        or body.get("snapshot_sha256") != snapshot.sha256
+        or body.get("execution_origin") != report.execution_origin
+        or body.get("validity") != report.validity
+        or body.get("summary") != report.summary
+    ):
+        raise ValueError("Report evidence is inconsistent")
+    return body
+
+
 @activity.defn
-async def execute_gpqa_exploration(run_id: str):
+async def execute_gpqa_exploration(run_id: str, resume: bool = False):
     identifier = uuid.UUID(run_id)
     settings = get_settings()
     engine, sessions = create_database(settings)
@@ -41,28 +55,46 @@ async def execute_gpqa_exploration(run_id: str):
                 select(RunSnapshot).where(RunSnapshot.run_id == identifier)
             )
             frozen = snapshot.canonical_body
-            # Redelivery must never replay a potentially billable request. An
-            # existing attempt requires evidence-based recovery, not resubmission.
-            existing = await session.scalar(
-                select(CaseExecutionRecord.id)
-                .where(CaseExecutionRecord.run_id == identifier)
-                .limit(1)
-            )
+            existing_records = (
+                await session.scalars(
+                    select(CaseExecutionRecord)
+                    .where(CaseExecutionRecord.run_id == identifier)
+                    .order_by(CaseExecutionRecord.created_at, CaseExecutionRecord.id)
+                )
+            ).all()
             row = await session.scalar(
                 select(EvaluationRun).where(EvaluationRun.id == identifier).with_for_update()
             )
+            existing_report = await session.scalar(
+                select(EvaluationReport).where(EvaluationReport.run_id == identifier)
+            )
             if row.state in {"completed", "failed", "cancelled"}:
+                if existing_report is not None:
+                    await _verified_report(settings, existing_report, identifier, snapshot)
                 return {"state": row.state}
-            if existing or row.state != "accepted":
+            if existing_report is not None:
+                await _verified_report(settings, existing_report, identifier, snapshot)
+                return {"state": "unresolved", "ownership_retained": True}
+            # Redelivery must never replay a potentially billable request. Only
+            # evidence-based recovery may continue after an attempt was registered.
+            if not resume and (existing_records or row.state != "accepted"):
                 return {"state": "unresolved"}
+            if any(record.state == "started" for record in existing_records):
+                return {"state": "unresolved", "ownership_retained": True}
+            initial_state = row.state
+            cancelled = row.cancel_requested_at is not None or initial_state == "cancelling"
             target = await session.get(TargetBinding, uuid.UUID(frozen["target_id"]))
             credential_ref = target.credential_ref
-            row.state = "queued"
-            row.projection_version += 1
-            session.add(
-                RunEvent(run_id=identifier, seq=row.projection_version, type="queued", body={})
-            )
-        await transition(sessions, identifier, "preparing")
+            if initial_state == "accepted":
+                row.state = "queued"
+                row.projection_version += 1
+                session.add(
+                    RunEvent(
+                        run_id=identifier, seq=row.projection_version, type="queued", body={}
+                    )
+                )
+        if initial_state in {"accepted", "queued"}:
+            await transition(sessions, identifier, "preparing")
         identity = await asyncio.to_thread(
             inspect_executor, settings.docker_executable, frozen["container_id"]
         )
@@ -72,16 +104,52 @@ async def execute_gpqa_exploration(run_id: str):
             read_manifest, settings, SimpleNamespace(**frozen["dataset_content"])
         )
         members = {s["sample_id"]: s for s in bundle["samples"]}
-        credential = FileSecretStore(settings.secret_store_path).get(credential_ref)
-        await transition(sessions, identifier, "running")
         attempts, predictions, references = [], [], []
-        cancelled = False
+        attempted_samples = set()
+        expected_samples = {sample["sample_id"]: sample for sample in frozen["samples"]}
+        for record in existing_records:
+            expected = expected_samples.get(record.sample_id)
+            if record.dataset_key != "GPQA" or expected is None or record.sample_id in attempted_samples:
+                raise ValueError("Unexpected or ambiguous archived attempt")
+            sample = members[record.sample_id]
+            if (
+                sample["sha256"] != expected["sha256"]
+                or hashlib.sha256(canonical_manifest(sample["native_sample"])).hexdigest()
+                != expected["sha256"]
+            ):
+                raise ValueError("Native sample identity changed")
+            evidence = await asyncio.to_thread(read_manifest, settings, record)
+            if (
+                evidence.get("schema_version") != "case-evidence.v1"
+                or evidence.get("attempt_id") != str(record.id)
+                or evidence.get("state") != record.state
+                or (record.state == "succeeded" and evidence.get("response") is None)
+            ):
+                raise ValueError("Archived attempt evidence is inconsistent")
+            attempts.append(
+                {
+                    "sample_id": record.sample_id,
+                    "attempt_id": str(record.id),
+                    "state": record.state,
+                    "usage": evidence.get("usage"),
+                }
+            )
+            attempted_samples.add(record.sample_id)
+            if record.state == "succeeded":
+                predictions.append(evidence["response"])
+                references.append(sample["native_sample"]["answer"])
+        credential = FileSecretStore(settings.secret_store_path).get(credential_ref)
+        if initial_state in {"accepted", "queued", "preparing", "running"}:
+            await transition(sessions, identifier, "running")
         for expected in frozen["samples"]:
+            if expected["sample_id"] in attempted_samples:
+                continue
             activity.heartbeat(run_id)
             async with sessions() as session:
                 cancelled = (
-                    await session.get(EvaluationRun, identifier)
-                ).cancel_requested_at is not None
+                    cancelled
+                    or (await session.get(EvaluationRun, identifier)).cancel_requested_at is not None
+                )
             if cancelled:
                 break
             sample = members[expected["sample_id"]]
@@ -232,17 +300,31 @@ async def execute_gpqa_exploration(run_id: str):
                     body={"validity": validity},
                 )
             )
-            session.add(
-                EvaluationReport(
-                    execution_origin=frozen.get("execution_origin", "unverified"),
-                    run_id=identifier,
-                    validity=validity,
-                    snapshot_sha256=snapshot.sha256,
-                    summary=summary,
-                    object_key=key,
-                    sha256=digest,
-                )
+            existing_report = await session.scalar(
+                select(EvaluationReport)
+                .where(EvaluationReport.run_id == identifier)
+                .with_for_update()
             )
+            if existing_report is not None:
+                body = await _verified_report(settings, existing_report, identifier, snapshot)
+                if (
+                    existing_report.object_key != key
+                    or existing_report.sha256 != digest
+                    or canonical_manifest(body) != raw
+                ):
+                    raise ValueError("Existing report conflicts with recovered execution")
+            else:
+                session.add(
+                    EvaluationReport(
+                        execution_origin=frozen.get("execution_origin", "unverified"),
+                        run_id=identifier,
+                        validity=validity,
+                        snapshot_sha256=snapshot.sha256,
+                        summary=summary,
+                        object_key=key,
+                        sha256=digest,
+                    )
+                )
             await session.execute(delete(ExecutionLease).where(ExecutionLease.run_id == identifier))
         return {"state": final_state, "validity": validity}
     except (

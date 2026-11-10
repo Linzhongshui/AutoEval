@@ -6,7 +6,11 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from temporalio.client import Client, WorkflowExecutionStatus
+from temporalio.common import WorkflowIDReusePolicy
+from temporalio.exceptions import WorkflowAlreadyStartedError
+from temporalio.service import RPCError, RPCStatusCode
 
+from autoeval.case_history import CaseExecutionRecord
 from autoeval.config import get_settings
 from autoeval.contracts import JobRef
 from autoeval.db import create_database
@@ -14,6 +18,7 @@ from autoeval.docker_executor import DockerExecutor
 from autoeval.domain import RunState, check_transition
 from autoeval.models import EvaluationRun, RunEvent, RunSnapshot
 from autoeval.runs import DiagnosticResult, ExecutionLease
+from autoeval.workflows import GpqaExplorationWorkflow
 
 log = logging.getLogger(__name__)
 
@@ -82,6 +87,65 @@ async def reconcile_diagnostic(sessions, client, settings, run_id):
         return row.state
 
 
+async def reconcile_gpqa(sessions, client, settings, run_id):
+    # The original Workflow exclusively owns writes and model submission while active.
+    description = await client.get_workflow_handle(f"demo/run/{run_id}").describe()
+    if description.status == WorkflowExecutionStatus.RUNNING:
+        return "workflow_active"
+    async with sessions() as session, session.begin():
+        row = await session.scalar(
+            select(EvaluationRun).where(EvaluationRun.id == run_id).with_for_update()
+        )
+        if row is None or row.trigger_scope != "local-operator:evaluation":
+            return "unsupported"
+        if row.state in {"completed", "failed", "cancelled"}:
+            return "terminal"
+        started = await session.scalar(
+            select(CaseExecutionRecord.id)
+            .where(
+                CaseExecutionRecord.run_id == run_id,
+                CaseExecutionRecord.state == "started",
+            )
+            .limit(1)
+        )
+        if started is not None:
+            return "unresolved"
+    recovery_id = f"demo/recovery/gpqa/{run_id}"
+    try:
+        recovery = await client.get_workflow_handle(recovery_id).describe()
+    except RPCError as exc:
+        if exc.status != RPCStatusCode.NOT_FOUND:
+            raise
+    else:
+        if recovery.status == WorkflowExecutionStatus.RUNNING:
+            return "recovery_active"
+    try:
+        await client.start_workflow(
+            GpqaExplorationWorkflow.run,
+            {
+                "run_id": str(run_id),
+                "activity_queue": settings.gpqa_activity_queue,
+                "resume": True,
+            },
+            id=recovery_id,
+            task_queue=settings.gpqa_workflow_queue,
+            id_reuse_policy=WorkflowIDReusePolicy.ALLOW_DUPLICATE,
+        )
+    except WorkflowAlreadyStartedError:
+        return "recovery_active"
+    return "recovery_started"
+
+
+async def reconcile_run(sessions, client, settings, run_id):
+    async with sessions() as session:
+        scope = await session.scalar(
+            select(EvaluationRun.trigger_scope).where(EvaluationRun.id == run_id)
+        )
+    if scope == "local-operator:evaluation":
+        return await reconcile_gpqa(sessions, client, settings, run_id)
+    return await reconcile_diagnostic(sessions, client, settings, run_id)
+
+
 async def serve():
     settings = get_settings()
     engine, sessions = create_database(settings)
@@ -101,7 +165,7 @@ async def serve():
                 )
                 for run_id in ids:
                     try:
-                        result = await reconcile_diagnostic(sessions, client, settings, run_id)
+                        result = await reconcile_run(sessions, client, settings, run_id)
                         log.info("Reconciliation run=%s result=%s", run_id, result)
                     except Exception:  # noqa: BLE001 -- isolate unavailable external systems; retain lease
                         log.warning("Reconciliation deferred run=%s", run_id)

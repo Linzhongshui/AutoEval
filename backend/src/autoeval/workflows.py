@@ -52,7 +52,7 @@ class GpqaExplorationWorkflow:
         queue = "demo.gpqa.v1" if isinstance(request, str) else request["activity_queue"]
         return await workflow.execute_activity(
             "execute_gpqa_exploration",
-            run_id,
+            args=[run_id, isinstance(request, dict) and request.get("resume", False)],
             task_queue=queue,
             start_to_close_timeout=timedelta(minutes=10),
             heartbeat_timeout=timedelta(seconds=90),

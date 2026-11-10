@@ -6,6 +6,7 @@ import { ExecutionBindings } from "../components/ExecutionBindings";
 import { CaseHistory } from "../components/CaseHistory";
 import { EvaluationRuns } from "../components/EvaluationRuns";
 import { RealReports } from "../components/RealReports";
+import { RealLeaderboard } from "../components/RealLeaderboard";
 import {
   Configurations,
   EvaluationConsole,
@@ -390,7 +391,8 @@ export function App() {
         {page === "detail" && (
           <Detail id={reportId} go={go} notify={setToast} />
         )}{" "}
-        {page === "leaderboard" && <Leaderboard go={go} />}
+        {page === "leaderboard" && <RealLeaderboard open={(id) => go(`report/${id}`)} />}
+        {page === "leaderboard" && <details><summary>查看原型示例榜单</summary><Leaderboard go={go} /></details>}
         <footer className="page-foot">
           AutoEval · 智能测评平台
           <span>已接入区域展示后端数据；明确标记的原型示例不代表真实结果</span>

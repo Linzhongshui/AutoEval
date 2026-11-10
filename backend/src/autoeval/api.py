@@ -16,6 +16,7 @@ from autoeval.configuration import router as configuration_router
 from autoeval.datasets import router as datasets_router
 from autoeval.db import create_database
 from autoeval.evaluations import router as evaluations_router
+from autoeval.leaderboards import router as leaderboard_router
 from autoeval.profiles import router as profiles_router
 from autoeval.registry import router as registry_router
 from autoeval.reports import router as reports_router
@@ -44,6 +45,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(resources_router)
     app.include_router(runs_router)
     app.include_router(evaluations_router)
+    app.include_router(leaderboard_router)
     app.include_router(reports_router)
 
     @app.middleware("http")

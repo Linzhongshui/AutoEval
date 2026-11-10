@@ -211,6 +211,13 @@ async def submit(
             if body.resource_kind == "customer_ssh":
                 if not resource.native_tool_root:
                     raise HTTPException(422, "SSH resource has no approved native tool root")
+                if (
+                    not resource.native_bridge_sha256
+                    or resource.native_tool_revision != contract["revision"]
+                ):
+                    raise HTTPException(
+                        422, "SSH resource tool version is unpinned or differs from Profile"
+                    )
                 resource_spec = {
                     "resource_kind": "customer_ssh",
                     "ssh": frozen_ssh_resource(resource, request.app.state.settings),

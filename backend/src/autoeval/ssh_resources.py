@@ -1,14 +1,16 @@
 """Customer SSH resource registration and explicit pinned-key preflight."""
 
 import asyncio
+import hashlib
 import json
 import uuid
+from pathlib import Path
 from typing import Literal
 
 import paramiko
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
-from sqlalchemy import ForeignKey, String, UniqueConstraint, select
+from sqlalchemy import CheckConstraint, ForeignKey, String, UniqueConstraint, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -33,7 +35,18 @@ class SSHResourceBinding(Record, Base):
     auth_kind: Mapped[str] = mapped_column(String(16))
     credential_ref: Mapped[str] = mapped_column(String(32))
     native_tool_root: Mapped[str | None] = mapped_column(String(512))
-    __table_args__ = (UniqueConstraint("binding_key", "version"),)
+    native_bridge_sha256: Mapped[str | None] = mapped_column(String(64))
+    native_lock_sha256: Mapped[str | None] = mapped_column(String(64))
+    native_tool_revision: Mapped[str | None] = mapped_column(String(64))
+    __table_args__ = (
+        UniqueConstraint("binding_key", "version"),
+        CheckConstraint(
+            "(native_bridge_sha256 IS NULL AND native_lock_sha256 IS NULL AND native_tool_revision IS NULL) OR "
+            "(native_tool_root IS NOT NULL AND native_bridge_sha256 IS NOT NULL AND native_lock_sha256 IS NOT NULL AND native_tool_revision IS NOT NULL "
+            "AND native_bridge_sha256 ~ '^[0-9a-f]{64}$' AND native_lock_sha256 ~ '^[0-9a-f]{64}$' AND native_tool_revision ~ '^([0-9a-f]{40}|[0-9a-f]{64})$')",
+            name="ck_ssh_native_pins",
+        ),
+    )
 
 
 class SSHCredential(BaseModel):
@@ -82,6 +95,9 @@ def resource_data(row):
         "auth_kind": row.auth_kind,
         "provider_kind": "customer_ssh",
         "native_tool_root": row.native_tool_root,
+        "native_bridge_sha256": row.native_bridge_sha256,
+        "native_lock_sha256": row.native_lock_sha256,
+        "native_tool_revision": row.native_tool_revision,
         "evaluation_ready": False,
     }
 
@@ -129,7 +145,19 @@ async def register(body: SSHResourceInput, request: Request):
                 provider = ResourceProvider(name="customer-ssh", kind="customer_ssh")
                 session.add(provider)
                 await session.flush()
-            row = SSHResourceBinding(provider_id=provider.id, version=1, **body.model_dump())
+            pins = {}
+            if body.native_tool_root:
+                lock_bytes = request.app.state.settings.aisbench_lock_path.read_bytes()
+                pins = {
+                    "native_bridge_sha256": hashlib.sha256(
+                        Path(__file__).with_name("aisbench_native.py").read_bytes()
+                    ).hexdigest(),
+                    "native_lock_sha256": hashlib.sha256(lock_bytes).hexdigest(),
+                    "native_tool_revision": json.loads(lock_bytes)["revision"],
+                }
+            row = SSHResourceBinding(
+                provider_id=provider.id, version=1, **body.model_dump(), **pins
+            )
             session.add(row)
             await session.flush()
             data = resource_data(row)
@@ -202,8 +230,9 @@ async def validate(binding_id: uuid.UUID, request: Request):
                         },
                     }
                 )
-                lock = json.loads(request.app.state.settings.aisbench_lock_path.read_text())
-                if result.get("tool_revision") != lock["revision"] or not result.get("prompt"):
+                if result.get("tool_revision") != row.native_tool_revision or not result.get(
+                    "prompt"
+                ):
                     raise ValueError("Native tool preflight identity mismatch")
                 ready = True
             return {

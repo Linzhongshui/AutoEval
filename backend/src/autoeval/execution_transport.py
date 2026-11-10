@@ -1,8 +1,6 @@
 """Resolve frozen SSH transport without putting credentials into run snapshots."""
 
-import hashlib
 import uuid
-from pathlib import Path
 
 from pydantic import SecretStr
 
@@ -15,6 +13,10 @@ from autoeval.ssh_resources import SSHResourceBinding
 def frozen_ssh_resource(row, settings):
     if not row.native_tool_root:
         raise ValueError("SSH native tool root not registered")
+    if not row.native_bridge_sha256 or not row.native_lock_sha256 or not row.native_tool_revision:
+        raise ValueError(
+            "SSH native tool version is not pinned; register an approved resource version"
+        )
     return {
         "host": row.host,
         "port": row.port,
@@ -24,10 +26,9 @@ def frozen_ssh_resource(row, settings):
         "auth_kind": row.auth_kind,
         "owner_id": str(row.id),
         "tool_root": row.native_tool_root,
-        "bridge_sha256": hashlib.sha256(
-            Path(__file__).with_name("aisbench_native.py").read_bytes()
-        ).hexdigest(),
-        "lock_sha256": hashlib.sha256(settings.aisbench_lock_path.read_bytes()).hexdigest(),
+        "bridge_sha256": row.native_bridge_sha256,
+        "lock_sha256": row.native_lock_sha256,
+        "tool_revision": row.native_tool_revision,
     }
 
 

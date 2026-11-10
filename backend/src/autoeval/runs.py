@@ -34,6 +34,30 @@ class DiagnosticResult(Record, Base):
     summary: Mapped[dict] = mapped_column(JSONB)
 
 
+async def complete_cleanup(session, row, *, observed_state: str):
+    lease = await session.scalar(select(ExecutionLease).where(ExecutionLease.run_id == row.id))
+    if lease is None:
+        return False
+    details = {"observed_state": observed_state, "ownership_released": True}
+    row.projection_version += 1
+    session.add(
+        RunEvent(
+            run_id=row.id, seq=row.projection_version, type="execution_cleaned", body=details
+        )
+    )
+    record_audit(
+        session,
+        action="execution.cleanup",
+        resource_id=str(row.id),
+        run_id=row.id,
+        outcome="cleaned",
+        request_id=f"cleanup:{row.id}",
+        details=details,
+    )
+    await session.delete(lease)
+    return True
+
+
 class DiagnosticInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     resource_binding_id: uuid.UUID
@@ -148,15 +172,26 @@ async def detail(run_id: uuid.UUID, request: Request):
                     select(RunEvent).where(RunEvent.run_id == run_id).order_by(RunEvent.seq)
                 )
             ).all()
+            ownership_held = await session.scalar(
+                select(ExecutionLease.run_id).where(ExecutionLease.run_id == run_id)
+            ) is not None
+            unresolved = bool(events and events[-1].type == "execution_unresolved")
+            cleanup_pending = any(event.type == "execution_cleanup_pending" for event in events) or (
+                unresolved and events[-1].body.get("cleanup_pending", False)
+            )
             data = {
                 "id": str(run_id),
                 "state": row.state,
                 "diagnostic_only": True,
-                "execution_unresolved": bool(events and events[-1].type == "execution_unresolved"),
-                "ownership_held": await session.scalar(
-                    select(ExecutionLease.run_id).where(ExecutionLease.run_id == run_id)
-                )
-                is not None,
+                "execution_unresolved": unresolved,
+                "ownership_held": ownership_held,
+                "cleanup_state": (
+                    "completed"
+                    if any(event.type == "execution_cleaned" for event in events)
+                    else "pending"
+                    if cleanup_pending
+                    else "not_requested"
+                ),
                 "gate_status": "not_applicable",
                 "result": result.summary if result else None,
                 "events": [{"seq": e.seq, "type": e.type, "body": e.body} for e in events],

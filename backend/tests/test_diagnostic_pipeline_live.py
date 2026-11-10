@@ -60,14 +60,19 @@ async def test_diagnostic_submit_deduplicate_execute_and_cancel():
                 if cancel and data["state"] == "running" and not cancellation_sent:
                     assert (await api.post(f"{path}/{run_id}/cancel")).status_code == 202
                     cancellation_sent = True
-                if data["state"] in {"completed", "failed", "cancelled"}:
+                if data["state"] in {"completed", "failed", "cancelled"} and data.get(
+                    "cleanup_state"
+                ) == "completed":
                     break
                 await asyncio.sleep(0.5)
             assert data["state"] == ("cancelled" if cancel else "completed"), data
             assert data["result"]["diagnostic_only"] is True
             assert data["gate_status"] == "not_applicable"
+            assert data["cleanup_state"] == "completed"
             events = data["events"]
             assert [e["seq"] for e in events] == list(range(1, len(events) + 1))
+            assert [e["type"] for e in events].count("execution_cleanup_pending") == 1
+            assert [e["type"] for e in events].count("execution_cleaned") == 1
             audit = await api.get(
                 "/api/autoeval/v1/audit-events", params={"run_id": run_id, "limit": 200}
             )
@@ -75,4 +80,5 @@ async def test_diagnostic_submit_deduplicate_execute_and_cancel():
             actions = [row["action"] for row in audit.json()["data"]]
             assert actions.count("diagnostic.submit") == 1
             assert actions.count("diagnostic.cancel") == (1 if cancel else 0)
+            assert actions.count("execution.cleanup") == 1
             assert all("credential" not in str(row).lower() for row in audit.json()["data"])

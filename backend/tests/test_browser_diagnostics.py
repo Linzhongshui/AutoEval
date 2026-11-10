@@ -36,11 +36,14 @@ def test_browser_diagnostic_execute_reload_and_cancel():
                     page.get_by_role("button", name="取消Docker诊断", exact=True).click()
                 expected = "cancelled" if cancel else "completed"
                 expect(state).to_have_text("诊断状态：" + expected, timeout=60000)
+                cleanup = page.get_by_test_id("diagnostic-cleanup-state")
+                expect(cleanup).to_have_text("清理状态：completed", timeout=15000)
                 page.reload()
                 select = page.get_by_label("已保存诊断任务", exact=True)
                 expect(select.locator(f'option[value="{run_id}"]')).to_have_count(1)
                 select.select_option(run_id)
                 expect(state).to_have_text("诊断状态：" + expected)
+                expect(cleanup).to_have_text("清理状态：completed")
             assert not errors
         finally:
             browser.close()

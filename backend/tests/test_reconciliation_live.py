@@ -72,6 +72,7 @@ async def test_recover_closed_workflow_without_restarting_job():
         detail = (await api.get(f"/api/autoeval/v1/diagnostics/runs/{run_id}")).json()["data"]
         assert detail["execution_unresolved"] is True
         assert detail["ownership_held"] is True
+        assert detail["cleanup_state"] == "pending"
         assert [event["type"] for event in detail["events"]].count("execution_unresolved") == 1
         audits = (
             await api.get("/api/autoeval/v1/audit-events", params={"run_id": str(run_id)})
@@ -96,6 +97,13 @@ async def test_recover_closed_workflow_without_restarting_job():
         data = (await api.get(f"/api/autoeval/v1/diagnostics/runs/{run_id}")).json()["data"]
         assert data["result"]["reconciled"] is True
         assert data["result"]["result"]["model_called"] is False
+        assert data["cleanup_state"] == "completed"
+        assert [event["type"] for event in data["events"]].count("execution_cleaned") == 1
+        assert (await adapter.status(job)).state == "cleaned"
+        audits = (
+            await api.get("/api/autoeval/v1/audit-events", params={"run_id": str(run_id)})
+        ).json()["data"]
+        assert [event["action"] for event in audits].count("execution.cleanup") == 1
         async with app.state.sessions() as session:
             assert (
                 await session.scalar(select(ExecutionLease).where(ExecutionLease.run_id == run_id))

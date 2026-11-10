@@ -26,6 +26,8 @@ def identity(pid):
 
 
 def inspect_job(folder):
+    if (folder / "cleanup.json").exists():
+        return {"state": "cleaned"}
     if (folder / "exit.json").exists():
         return json.loads((folder / "exit.json").read_text())
     if not (folder / "job.json").exists():
@@ -68,7 +70,10 @@ def main():
         child(folder)
         return
     if action != "submit" and not folder.exists():
-        print(json.dumps({"state": "unknown"}))
+        state = {"state": "unknown"}
+        if action == "cleanup":
+            state["cleaned"] = False
+        print(json.dumps(state))
         return
     folder.mkdir(exist_ok=True)
     if folder.is_symlink() or folder.resolve().parent != ROOT.resolve():
@@ -76,6 +81,8 @@ def main():
     with (folder / ".lock").open("a") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         if action == "submit":
+            if (folder / "cleanup.json").exists():
+                raise ValueError("Cleaned submission key cannot be reused")
             spec = json.load(sys.stdin)
             if set(spec) != {"kind", "duration_seconds"} or spec["kind"] != "framework_smoke":
                 raise ValueError("Unsupported job specification")
@@ -111,6 +118,23 @@ def main():
             state = inspect_job(folder)
             if state["state"] == "running":
                 os.killpg(state["pid"], signal.SIGTERM)
+        elif action == "cleanup":
+            state = inspect_job(folder)
+            if state["state"] == "cleaned":
+                print(json.dumps({"state": "cleaned", "cleaned": True}))
+                return
+            if state["state"] not in {"succeeded", "failed", "cancelled"}:
+                print(json.dumps({**state, "cleaned": False}))
+                return
+            observed_state = state["state"]
+            atomic_json(folder / "cleanup.json", {"state": "cleaned"})
+            for path in folder.iterdir():
+                if path.name not in {".lock", "cleanup.json"}:
+                    path.unlink()
+            print(json.dumps({
+                "state": "cleaned", "observed_state": observed_state, "cleaned": True,
+            }))
+            return
         elif action == "collect":
             state = inspect_job(folder)
             if state["state"] == "succeeded":

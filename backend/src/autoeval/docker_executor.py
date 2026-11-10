@@ -95,3 +95,6 @@ class DockerExecutor:
 
     async def collect(self, job: JobRef) -> dict:
         return await self._invoke("collect", job.submission_key)
+
+    async def cleanup(self, job: JobRef) -> dict:
+        return await self._invoke("cleanup", job.submission_key)

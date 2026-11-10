@@ -1,5 +1,6 @@
 import asyncio
 import os
+import subprocess
 import uuid
 
 import pytest
@@ -38,14 +39,28 @@ async def test_actual_docker_submit_dedup_and_collect():
 
 async def test_actual_docker_cancel_and_unknown_key():
     adapter = await executor()
-    assert (await adapter.lookup(str(uuid.uuid4()))).state == "unknown"
+    unknown_key = str(uuid.uuid4())
+    unknown_job = await adapter.lookup(unknown_key)
+    assert unknown_job.state == "unknown"
+    assert await adapter.cleanup(unknown_job.job) == {"state": "unknown", "cleaned": False}
+    assert (await adapter.lookup(unknown_key)).state == "unknown"
     job = await adapter.submit(
         {"kind": "framework_smoke", "duration_seconds": 30}, str(uuid.uuid4())
     )
     await asyncio.sleep(0.2)
+    assert (await adapter.cleanup(job))["state"] == "running"
+    assert (await adapter.status(job)).state == "running"
     await adapter.cancel(job, "cancel-once")
     for _ in range(20):
         if (await adapter.status(job)).state == "cancelled":
-            return
+            break
         await asyncio.sleep(0.2)
-    pytest.fail("Remote cancellation was not confirmed")
+    else:
+        pytest.fail("Remote cancellation was not confirmed")
+    assert await adapter.cleanup(job) == {
+        "state": "cleaned", "observed_state": "cancelled", "cleaned": True,
+    }
+    assert await adapter.cleanup(job) == {"state": "cleaned", "cleaned": True}
+    assert (await adapter.status(job)).state == "cleaned"
+    with pytest.raises(subprocess.CalledProcessError):
+        await adapter.submit({"kind": "framework_smoke", "duration_seconds": 0}, job.submission_key)

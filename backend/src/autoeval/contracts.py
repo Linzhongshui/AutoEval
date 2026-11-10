@@ -22,7 +22,9 @@ class JobRef(Contract):
 
 class JobObservation(Contract):
     job: JobRef
-    state: Literal["queued", "running", "succeeded", "failed", "cancelled", "unknown"]
+    state: Literal[
+        "queued", "running", "succeeded", "failed", "cancelled", "unknown", "cleaned"
+    ]
 
 
 class ResourceProvider(Protocol):
@@ -40,3 +42,4 @@ class ExecutorAdapter(Protocol):
     async def status(self, job: JobRef) -> JobObservation: ...
     async def cancel(self, job: JobRef, operation_key: str) -> JobObservation: ...
     async def collect(self, job: JobRef) -> dict[str, Any]: ...
+    async def cleanup(self, job: JobRef) -> dict[str, Any]: ...

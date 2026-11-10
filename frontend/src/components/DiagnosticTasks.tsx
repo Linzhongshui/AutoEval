@@ -4,7 +4,7 @@ import { OffsetPagination, REGISTRY_PAGE_SIZE } from "./OffsetPagination";
 
 type Resource = { id: string; binding_key: string; version: number };
 type Run = { id: string; state: string };
-type Detail = Run & { result: unknown; execution_unresolved: boolean; ownership_held: boolean; events: { seq: number; type: string }[] };
+type Detail = Run & { result: unknown; execution_unresolved: boolean; ownership_held: boolean; cleanup_state: "not_requested" | "pending" | "completed"; events: { seq: number; type: string }[] };
 const terminal = new Set(["completed", "failed", "cancelled"]);
 
 export function DiagnosticTasks() {
@@ -82,6 +82,8 @@ export function DiagnosticTasks() {
     </select></label>
     {detail && <div>
       <p role="status" data-testid="diagnostic-state">诊断状态：{detail.state}</p>
+      <p role="status" data-testid="diagnostic-cleanup-state">清理状态：{detail.cleanup_state}</p>
+      {detail.cleanup_state === "pending" && <p role="status">清理尚未确认，资源占用继续保留；对账确认后将自动释放。</p>}
       {detail.execution_unresolved && <p role="alert">执行结果待查证；资源占用已保留，系统对账后再确认终态。请勿重复提交替代任务。</p>}
       <button type="button" disabled={busy || terminal.has(detail.state)} onClick={() => void cancel()}>取消Docker诊断</button>
       <ol>{detail.events.map((event) => <li key={event.seq}>{event.seq}. {event.type}</li>)}</ol>

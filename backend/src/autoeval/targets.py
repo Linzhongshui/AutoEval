@@ -13,7 +13,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Mapped, mapped_column
 
 from autoeval.models import Base, Record
-from autoeval.registry import AssetVersion
+from autoeval.registry import Asset, AssetVersion, ModelConfigBinding
 from autoeval.secrets import FileSecretStore
 
 
@@ -164,14 +164,20 @@ async def check_connection(target_id: uuid.UUID, request: Request):
 
 
 @router.get("/target-bindings")
-async def list_targets(request: Request, offset: int = 0, limit: int = 200):
+async def list_targets(
+    request: Request, offset: int = 0, limit: int = 200, target_id: uuid.UUID | None = None
+):
     if offset < 0 or not 1 <= limit <= 200:
         raise HTTPException(422, "Invalid pagination")
     try:
         async with request.app.state.sessions() as session:
             rows = (
-                await session.scalars(
-                    select(TargetBinding)
+                await session.execute(
+                    select(TargetBinding, Asset, AssetVersion, ModelConfigBinding)
+                    .join(AssetVersion, AssetVersion.id == TargetBinding.model_version_id)
+                    .join(Asset, Asset.id == AssetVersion.asset_id)
+                    .outerjoin(ModelConfigBinding, ModelConfigBinding.model_asset_id == Asset.id)
+                    .where(TargetBinding.id == target_id if target_id else True)
                     .order_by(TargetBinding.created_at.desc(), TargetBinding.id.desc())
                     .offset(offset)
                     .limit(limit + 1)
@@ -180,11 +186,18 @@ async def list_targets(request: Request, offset: int = 0, limit: int = 200):
             data = [
                 {
                     "id": str(t.id),
-                    "model_version_id": str(t.model_version_id),
+                    "model_id": str(model.id),
+                    "model_key": model.asset_key,
+                    "model_name": model.name,
+                    "model_version_id": str(version.id),
+                    "model_version": version.version,
+                    "default_config_version_id": str(binding.default_config_version_id)
+                    if binding
+                    else None,
                     "base_url": t.base_url,
                     "remote_model": t.remote_model,
                 }
-                for t in rows[:limit]
+                for t, model, version, binding in rows[:limit]
             ]
     except SQLAlchemyError as exc:
         raise HTTPException(503, "Target database unavailable") from exc

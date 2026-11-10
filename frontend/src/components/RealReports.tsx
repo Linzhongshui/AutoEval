@@ -61,7 +61,7 @@ export function RealReports({ reportId, open }: { reportId?: string; open: (id: 
         {report.baseline_comparison.status === "matched" && <p>基准对比：{report.baseline_comparison.baseline_key} {report.baseline_comparison.baseline_version}，基准 {report.baseline_comparison.baseline_value}{report.baseline_comparison.baseline_unit}，实测 {report.baseline_comparison.measured_value}{report.baseline_comparison.baseline_unit}，差值 {report.baseline_comparison.difference === null ? "不可计算" : `${report.baseline_comparison.difference > 0 ? "+" : ""}${report.baseline_comparison.difference}pp`}。</p>}
       </div>
       <AnalysisPanel reportId={report.id} status={report.analysis_status} onStatus={(state) => setReport((current) => current ? { ...current, analysis_status: state } : current)} />
-      <p>运行ID：{report.run_id}（任务页可回溯逐次执行证据）</p>
+      <p>运行ID：{report.run_id} · <a href={`#run/${report.run_id}`}>查看来源任务与case历史</a></p>
       <details><summary>报告标识与校验值</summary><p>报告ID：{report.id}</p><p>报告SHA-256：{report.sha256}</p><p>快照SHA-256：{report.snapshot_sha256}</p></details>
       <button onClick={() => setEvidenceRequested(true)}>读取并校验报告证据</button>
       {evidence !== null && <details open><summary>报告证据已通过后端校验</summary><pre data-testid="real-report-evidence" style={{ overflow: "auto", maxHeight: 400 }}>{JSON.stringify(evidence, null, 2)}</pre></details>}

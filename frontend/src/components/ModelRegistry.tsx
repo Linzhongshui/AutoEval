@@ -46,7 +46,7 @@ export function ModelRegistry({ onApply }: {
   };
   return <details className="card stack" aria-label="持久化模型登记">
     <summary>已登记模型与默认配置（真实后端）</summary>
-    <p>登记不代表服务可调用；端点、凭据和连接检测尚待接入。</p>
+    <p>登记后在下方服务绑定中配置端点和凭据。探索测评将从该模型的默认配置版本加载参数。</p>
     <div className="form-grid">
       <label>新模型ID<input aria-label="登记模型ID" value={modelId} onChange={e => setModelId(e.target.value)} /></label>
       <label>名称<input aria-label="登记模型名称" value={modelName} onChange={e => setModelName(e.target.value)} /></label>
@@ -78,7 +78,7 @@ export function ModelRegistry({ onApply }: {
     })}>保存默认绑定</button>
     <button disabled={busy || !selected} onClick={() => perform(async () => {
       const config = await request<{ model_id: string; config_key: string; version_label: string; items: Record<string, Params> }>(`/models/${selected}/default-test-config`);
-      onApply(config.model_id, config.items, config.config_key, config.version_label); setMessage("已加载默认配置；真实测评尚未启用。");
+      onApply(config.model_id, config.items, config.config_key, config.version_label); setMessage("已加载默认配置到当前表单；使用已保存服务的探索入口可创建真实任务。");
     })}>加载模型默认配置</button>
     <button disabled={busy} onClick={() => perform(refresh)}>刷新登记列表</button>
     <p role="status">{message}</p>

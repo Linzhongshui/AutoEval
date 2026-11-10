@@ -61,8 +61,8 @@ async def list_runs(request: Request, offset: int = 0, limit: int = 50):
     try:
         async with request.app.state.sessions() as session:
             rows = (
-                await session.scalars(
-                    select(EvaluationRun)
+                await session.execute(
+                    select(EvaluationRun, RunSnapshot)
                     .join(RunSnapshot, RunSnapshot.run_id == EvaluationRun.id)
                     .outerjoin(EvaluationReport, EvaluationReport.run_id == EvaluationRun.id)
                     .where(EvaluationRun.trigger_scope == "local-operator:evaluation")
@@ -81,8 +81,16 @@ async def list_runs(request: Request, offset: int = 0, limit: int = 50):
             ).all()
             return {
                 "data": [
-                    {"id": str(r.id), "state": r.state, "created_at": r.created_at.isoformat()}
-                    for r in rows[:limit]
+                    {
+                        "id": str(r.id),
+                        "state": r.state,
+                        "created_at": r.created_at.isoformat(),
+                        "remote_model": snapshot.canonical_body.get("remote_model"),
+                        "resource_kind": snapshot.canonical_body.get(
+                            "resource_kind", "docker_local"
+                        ),
+                    }
+                    for r, snapshot in rows[:limit]
                 ],
                 "next_offset": offset + limit if len(rows) > limit else None,
                 "request_id": request.state.request_id,
@@ -319,6 +327,28 @@ async def detail(run_id: uuid.UUID, request: Request):
                 "id": str(row.id),
                 "state": row.state,
                 "run_mode": row.run_mode,
+                "snapshot": {
+                    "sha256": snapshot.sha256,
+                    **{
+                        key: snapshot.canonical_body.get(key)
+                        for key in (
+                            "config_version_id",
+                            "config_sha256",
+                            "parameters",
+                            "target_id",
+                            "model_version_id",
+                            "remote_model",
+                            "resource_id",
+                            "resource_kind",
+                            "manifest_id",
+                            "manifest_sha256",
+                            "execution_origin",
+                        )
+                    },
+                    "sample_count": len(snapshot.canonical_body.get("samples", [])),
+                }
+                if snapshot
+                else None,
                 "gate_status": "not_applicable",
                 "cleanup": cleanup_view(
                     cleanup,

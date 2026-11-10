@@ -79,6 +79,7 @@ export function ServiceBindings() {
         : `连接检测：${result.outcome}${result.details.http_status ? `（HTTP ${result.details.http_status}）` : ""}`);
     })}>检测已保存服务</button>
     <button disabled={busy} onClick={() => perform(refresh)}>刷新服务列表</button>
+    {targetId && <p><a href={`#evaluate?target=${encodeURIComponent(targetId)}`}>使用此服务创建探索测评</a>（进入后加载模型默认配置；提交前需确认资源，不会自动调用模型）</p>}
     <p role="status">{message}</p>
   </details>;
 }

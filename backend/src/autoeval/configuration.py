@@ -152,7 +152,9 @@ async def execution_spec(config_id: uuid.UUID, request: Request):
 
 
 @router.get("")
-async def list_configs(request: Request, offset: int = 0, limit: int = 100):
+async def list_configs(
+    request: Request, offset: int = 0, limit: int = 100, config_id: uuid.UUID | None = None
+):
     from autoeval.profiles import ConfigDatasetBinding
 
     if offset < 0 or not 1 <= limit <= 200:
@@ -162,6 +164,7 @@ async def list_configs(request: Request, offset: int = 0, limit: int = 100):
             rows = (
                 await session.scalars(
                     select(TestConfigVersion)
+                    .where(TestConfigVersion.id == config_id if config_id else True)
                     .order_by(TestConfigVersion.created_at.desc(), TestConfigVersion.id.desc())
                     .offset(offset)
                     .limit(limit + 1)

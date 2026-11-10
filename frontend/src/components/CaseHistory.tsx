@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 
 type Attempt = { id: string; dataset_key: string; sample_id: string; attempt_no: number; state: string; error_code: string | null; evidence_available: boolean; evidence_sha256: string | null };
 
-export function CaseHistory() {
-  const [run, setRun] = useState("");
+export function CaseHistory({ initialRun = "" }: { initialRun?: string }) {
+  const [run, setRun] = useState(initialRun);
   const [sample, setSample] = useState("");
   const [query, setQuery] = useState<{ run: string; sample: string; offset: number } | null>(null);
   const [rows, setRows] = useState<Attempt[]>([]);
@@ -11,6 +11,9 @@ export function CaseHistory() {
   const [selected, setSelected] = useState("");
   const [evidence, setEvidence] = useState<unknown>(null);
   const [message, setMessage] = useState("");
+  useEffect(() => {
+    if (initialRun) { setRun(initialRun); setQuery({ run: initialRun, sample: "", offset: 0 }); }
+  }, [initialRun]);
   useEffect(() => {
     if (!query) return;
     const controller = new AbortController();
@@ -31,7 +34,7 @@ export function CaseHistory() {
       .then(setEvidence).catch((error) => { if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : "证据读取失败"); });
     return () => controller.abort();
   }, [selected]);
-  return <details className="diagnostic-tasks">
+  return <details className="diagnostic-tasks" open={Boolean(initialRun)}>
     <summary>case历史回溯（真实后端）</summary>
     <p>查询每次执行尝试及已校验的原始证据。重试成功仍保留此前失败；执行状态与评分正确性分开。</p>
     <label>运行ID <input aria-label="回溯运行ID" value={run} onChange={(event) => setRun(event.target.value)} /></label>

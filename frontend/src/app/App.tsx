@@ -250,6 +250,7 @@ export function App() {
   const [page, setPage] = useState(location.hash.slice(1) || "console");
   const [reportId, setReportId] = useState("RPT-023");
   const [toast, setToast] = useState("");
+  const evaluationPage = page === "tasks" || page.startsWith("run/") || page.startsWith("evaluate?");
   const go = (p: string, id?: string) => {
     if (id) setReportId(id);
     location.hash = p;
@@ -266,7 +267,7 @@ export function App() {
     const t = setTimeout(() => setToast(""), 3500);
     return () => clearTimeout(t);
   }, [toast]);
-  const title = page.startsWith("task/")
+  const title = page.startsWith("run/") ? "测评任务详情" : page.startsWith("evaluate?") ? "新建探索测评" : page.startsWith("report/") ? "测评报告" : page.startsWith("task/")
     ? "任务详情"
     : page === "detail"
       ? "测评报告"
@@ -292,6 +293,7 @@ export function App() {
               className={
                 page === m.id ||
                 (page.startsWith("task/") && m.id === "tasks") ||
+                (evaluationPage && m.id === "tasks") ||
                 (page === "detail" && m.id === "reports") ||
                 (page.startsWith("report/") && m.id === "reports") ||
                 (page.startsWith("config/") && m.id === "config")
@@ -306,7 +308,7 @@ export function App() {
         </nav>
         <div className="sidebar-foot">
           <span className="dot" /> AutoEval Demo{" "}
-          <small>前端静态预览 · v0.1</small>
+          <small>开发联调 · v0.2</small>
         </div>
       </aside>
       <main className="main">
@@ -319,7 +321,7 @@ export function App() {
           )}
           <ChevronRight size={14} />
           {page === "detail" ? reportId : title}
-          <Badge>示例数据</Badge>
+          <Badge>{evaluationPage || page.startsWith("report/") || page === "reports" || page === "leaderboard" ? "后端数据" : "含原型示例"}</Badge>
         </div>
         <header className="page-heading">
           <div>
@@ -374,11 +376,11 @@ export function App() {
           />
         )}
         {
-          <div hidden={page !== "tasks"}>
-            {page === "tasks" && <EvaluationRuns />}
+          <div hidden={!evaluationPage}>
+            {evaluationPage && <EvaluationRuns runId={page.startsWith("run/") ? page.slice(4) : undefined} initialTarget={page.startsWith("evaluate?") ? new URLSearchParams(page.slice(9)).get("target") || "" : undefined} />}
             {page === "tasks" && <DiagnosticTasks />}
             {page === "tasks" && <CaseHistory />}
-            <Tasks go={go} />
+            <details hidden={page !== "tasks"}><summary>查看原型示例任务</summary><Tasks go={go} /></details>
           </div>
         }
         {page.startsWith("task/") && (

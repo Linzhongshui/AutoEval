@@ -790,8 +790,9 @@ export function EvaluationConsole({
           <h2>发起测评</h2>
           <p>选择模型、确认配置和数据集，完成本次测评设置。</p>
           <span className="console-demo-note">
-            静态演示：不会连接模型或创建真实任务。
+            下方原型参数表单仅作演示；模型登记、服务与SSH资源绑定使用真实后端。
           </span>
+          <p><a href="#tasks">创建真实GPQA Lite测评</a> · 从已保存服务进入时会加载模型默认配置。</p>
         </header>
         <section className="console-step">
           <h3 className="console-step-title">

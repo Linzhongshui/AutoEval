@@ -84,6 +84,8 @@ def test_browser_register_model_bind_and_reload_default():
             page.get_by_text("已登记模型与默认配置（真实后端）", exact=True).click()
             page.get_by_label("已登记模型", exact=True).select_option(label=f"{key} · {key}")
             page.get_by_role("button", name="加载模型默认配置", exact=True).click()
-            page.get_by_text("已加载默认配置；真实测评尚未启用。", exact=True).wait_for()
+            page.get_by_text(
+                "已加载默认配置到当前表单；使用已保存服务的探索入口可创建真实任务。", exact=True
+            ).wait_for()
         finally:
             browser.close()

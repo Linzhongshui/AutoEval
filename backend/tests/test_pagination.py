@@ -8,7 +8,7 @@ from sqlalchemy.dialects import postgresql
 
 from autoeval.configuration import TestConfigVersion as ConfigVersion
 from autoeval.configuration import list_configs
-from autoeval.registry import Asset, list_models
+from autoeval.registry import Asset, AssetVersion, list_models
 from autoeval.resources import ResourceBinding, list_resources
 from autoeval.targets import TargetBinding, list_targets
 
@@ -76,16 +76,21 @@ def model_rows():
 
 
 def target_rows():
-    return [
-        TargetBinding(
+    rows = []
+    for index in range(3):
+        model = Asset(
+            id=uuid.uuid4(), asset_key=f"target-model-{index}", kind="model", name="Model"
+        )
+        version = AssetVersion(id=uuid.uuid4(), asset_id=model.id, version="v1", metadata_json={})
+        target = TargetBinding(
             id=uuid.uuid4(),
-            model_version_id=uuid.uuid4(),
+            model_version_id=version.id,
             base_url="https://api.deepseek.com",
             remote_model="model",
             credential_ref="a" * 32,
         )
-        for _ in range(3)
-    ]
+        rows.append((target, model, version, None))
+    return rows
 
 
 def resource_rows():

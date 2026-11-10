@@ -96,12 +96,17 @@ async def register_executor(body: RegisterExecutor, request: Request):
 
 
 @router.get("")
-async def list_resources(request: Request):
+async def list_resources(request: Request, offset: int = 0, limit: int = 200):
+    if offset < 0 or not 1 <= limit <= 200:
+        raise HTTPException(422, "Invalid pagination")
     try:
         async with request.app.state.sessions() as session:
             rows = (
                 await session.scalars(
-                    select(ResourceBinding).order_by(ResourceBinding.created_at.desc()).limit(200)
+                    select(ResourceBinding)
+                    .order_by(ResourceBinding.created_at.desc(), ResourceBinding.id.desc())
+                    .offset(offset)
+                    .limit(limit + 1)
                 )
             ).all()
             data = [
@@ -113,11 +118,15 @@ async def list_resources(request: Request):
                     "image_id": row.image_id,
                     "tools_validated": False,
                 }
-                for row in rows
+                for row in rows[:limit]
             ]
     except SQLAlchemyError as exc:
         raise HTTPException(503, "Resource database unavailable") from exc
-    return {"data": data, "request_id": request.state.request_id}
+    return {
+        "data": data,
+        "next_offset": offset + limit if len(rows) > limit else None,
+        "request_id": request.state.request_id,
+    }
 
 
 @router.post("/{binding_id}/validate")

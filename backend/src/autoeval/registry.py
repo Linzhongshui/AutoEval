@@ -129,7 +129,9 @@ async def register_model(body: ModelCreate, request: Request):
 
 
 @router.get("")
-async def list_models(request: Request):
+async def list_models(request: Request, offset: int = 0, limit: int = 200):
+    if offset < 0 or not 1 <= limit <= 200:
+        raise HTTPException(422, "Invalid pagination")
     try:
         async with request.app.state.sessions() as session:
             rows = (
@@ -137,8 +139,9 @@ async def list_models(request: Request):
                     select(Asset, ModelConfigBinding)
                     .outerjoin(ModelConfigBinding, ModelConfigBinding.model_asset_id == Asset.id)
                     .where(Asset.kind == "model")
-                    .order_by(Asset.created_at.desc())
-                    .limit(200)
+                    .order_by(Asset.created_at.desc(), Asset.id.desc())
+                    .offset(offset)
+                    .limit(limit + 1)
                 )
             ).all()
             data = [
@@ -150,11 +153,15 @@ async def list_models(request: Request):
                     "binding_revision": b.row_version if b else 0,
                     "connection_state": "not_configured",
                 }
-                for a, b in rows
+                for a, b in rows[:limit]
             ]
     except SQLAlchemyError as exc:
         raise HTTPException(503, "Model database unavailable or migration required") from exc
-    return {"data": data, "request_id": request.state.request_id}
+    return {
+        "data": data,
+        "next_offset": offset + limit if len(rows) > limit else None,
+        "request_id": request.state.request_id,
+    }
 
 
 @router.put("/{model_id}/default-test-config")

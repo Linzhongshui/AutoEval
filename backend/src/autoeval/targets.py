@@ -164,12 +164,17 @@ async def check_connection(target_id: uuid.UUID, request: Request):
 
 
 @router.get("/target-bindings")
-async def list_targets(request: Request):
+async def list_targets(request: Request, offset: int = 0, limit: int = 200):
+    if offset < 0 or not 1 <= limit <= 200:
+        raise HTTPException(422, "Invalid pagination")
     try:
         async with request.app.state.sessions() as session:
-            targets = (
+            rows = (
                 await session.scalars(
-                    select(TargetBinding).order_by(TargetBinding.created_at.desc()).limit(200)
+                    select(TargetBinding)
+                    .order_by(TargetBinding.created_at.desc(), TargetBinding.id.desc())
+                    .offset(offset)
+                    .limit(limit + 1)
                 )
             ).all()
             data = [
@@ -179,8 +184,12 @@ async def list_targets(request: Request):
                     "base_url": t.base_url,
                     "remote_model": t.remote_model,
                 }
-                for t in targets
+                for t in rows[:limit]
             ]
     except SQLAlchemyError as exc:
         raise HTTPException(503, "Target database unavailable") from exc
-    return {"data": data, "request_id": request.state.request_id}
+    return {
+        "data": data,
+        "next_offset": offset + limit if len(rows) > limit else None,
+        "request_id": request.state.request_id,
+    }

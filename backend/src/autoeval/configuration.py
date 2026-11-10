@@ -23,11 +23,29 @@ class TestConfigVersion(Record, Base):
     kind: Mapped[str] = mapped_column(String(16))
     content_hash: Mapped[str] = mapped_column(String(64))
     created_by: Mapped[str] = mapped_column(String(256))
+    source_url: Mapped[str | None] = mapped_column(String(2048))
+    source_revision: Mapped[str | None] = mapped_column(String(256))
+    source_sha256: Mapped[str | None] = mapped_column(String(64))
+    approved_by: Mapped[str | None] = mapped_column(String(256))
     __table_args__ = (
         UniqueConstraint("config_key", "version"),
         UniqueConstraint("config_key", "version_label"),
         CheckConstraint("version > 0"),
         CheckConstraint("kind IN ('standard','custom')"),
+        CheckConstraint(
+            "(kind = 'standard' AND source_url IS NOT NULL AND source_revision IS NOT NULL "
+            "AND source_sha256 IS NOT NULL AND approved_by IS NOT NULL) OR "
+            "(kind = 'custom' AND source_url IS NULL AND source_revision IS NULL "
+            "AND source_sha256 IS NULL AND approved_by IS NULL)",
+            name="ck_standard_config_metadata",
+        ),
+        CheckConstraint(
+            "(source_url IS NULL OR source_url LIKE 'https://%') AND "
+            "(source_revision IS NULL OR length(source_revision) > 0) AND "
+            "(source_sha256 IS NULL OR source_sha256 ~ '^[0-9a-f]{64}$') AND "
+            "(approved_by IS NULL OR length(approved_by) > 0)",
+            name="ck_standard_config_source_values",
+        ),
     )
 
 
@@ -134,20 +152,22 @@ async def execution_spec(config_id: uuid.UUID, request: Request):
 
 
 @router.get("")
-async def list_configs(request: Request, limit: int = 100):
+async def list_configs(request: Request, offset: int = 0, limit: int = 100):
     from autoeval.profiles import ConfigDatasetBinding
 
-    if limit < 1 or limit > 200:
-        raise HTTPException(422, "limit must be between 1 and 200")
+    if offset < 0 or not 1 <= limit <= 200:
+        raise HTTPException(422, "Invalid pagination")
     try:
         async with request.app.state.sessions() as session:
-            versions = (
+            rows = (
                 await session.scalars(
                     select(TestConfigVersion)
                     .order_by(TestConfigVersion.created_at.desc(), TestConfigVersion.id.desc())
-                    .limit(limit)
+                    .offset(offset)
+                    .limit(limit + 1)
                 )
             ).all()
+            versions = rows[:limit]
             ids = [v.id for v in versions]
             items = (
                 (
@@ -199,7 +219,11 @@ async def list_configs(request: Request, limit: int = 100):
         raise HTTPException(
             503, "Configuration database unavailable or migration required"
         ) from exc
-    return {"data": data, "request_id": request.state.request_id}
+    return {
+        "data": data,
+        "next_offset": offset + limit if len(rows) > limit else None,
+        "request_id": request.state.request_id,
+    }
 
 
 @router.post("", status_code=201)

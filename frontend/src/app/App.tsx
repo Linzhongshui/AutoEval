@@ -1,5 +1,7 @@
 import { ReportView, reportDatasets } from "./ReportView";
 import { BackendConnection } from "../components/BackendConnection";
+import { DatasetManifests } from "../components/DatasetManifests";
+import { ExecutionBindings } from "../components/ExecutionBindings";
 import {
   Configurations,
   EvaluationConsole,
@@ -347,6 +349,8 @@ export function App() {
             notify={setToast}
           />
         )}
+        {page === "config" && <DatasetManifests />}
+        {page === "config" && <ExecutionBindings />}
         {page === "config" && (
           <Configurations
             profiles={profiles}

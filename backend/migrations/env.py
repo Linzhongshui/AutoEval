@@ -3,8 +3,12 @@ import asyncio
 from alembic import context
 
 from autoeval.config import get_settings
+import autoeval.configuration
+import autoeval.datasets
 from autoeval.db import create_database
 from autoeval.models import Base
+import autoeval.profiles
+import autoeval.registry
 
 config = context.config
 target_metadata = Base.metadata

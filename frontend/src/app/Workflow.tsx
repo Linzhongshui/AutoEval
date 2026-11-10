@@ -1,5 +1,6 @@
 import { createPortal } from "react-dom";
 import { useState, useEffect } from "react";
+import { ModelRegistry } from "../components/ModelRegistry";
 type Param = {
   output: number;
   concurrency: number;
@@ -8,6 +9,7 @@ type Param = {
   scope: string;
 };
 type Profile = {
+  persistedVersion?: number;
   id: string;
   name: string;
   source: string;
@@ -136,7 +138,33 @@ const seed: Profile[] = [
   },
 ];
 export function useProfiles() {
-  return useState(seed);
+  const [profiles, setProfiles] = useState<Profile[]>(seed.filter((p) => p.official));
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch("/api/autoeval/v1/test-configs?limit=200", { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("配置服务不可用");
+        return response.json();
+      })
+      .then((body) => {
+        const grouped = new Map<string, Profile>();
+        for (const item of body.data as Array<{ config_key: string; display_name: string;
+          version: number; version_label: string; kind: string; items: Record<string, Param> }>) {
+          if (item.kind !== "custom") continue;
+          const existing = grouped.get(item.config_key);
+          if (existing) {
+            existing.versions.push(item.version_label);
+            existing.data![item.version_label] = item.items;
+          } else grouped.set(item.config_key, { id: item.config_key, name: item.display_name,
+            source: "后端持久化", official: false, persistedVersion: item.version,
+            versions: [item.version_label], items: Object.keys(item.items),
+            data: { [item.version_label]: item.items } });
+        }
+        setProfiles([...seed.filter((p) => p.official), ...grouped.values()]);
+      }).catch(() => { /* Saving reports dependency errors explicitly; no fake persisted data. */ });
+    return () => controller.abort();
+  }, []);
+  return [profiles, setProfiles] as const;
 }
 function Note({ children }: { children: React.ReactNode }) {
   return <div className="notice">{children}</div>;
@@ -247,6 +275,7 @@ export function Configurations({
   const [params, setParams] = useState<Record<string, Param>>({});
   const [versionName, setVersionName] = useState("");
   const [saveTo, setSaveTo] = useState("新建配置");
+  const [saving, setSaving] = useState(false);
   const [add, setAdd] = useState(false);
   const [picked, setPicked] = useState<string[]>([]);
   const [catalog, setCatalog] = useState("");
@@ -306,7 +335,7 @@ export function Configurations({
     <div className="stack">
       <Note>
         标准配置来自固定仓库，版本读取
-        tag；以下仓库版本与自定义配置均为本地示例，未连接远程仓库。
+        tag；标准仓库版本仍为只读示例；自定义配置通过后端数据库保存与加载。
       </Note>
       <div className="config-toolbar">
         <input
@@ -550,59 +579,38 @@ export function Configurations({
                   {saveTo === "新建配置"
                     ? "创建一份独立配置，版本名称同时作为配置名称。"
                     : "将本次参数保存为所选配置的新版本，保留已有历史版本。"}{" "}
-                  仅在当前页面内存中保存，刷新后恢复。
+                  保存到后端数据库；失败时保留当前编辑内容。
                 </p>
                 <div className="config-save-actions">
                   <button onClick={() => setEditing(null)}>取消</button>
                   <button
                     className="primary"
-                    disabled={!versionName.trim() || !editing.items.length}
-                    onClick={() => {
-                      if (saveTo !== "新建配置") {
-                        const target = profiles.find((p) => p.id === saveTo);
-                        if (
-                          !target ||
-                          target.versions.includes(versionName.trim())
-                        ) {
-                          notify(
-                            "版本名称冲突，处理规则待确认；请使用其他名称。",
-                          );
-                          return;
-                        }
-                        setProfiles(
-                          profiles.map((p) =>
-                            p.id === saveTo
-                              ? {
-                                  ...p,
-                                  items: [...editing.items],
-                                  versions: [versionName.trim(), ...p.versions],
-                                  data: {
-                                    ...p.data,
-                                    [versionName.trim()]:
-                                      structuredClone(params),
-                                  },
-                                }
-                              : p,
-                          ),
-                        );
-                        setEditing(null);
-                        notify("已保存为已有配置的新版本（本地示例）。");
-                        return;
-                      }
-                      setProfiles([
-                        ...profiles,
-                        {
-                          ...editing,
-                          id: `custom-${Date.now()}`,
-                          name: versionName.trim(),
-                          versions: [versionName.trim()],
-                          data: {
-                            [versionName.trim()]: structuredClone(params),
-                          },
-                        },
-                      ]);
-                      setEditing(null);
-                      notify("自定义配置已加入本地示例列表，刷新后恢复。");
+                    disabled={saving || !versionName.trim() || !editing.items.length}
+                    onClick={async () => {
+                      if (saving) return;
+                      const target = saveTo === "新建配置" ? null : profiles.find((p) => p.id === saveTo);
+                      if (saveTo !== "新建配置" && !target) { notify("目标配置不存在，请刷新"); return; }
+                      const key = target?.id || `custom-${crypto.randomUUID()}`;
+                      setSaving(true);
+                      try {
+                        const response = await fetch("/api/autoeval/v1/test-configs", {
+                          method: "POST", headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ config_key: key,
+                            display_name: target?.name || versionName.trim(),
+                            version_label: versionName.trim(), expected_version: target?.persistedVersion || 0,
+                            items: Object.fromEntries(editing.items.map((name) => [name, params[name]])) }),
+                        });
+                        const body = await response.json();
+                        if (!response.ok) throw new Error(body.error?.message || "保存失败");
+                        const saved: Profile = { ...editing, id: key,
+                          name: target?.name || versionName.trim(), official: false, source: "后端持久化",
+                          persistedVersion: body.data.version, versions: [versionName.trim(), ...(target?.versions || [])],
+                          data: { ...target?.data, [versionName.trim()]: structuredClone(params) } };
+                        setProfiles(target ? profiles.map((p) => p.id === key ? saved : p) : [...profiles, saved]);
+                        setEditing(null); notify("配置已保存到后端，刷新后可重新加载。");
+                      } catch (error) {
+                        notify(error instanceof Error ? error.message : "后端不可用，配置未保存");
+                      } finally { setSaving(false); }
                     }}
                   >
                     保存配置
@@ -802,7 +810,12 @@ export function EvaluationConsole({
             </button>
           </div>
           {api ? (
-            <div className="form-grid">
+            <><ModelRegistry onApply={(id, values, configKey, versionLabel) => {
+              setCustom(true); setCustomKey(configKey + "::" + versionLabel);
+              setModel(id); setParams(values); setSelected(Object.keys(values));
+              setScopes(Object.fromEntries(Object.entries(values).map(([key, value]) => [key, value.scope])));
+              setSaved(false);
+            }} /><div className="form-grid">
               <label>模型ID</label>
               <select
                 value={model}
@@ -815,6 +828,7 @@ export function EvaluationConsole({
               >
                 <option>demo-vlm-001</option>
                 <option>demo-vlm-002</option>
+              {!['demo-vlm-001', 'demo-vlm-002'].includes(model) && <option value={model}>{model}</option>}
               </select>
               <details open className="console-service-details">
                 <summary>
@@ -837,7 +851,7 @@ export function EvaluationConsole({
                   </button>
                 </div>
               </details>
-            </div>
+            </div></>
           ) : (
             <div className="stack">
               <input placeholder="IP 地址" />
@@ -1297,7 +1311,7 @@ export function EvaluationConsole({
             )}
             <p className="config-save-help">
               {saveAsNew
-                ? "加入测评配置的自定义列表并自动选用，不覆盖原配置。当前仅在页面内存保存，刷新后恢复。"
+                ? "保存到后端自定义配置列表并自动选用，不覆盖原配置。"
                 : "仅应用到本次测评，不修改已有配置。"}
             </p>
           </div>
@@ -1309,7 +1323,7 @@ export function EvaluationConsole({
                 (saveAsNew && (!newConfigName.trim() || !newVersionName.trim()))
               }
               className="primary"
-              onClick={() => {
+              onClick={async () => {
                 if (saveAsNew) {
                   const name = newConfigName.trim();
                   const version = newVersionName.trim();
@@ -1317,13 +1331,28 @@ export function EvaluationConsole({
                     notify("配置名称已存在，请更换名称。");
                     return;
                   }
-                  const id = `custom-${Date.now()}`;
+                  const id = `custom-${crypto.randomUUID()}`;
+                  let persistedVersion: number;
+                  try {
+                    const response = await fetch("/api/autoeval/v1/test-configs", {
+                      method: "POST", headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ config_key: id, display_name: name,
+                        version_label: version, expected_version: 0,
+                        items: Object.fromEntries(draft.map((key) => [key, draftParams[key]])) }),
+                    });
+                    const body = await response.json();
+                    if (!response.ok) throw new Error(body.error?.message || "配置保存失败");
+                    persistedVersion = body.data.version;
+                  } catch (error) {
+                    notify(error instanceof Error ? error.message : "配置未保存"); return;
+                  }
                   setProfiles([
                     ...profiles,
                     {
                       id,
                       name,
-                      source: "当前用户",
+                      source: "后端持久化",
+                      persistedVersion,
                       modelId: model,
                       model:
                         model === "demo-vlm-001"
@@ -1349,7 +1378,7 @@ export function EvaluationConsole({
                 setDrawer(false);
                 notify(
                   saveAsNew
-                    ? "已保存为新配置并自动选用（本地示例）。"
+                    ? "已保存到后端并自动选用。"
                     : "已应用到本次测评，未修改原配置。",
                 );
               }}

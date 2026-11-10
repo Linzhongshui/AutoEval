@@ -11,7 +11,11 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from temporalio.client import Client
 
 from autoeval.config import Settings, get_settings
+from autoeval.configuration import router as configuration_router
+from autoeval.datasets import router as datasets_router
 from autoeval.db import create_database
+from autoeval.profiles import router as profiles_router
+from autoeval.registry import router as registry_router
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -25,6 +29,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         await app.state.engine.dispose()
 
     app = FastAPI(title="AutoEval Backend", version="0.1.0", lifespan=lifespan)
+    app.include_router(configuration_router)
+    app.include_router(datasets_router)
+    app.include_router(profiles_router)
+    app.include_router(registry_router)
 
     @app.middleware("http")
     async def correlation(request: Request, call_next):

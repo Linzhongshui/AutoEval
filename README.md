@@ -17,7 +17,7 @@ AutoEval 智能测评平台的演示 Demo，本期以精度测评为主线，展
 | 部分 | 已具备 | 尚未完成 |
 | --- | --- | --- |
 | 前端 | 持久化配置、模型/端点、Profile绑定、任务、证据、报告、分析状态和内部榜单 | 原型主流程整合及剩余资源/工具页面 |
-| 后端 | FastAPI、版本化配置/数据、Temporal/Outbox、Docker/SSH GPQA探索、历史证据、比较、独立分析、恢复及审计 | SSH原生临时结果清理、AutomationBench、MMMU-Pro完整推理、正式Release规则及生产身份 |
+| 后端 | FastAPI、版本化配置/数据、Temporal/Outbox、Docker/SSH GPQA探索、历史证据、比较、独立分析、归档后清理、恢复及审计 | AutomationBench、MMMU-Pro完整推理、正式Release规则及生产身份 |
 | 部署 | Docker开发数据库/Temporal/S3协议模拟、执行容器、scratch备份恢复演练 | 生产S3耐久性、镜像封装、正式权限和运维验收 |
 
 后端采用Python 3.12。详见 [后端运行说明](./backend/README.md)。无需为了查看静态前端启动全部后端服务。

@@ -5,7 +5,7 @@ type Config = { id: string; display_name: string; version_label: string; items: 
 type Target = { id: string; remote_model: string; base_url: string };
 type Resource = { id: string; binding_key: string; native_tool_root?: string | null };
 type Run = { id: string; state: string };
-type Detail = Run & { execution_unresolved: boolean; report: null | { id: string; validity: string; summary: Record<string, unknown> } };
+type Detail = Run & { execution_unresolved: boolean; cleanup: { state: string; attempt_count: number; last_error_code: string | null }; report: null | { id: string; validity: string; summary: Record<string, unknown> } };
 
 export function EvaluationRuns() {
   const [configs, setConfigs] = useState<Config[]>([]);
@@ -64,6 +64,12 @@ export function EvaluationRuns() {
     catch { setMessage("取消请求未确认，请查询任务状态后重试。"); }
     finally { setBusy(false); }
   };
+  const retryCleanup = async () => {
+    setBusy(true);
+    try { await apiPost(`/runs/${selected}/cleanup`); setMessage("清理意图已保存；后台核验归档后重试，不会重新测评。"); }
+    catch { setMessage("清理请求未确认，请刷新状态后重试。"); }
+    finally { setBusy(false); }
+  };
   return <details className="diagnostic-tasks" open>
     <summary>GPQA Lite探索测评（真实模型调用）</summary>
     <p>使用固定原生AISBench路径，每次最多5个样本、每样本最多64输出tokens，无自动重测。配置须为GPQA单数据集、Lite、并发1、temperature=0、top_p=1；正式发布门禁不适用。</p>
@@ -77,6 +83,7 @@ export function EvaluationRuns() {
     {detail && <div><p data-testid="evaluation-state">测评状态：{detail.state}</p>
       {detail.execution_unresolved && <p role="alert">执行待查证，保留占用及已有attempt；请勿重新提交替代任务。</p>}
       <p>运行ID：{detail.id}（可在下方case历史回溯查询）</p>
+      {detail.cleanup.state !== "not_required" && <div><p data-testid="cleanup-state">资源清理：{({ not_scheduled: "尚未安排清理", pending: "等待归档核验与清理", running: "清理中", failed: "清理待恢复（保留占用）", cleaned: "清理已确认" } as Record<string, string>)[detail.cleanup.state] ?? detail.cleanup.state} · 尝试{detail.cleanup.attempt_count}次</p>{["failed", "not_scheduled"].includes(detail.cleanup.state) && detail.report && <button disabled={busy} onClick={() => void retryCleanup()}>重试资源清理</button>}</div>}
       <button disabled={busy || ["completed", "failed", "cancelled"].includes(detail.state)} onClick={() => void cancel()}>取消探索测评</button>
       {detail.report && <div><p data-testid="evaluation-validity">报告完整性：{detail.report.validity}</p><a href={`#report/${detail.report.id}`}>查看完整报告</a><pre data-testid="evaluation-summary" style={{ overflow: "auto" }}>{JSON.stringify(detail.report.summary, null, 2)}</pre></div>}
     </div>}

@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import uuid
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import httpx
@@ -16,6 +17,7 @@ from temporalio.worker import Worker
 from autoeval import evaluation_activity
 from autoeval.api import create_app
 from autoeval.case_history import AttemptInput, CaseExecutionRecord, begin_attempt
+from autoeval.cleanup import ExecutionCleanup, reclaim
 from autoeval.config import get_settings
 from autoeval.configuration import TestConfigItem as ConfigItem
 from autoeval.configuration import TestConfigVersion as ConfigVersion
@@ -26,6 +28,7 @@ from autoeval.models import Outbox, RunSnapshot
 from autoeval.profiles import ConfigDatasetBinding, EvaluationProfile
 from autoeval.reconciler import reconcile_gpqa
 from autoeval.run_activities import transition
+from autoeval.runs import ExecutionLease
 from autoeval.ssh_native import SSHNativeTransport
 from autoeval.ssh_resources import SSHResourceBinding
 from autoeval.targets import TargetBinding
@@ -123,8 +126,39 @@ async def wait_terminal(api, run_id):
     raise AssertionError("SSH run did not finish")
 
 
+def store_simulated_receipt(transport, key, payload, result):
+    raw = json.dumps(result).encode()
+    root = f"{transport.root}/jobs/{key}"
+    digest = transport.request_digest(payload)
+    with transport.control.connect() as ssh:
+        transport.control.prepare(ssh)
+        transport.control.command(
+            ssh,
+            [
+                "python3",
+                "-c",
+                "from pathlib import Path; import sys; Path(sys.argv[1]).mkdir()",
+                root,
+            ],
+        )
+        with ssh.open_sftp() as sftp:
+            for name, data in {
+                "result.json": raw,
+                "spec_hash": digest.encode(),
+                "exit.json": json.dumps(
+                    {
+                        "state": "succeeded",
+                        "result_sha256": hashlib.sha256(raw).hexdigest(),
+                        "request_sha256": digest,
+                    }
+                ).encode(),
+            }.items():
+                with sftp.open(root + "/" + name, "wb") as stream:
+                    stream.write(data)
+
+
 async def test_ssh_submission_snapshot_report_and_cancel(harness, monkeypatch):
-    app, api, client, _settings, body = harness
+    app, api, client, settings, body = harness
     calls = []
 
     async def simulated_model(transport, payload, key):
@@ -132,7 +166,7 @@ async def test_ssh_submission_snapshot_report_and_cancel(harness, monkeypatch):
         prompt = await asyncio.to_thread(
             transport.invoke_local, {"operation": "prompt_gpqa_0shot", "sample": payload["sample"]}
         )
-        return {
+        result = {
             "tool_revision": prompt["tool_revision"],
             "prompt": prompt["prompt"],
             "state": "succeeded",
@@ -141,6 +175,8 @@ async def test_ssh_submission_snapshot_report_and_cancel(harness, monkeypatch):
             "error_code": None,
             "usage": {"input_tokens": 1, "output_tokens": 1},
         }
+        await asyncio.to_thread(store_simulated_receipt, transport, key, payload, result)
+        return result
 
     monkeypatch.setattr(SSHNativeTransport, "request", simulated_model)
     for cancelled in (False, True):
@@ -168,6 +204,62 @@ async def test_ssh_submission_snapshot_report_and_cancel(harness, monkeypatch):
         assert detail["state"] == ("cancelled" if cancelled else "completed")
         assert detail["report"]["validity"] == ("failed_summary" if cancelled else "complete")
         assert len(calls) == 1
+        assert detail["cleanup"]["state"] == "pending"
+        if not cancelled:
+            assert (
+                await reclaim(
+                    app.state.sessions,
+                    settings.model_copy(update={"evaluation_origin": "real"}),
+                    uuid.UUID(run_id),
+                )
+                == "ineligible"
+            )
+            async with app.state.sessions() as session, session.begin():
+                cleanup = await session.scalar(
+                    select(ExecutionCleanup).where(ExecutionCleanup.run_id == uuid.UUID(run_id))
+                )
+                cleanup.state = "running"
+                cleanup.claim_token = uuid.uuid4()
+                cleanup.claimed_until = datetime.now(UTC) + timedelta(minutes=1)
+            assert (
+                await reclaim(app.state.sessions, settings, uuid.UUID(run_id), force=True) == "busy"
+            )
+            async with app.state.sessions() as session, session.begin():
+                cleanup = await session.scalar(
+                    select(ExecutionCleanup).where(ExecutionCleanup.run_id == uuid.UUID(run_id))
+                )
+                cleanup.claimed_until = datetime.now(UTC) - timedelta(seconds=1)
+
+            async def unavailable_cleanup(*args):
+                raise OSError("simulated SSH disconnect")
+
+            with monkeypatch.context() as patch:
+                patch.setattr(SSHNativeTransport, "cleanup_request", unavailable_cleanup)
+                assert await reclaim(app.state.sessions, settings, uuid.UUID(run_id)) == "failed"
+            failed = (await api.get(f"/api/autoeval/v1/runs/{run_id}")).json()["data"]
+            assert failed["cleanup"]["state"] == "failed"
+            assert failed["report"] == detail["report"]
+            async with app.state.sessions() as session:
+                assert (
+                    await session.scalar(
+                        select(ExecutionLease).where(ExecutionLease.run_id == uuid.UUID(run_id))
+                    )
+                    is not None
+                )
+            assert await reclaim(app.state.sessions, settings, uuid.UUID(run_id)) == "deferred"
+            assert (await api.post(f"/api/autoeval/v1/runs/{run_id}/cleanup")).status_code == 202
+        assert await reclaim(app.state.sessions, settings, uuid.UUID(run_id)) == "cleaned"
+        assert await reclaim(app.state.sessions, settings, uuid.UUID(run_id)) == "cleaned"
+        assert (await api.get(f"/api/autoeval/v1/runs/{run_id}")).json()["data"]["cleanup"][
+            "state"
+        ] == "cleaned"
+        async with app.state.sessions() as session:
+            assert (
+                await session.scalar(
+                    select(ExecutionLease).where(ExecutionLease.run_id == uuid.UUID(run_id))
+                )
+                is None
+            )
 
 
 async def test_ssh_started_attempt_recovers_remote_evidence_without_model_request(
@@ -237,6 +329,10 @@ async def test_ssh_started_attempt_recovers_remote_evidence_without_model_reques
             ],
         )
         with ssh.open_sftp() as sftp:
+            with sftp.open(job_root + "/spec_hash", "w") as stream:
+                stream.write(
+                    transport.request_digest(evaluation_activity.model_payload(frozen, sample))
+                )
             with sftp.open(job_root + "/result.json", "wb") as stream:
                 stream.write(raw)
             with sftp.open(job_root + "/exit.json", "w") as stream:
@@ -269,3 +365,4 @@ async def test_ssh_started_attempt_recovers_remote_evidence_without_model_reques
             )
         ).all()
         assert len(records) == 1 and records[0].state == "succeeded"
+    assert await reclaim(app.state.sessions, settings, run_id) == "cleaned"

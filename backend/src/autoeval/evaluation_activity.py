@@ -419,7 +419,14 @@ async def execute_gpqa_exploration(run_id: str, resume: bool = False):
                     trigger="report_created",
                     baseline_comparison=comparison,
                 )
-            await session.execute(delete(ExecutionLease).where(ExecutionLease.run_id == identifier))
+            if frozen.get("resource_kind") == "customer_ssh":
+                from autoeval.cleanup import schedule_cleanup
+
+                await schedule_cleanup(session, identifier)
+            else:
+                await session.execute(
+                    delete(ExecutionLease).where(ExecutionLease.run_id == identifier)
+                )
         return {"state": final_state, "validity": validity}
     except (
         OSError,

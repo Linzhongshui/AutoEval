@@ -178,4 +178,16 @@ SSHNativeTransport要求批准的工具路径、桥接hash和源码锁hash，远
 
 原有gpqa Worker和Temporal工作流同时处理两种路径。SSH断连后按attempt UUID读取已持久化的远程结果、校验请求/结果摘要并归档；started attempt没有确认结果时保持占用，不重发。真实Worker拒绝模拟来源任务，对账器只扫描与运行环境匹配的测评及诊断任务。
 
-本机已验证一次真实SSH Lite1模型调用与浏览器报告刷新；这不代表Full或正式Release通过。AE_SSH_NATIVE_PIPELINE_TEST=1启用真实SSH/Temporal/S3与模拟模型边界的编排/恢复测试，不产生费用。SSH原生结果自动清理尚未完成，当前保留受控远程结果用于查证；不得递归清理客户执行目录。
+本机已验证一次真实SSH Lite1模型调用与浏览器报告刷新；这不代表Full或正式Release通过。AE_SSH_NATIVE_PIPELINE_TEST=1启用真实SSH/Temporal/S3与模拟模型边界的编排/恢复测试，不产生费用。不得递归清理客户执行目录。
+
+## SSH归档后清理与恢复
+
+迁移0020新增execution_cleanup，独立于运行终态及报告有效性，状态为pending/running/failed/cleaned。报告、分析意图和清理意图同事务提交；SSH占用保留至全部已执行attempt的清理确认，Docker探索路径保持原行为。
+
+启动`uv run python -m autoeval.reconciler`，每60秒扫描同execution_origin的到期清理。后台先验证冻结快照、报告、全体case及数据集内容的对象摘要和身份，再核验远程请求/结果；删除前持久化verified_proofs，防止删除中断后无法继续。仅清理attempt UUID目录内本次创建的临时结果，保留提交摘要及清理回执，防止同一UUID重新执行。归档case和报告始终保留。
+
+清理使用10分钟可接管claim及token防止过期写回；远程操作按归档证明幂等。失败保留占用、记录审计并从60秒退避至最多1小时。进程中断后claim到期自动接管；若部署进程已确认停止，可由运维确认后调整特定清理claim到期时间，禁止以重提测评替代恢复。清理异常不触发模型或修改成绩。
+
+GET `/api/autoeval/v1/runs/{id}`返回cleanup状态、次数和分类错误；POST同路径`/cleanup`持久化重试意图（202，不同步等待SSH），适用于当前来源的终态SSH运行，也可为旧报告补建清理意图。重复调用不重测，不抢占有效claim。页面展示清理进度与失败重试入口。框架终态与清理成功相互独立；清理失败不能被视为报告无效，也不能提前释放资源。
+
+验证需启用上述SSH流水线标志；AE_BROWSER_URL、AE_CHROME_PATH和AE_SSH_SIM_TEST同时启用可验证已回收任务的页面及刷新。测试明确模拟模型边界，不替代客户生产服务器验收。

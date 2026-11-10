@@ -225,6 +225,24 @@ async def serve():
             settings.temporal_address, namespace=settings.temporal_namespace
         )
         while True:
+            from autoeval.cleanup import ExecutionCleanup, reclaim
+
+            async with sessions() as session:
+                cleanup_ids = list(await session.scalars(
+                    select(ExecutionCleanup.run_id)
+                    .join(RunSnapshot, RunSnapshot.run_id == ExecutionCleanup.run_id)
+                    .where(
+                        ExecutionCleanup.state != "cleaned",
+                        RunSnapshot.canonical_body["execution_origin"].astext == settings.evaluation_origin,
+                        or_(ExecutionCleanup.next_retry_at.is_(None), ExecutionCleanup.next_retry_at <= datetime.now(UTC)),
+                        or_(ExecutionCleanup.claimed_until.is_(None), ExecutionCleanup.claimed_until <= datetime.now(UTC)),
+                    ).order_by(ExecutionCleanup.created_at).limit(100)
+                ))
+            for cleanup_id in cleanup_ids:
+                try:
+                    await reclaim(sessions, settings, cleanup_id)
+                except Exception:  # noqa: BLE001 -- isolate failed reconciliation
+                    log.warning("Cleanup deferred run=%s", cleanup_id)
             async with sessions() as session:
                 ids = await session.scalars(
                     select(EvaluationRun.id)

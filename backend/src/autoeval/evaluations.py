@@ -296,6 +296,8 @@ async def submit(
 
 @router.get("/{run_id}")
 async def detail(run_id: uuid.UUID, request: Request):
+    from autoeval.cleanup import ExecutionCleanup, cleanup_view
+
     try:
         async with request.app.state.sessions() as session:
             row = await session.get(EvaluationRun, run_id)
@@ -309,11 +311,21 @@ async def detail(run_id: uuid.UUID, request: Request):
             report = await session.scalar(
                 select(EvaluationReport).where(EvaluationReport.run_id == run_id)
             )
+            cleanup = await session.scalar(
+                select(ExecutionCleanup).where(ExecutionCleanup.run_id == run_id)
+            )
+            snapshot = await session.scalar(select(RunSnapshot).where(RunSnapshot.run_id == run_id))
             data = {
                 "id": str(row.id),
                 "state": row.state,
                 "run_mode": row.run_mode,
                 "gate_status": "not_applicable",
+                "cleanup": cleanup_view(
+                    cleanup,
+                    required=bool(
+                        snapshot and snapshot.canonical_body.get("resource_kind") == "customer_ssh"
+                    ),
+                ),
                 "execution_unresolved": bool(events and events[-1].type == "execution_unresolved"),
                 "events": [{"seq": e.seq, "type": e.type} for e in events],
                 "report": {
@@ -328,6 +340,33 @@ async def detail(run_id: uuid.UUID, request: Request):
     except SQLAlchemyError as exc:
         raise HTTPException(503, "Run database unavailable") from exc
     return {"data": data, "request_id": request.state.request_id}
+
+
+@router.post("/{run_id}/cleanup", status_code=202)
+async def retry_cleanup(run_id: uuid.UUID, request: Request):
+    from autoeval.cleanup import schedule_cleanup
+
+    async with request.app.state.sessions() as session, session.begin():
+        row = await session.scalar(
+            select(EvaluationRun).where(EvaluationRun.id == run_id).with_for_update()
+        )
+        snapshot = await session.scalar(select(RunSnapshot).where(RunSnapshot.run_id == run_id))
+        if row is None or row.trigger_scope != "local-operator:evaluation":
+            raise HTTPException(404, "Evaluation run not found")
+        if (
+            row.state not in {"completed", "failed", "cancelled"}
+            or snapshot is None
+            or snapshot.canonical_body.get("resource_kind") != "customer_ssh"
+            or snapshot.canonical_body.get("execution_origin")
+            != request.app.state.settings.evaluation_origin
+        ):
+            raise HTTPException(
+                409, "Only terminal SSH runs from this execution origin may be reclaimed"
+            )
+        cleanup = await schedule_cleanup(session, run_id)
+        if cleanup.state != "cleaned":
+            cleanup.next_retry_at = None
+    return {"data": {"accepted": True}, "request_id": request.state.request_id}
 
 
 @router.post("/{run_id}/cancel", status_code=202)

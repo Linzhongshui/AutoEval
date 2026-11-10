@@ -10,6 +10,7 @@ from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from temporalio.client import Client
 
+from autoeval.case_history import router as case_history_router
 from autoeval.config import Settings, get_settings
 from autoeval.configuration import router as configuration_router
 from autoeval.datasets import router as datasets_router
@@ -17,6 +18,7 @@ from autoeval.db import create_database
 from autoeval.evaluations import router as evaluations_router
 from autoeval.profiles import router as profiles_router
 from autoeval.registry import router as registry_router
+from autoeval.reports import router as reports_router
 from autoeval.resources import router as resources_router
 from autoeval.runs import router as runs_router
 from autoeval.targets import router as targets_router
@@ -34,6 +36,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="AutoEval Backend", version="0.1.0", lifespan=lifespan)
     app.include_router(configuration_router)
+    app.include_router(case_history_router)
     app.include_router(datasets_router)
     app.include_router(profiles_router)
     app.include_router(registry_router)
@@ -41,6 +44,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(resources_router)
     app.include_router(runs_router)
     app.include_router(evaluations_router)
+    app.include_router(reports_router)
 
     @app.middleware("http")
     async def correlation(request: Request, call_next):

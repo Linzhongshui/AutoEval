@@ -2,6 +2,7 @@ import asyncio
 
 from alembic import context
 
+import autoeval.case_history
 import autoeval.configuration
 import autoeval.datasets
 import autoeval.evaluations

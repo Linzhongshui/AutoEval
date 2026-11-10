@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     aisbench_lock_path: Path = Path("tool-locks/aisbench.json")
     gpqa_activity_queue: str = "demo.gpqa.v1"
     gpqa_workflow_queue: str = "demo.workflow.v1"
+    evaluation_origin: Literal["real", "simulation"] = "real"
     allowed_model_hosts: list[str] = ["api.deepseek.com"]
     docker_executable: str = "docker"
 

@@ -3,7 +3,9 @@ import { BackendConnection } from "../components/BackendConnection";
 import { DiagnosticTasks } from "../components/DiagnosticTasks";
 import { DatasetManifests } from "../components/DatasetManifests";
 import { ExecutionBindings } from "../components/ExecutionBindings";
+import { CaseHistory } from "../components/CaseHistory";
 import { EvaluationRuns } from "../components/EvaluationRuns";
+import { RealReports } from "../components/RealReports";
 import {
   Configurations,
   EvaluationConsole,
@@ -290,6 +292,7 @@ export function App() {
                 page === m.id ||
                 (page.startsWith("task/") && m.id === "tasks") ||
                 (page === "detail" && m.id === "reports") ||
+                (page.startsWith("report/") && m.id === "reports") ||
                 (page.startsWith("config/") && m.id === "config")
                   ? "selected"
                   : ""
@@ -373,14 +376,16 @@ export function App() {
           <div hidden={page !== "tasks"}>
             {page === "tasks" && <EvaluationRuns />}
             {page === "tasks" && <DiagnosticTasks />}
+            {page === "tasks" && <CaseHistory />}
             <Tasks go={go} />
           </div>
         }
         {page.startsWith("task/") && (
           <TaskDetail key={page} task={page.slice(5)} go={go} />
         )}
+        {(page === "reports" || page.startsWith("report/")) && <RealReports reportId={page.startsWith("report/") ? page.slice(7) : undefined} open={(id) => go(`report/${id}`)} />}
         <div hidden={page !== "reports"}>
-          <Reports go={go} />
+          <details><summary>查看原型示例报告</summary><Reports go={go} /></details>
         </div>{" "}
         {page === "detail" && (
           <Detail id={reportId} go={go} notify={setToast} />
@@ -388,7 +393,7 @@ export function App() {
         {page === "leaderboard" && <Leaderboard go={go} />}
         <footer className="page-foot">
           AutoEval · 智能测评平台
-          <span>所有数据均为静态示例，不代表真实测评结果</span>
+          <span>已接入区域展示后端数据；明确标记的原型示例不代表真实结果</span>
         </footer>
       </main>
       {toast && (

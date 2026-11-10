@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import SecretStr, model_validator
@@ -20,6 +21,9 @@ class Settings(BaseSettings):
     s3_secret_key: SecretStr = SecretStr("local-development-only")
     dependency_timeout_seconds: float = 3.0
     poll_seconds: float = 5.0
+    secret_store_path: Path = Path(".secrets")
+    allowed_model_hosts: list[str] = ["api.deepseek.com"]
+    docker_executable: str = "docker"
 
     @model_validator(mode="after")
     def local_only(self):

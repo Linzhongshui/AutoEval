@@ -2,13 +2,15 @@ import asyncio
 
 from alembic import context
 
-from autoeval.config import get_settings
 import autoeval.configuration
 import autoeval.datasets
-from autoeval.db import create_database
-from autoeval.models import Base
 import autoeval.profiles
 import autoeval.registry
+import autoeval.resources
+import autoeval.targets  # noqa: F401 -- register endpoint/probe tables
+from autoeval.config import get_settings
+from autoeval.db import create_database
+from autoeval.models import Base
 
 config = context.config
 target_metadata = Base.metadata

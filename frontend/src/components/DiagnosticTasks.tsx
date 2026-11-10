@@ -66,7 +66,7 @@ export function DiagnosticTasks() {
     finally { setBusy(false); }
   };
   return <details className="diagnostic-tasks" open>
-    <summary>本机Docker诊断任务（真实后端）</summary>
+    <summary>本机 Docker 诊断</summary>
     <p>验证提交、执行与取消链路，每次约15秒。不调用模型，不产生测评成绩，发布门禁不适用。</p>
     <label>诊断执行资源 <select aria-label="诊断执行资源" value={resource} onChange={(e) => setResource(e.target.value)}>
       <option value="">请选择已登记资源</option>

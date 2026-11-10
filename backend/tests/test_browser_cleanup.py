@@ -35,7 +35,8 @@ def test_browser_persisted_ssh_cleanup_status_after_reload():
             for reload in (False, True):
                 if reload:
                     page.reload()
-                page.get_by_label("已保存探索任务", exact=True).select_option(selected["id"])
+                else:
+                    page.get_by_label("已保存探索任务", exact=True).select_option(selected["id"])
                 expect(page.get_by_test_id("cleanup-state")).to_contain_text("清理已确认")
                 expect(page.get_by_test_id("evaluation-state")).to_contain_text(selected["state"])
                 expect(page.get_by_role("button", name="重试资源清理", exact=True)).to_have_count(0)

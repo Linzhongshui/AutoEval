@@ -11,6 +11,51 @@ from autoeval.models import EvaluationRun
 
 
 @pytest.mark.skipif(not os.environ.get("AE_BROWSER_URL"), reason="Live services required")
+async def test_browser_original_pages_have_no_prototype_panels():
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(
+            executable_path=os.environ.get("AE_CHROME_PATH") or None, headless=True
+        )
+        try:
+            page = await browser.new_page()
+            await page.goto(os.environ["AE_BROWSER_URL"] + "/#tasks")
+            await expect(page.locator(".evaluation-tasks")).to_be_visible()
+            await expect(page.locator(".task-stats")).to_be_visible()
+            await expect(page.locator(".task-stats")).to_contain_text("当前页")
+            await expect(page.get_by_text("查看原型示例任务", exact=True)).to_have_count(0)
+            await expect(page.get_by_text("其余为示例数据", exact=False)).to_have_count(0)
+            await expect(page.get_by_text("case历史回溯（真实后端）", exact=True)).to_have_count(0)
+            await expect(
+                page.get_by_text("GPQA Lite探索测评（真实模型调用）", exact=True)
+            ).to_have_count(0)
+        finally:
+            await browser.close()
+
+
+@pytest.mark.skipif(not os.environ.get("AE_BROWSER_URL"), reason="Live services required")
+async def test_browser_home_uses_real_recent_reports():
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(
+            executable_path=os.environ.get("AE_CHROME_PATH") or None, headless=True
+        )
+        try:
+            page = await browser.new_page()
+            await page.goto(os.environ["AE_BROWSER_URL"] + "/#home")
+            await expect(page.get_by_text("查看示例报告", exact=True)).to_have_count(0)
+            await expect(page.get_by_text("示例测评报告", exact=True)).to_have_count(0)
+            recent = page.get_by_test_id("recent-reports")
+            await expect(recent).to_be_visible()
+            reports = await page.request.get(
+                os.environ["AE_BROWSER_URL"] + "/api/autoeval/v1/reports?limit=3&offset=0"
+            )
+            rows = (await reports.json())["data"]
+            if rows:
+                await expect(recent).to_contain_text(rows[0]["remote_model"])
+        finally:
+            await browser.close()
+
+
+@pytest.mark.skipif(not os.environ.get("AE_BROWSER_URL"), reason="Live services required")
 async def test_browser_failed_attempt_is_still_available_after_success():
     settings = get_settings()
     engine, sessions = create_database(settings)
@@ -55,9 +100,14 @@ async def test_browser_failed_attempt_is_still_available_after_success():
             try:
                 page = await browser.new_page()
                 await page.goto(os.environ["AE_BROWSER_URL"] + "/#tasks")
-                await page.get_by_text("case历史回溯（真实后端）", exact=True).click()
+                await page.get_by_text("Case 执行历史", exact=True).click()
                 await page.get_by_label("回溯运行ID", exact=True).fill(str(run_id))
                 await page.get_by_role("button", name="查询case历史", exact=True).click()
+                attempts = page.get_by_test_id("case-attempts")
+                await expect(attempts).to_contain_text("UPSTREAM_TIMEOUT")
+                await expect(attempts.get_by_role("columnheader", name="执行状态", exact=True)).to_be_visible()
+                await expect(attempts.get_by_role("columnheader", name="创建时间", exact=True)).to_be_visible()
+                await expect(page.get_by_text("判分通过", exact=True)).to_have_count(0)
                 await page.get_by_role("button", name="查看第2次证据", exact=True).click()
                 await expect(page.get_by_test_id("case-evidence")).to_contain_text(
                     '"state": "succeeded"'

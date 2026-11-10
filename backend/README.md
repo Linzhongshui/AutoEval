@@ -167,3 +167,5 @@ SSHExecutor只开放固定framework_smoke和0—30秒持续时间，不接收任
 本机协议联调：可用`deploy/ssh-sim.Dockerfile`构建OpenSSH开发镜像，启动名为autoeval-ssh-sim、带autoeval.role=ssh-simulator标签的容器，仅映射127.0.0.1:2222:22；再从backend执行`uv run python ../deploy/setup_ssh_sim.py`。脚本生成本机专用客户端密钥并存于受保护.secrets，私钥不复制进容器。实际本轮使用已安装OpenSSH的独立Python开发容器验证；该Dockerfile构建尚未在受限网络中验收。
 
 AE_SSH_SIM_TEST=1启用真实SSH/SFTP专项，配合AE_BROWSER_URL和AE_CHROME_PATH可验证页面登记预检，不调用模型。资源预检成功不等于工具已接入：当前GPQA探索仍走Docker适配器，SSH测评工作流待下一批。
+
+SSH原生请求的持久化传输已作为独立模块加入：SSHNativeTransport要求批准的工具路径、桥接hash和源码锁hash，远程native_request_runtime仅接收固定GPQA推理操作，秘密仅走stdin。结果以稳定作业键查证并通过SFTP校验，未知状态不重发。当前尚未连接用户运行提交、Temporal及完整远程工具环境；这些协议测试不能替代SSH真实测评验收。

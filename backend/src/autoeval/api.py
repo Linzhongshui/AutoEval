@@ -1,0 +1,131 @@
+import asyncio
+from contextlib import asynccontextmanager
+from uuid import uuid4
+
+import boto3
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from sqlalchemy import text
+from starlette.exceptions import HTTPException as StarletteHTTPException
+from temporalio.client import Client
+
+from autoeval.config import Settings, get_settings
+from autoeval.db import create_database
+
+
+def create_app(settings: Settings | None = None) -> FastAPI:
+    settings = settings or get_settings()
+
+    @asynccontextmanager
+    async def lifespan(app):
+        app.state.settings = settings
+        app.state.engine, app.state.sessions = create_database(settings)
+        yield
+        await app.state.engine.dispose()
+
+    app = FastAPI(title="AutoEval Backend", version="0.1.0", lifespan=lifespan)
+
+    @app.middleware("http")
+    async def correlation(request: Request, call_next):
+        request.state.request_id = str(uuid4())
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request.state.request_id
+        return response
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_error(request, exc):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={
+                "error": {"code": "HTTP_ERROR", "message": str(exc.detail)},
+                "request_id": request.state.request_id,
+            },
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(request, exc):
+        return JSONResponse(
+            status_code=422,
+            content={
+                "error": {"code": "VALIDATION_ERROR", "message": "Invalid request"},
+                "request_id": request.state.request_id,
+            },
+        )
+
+    @app.exception_handler(Exception)
+    async def unexpected_error(request, exc):
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": {"code": "INTERNAL_ERROR", "message": "Internal server error"},
+                "request_id": getattr(request.state, "request_id", "unknown"),
+            },
+        )
+
+    @app.get("/health/live")
+    async def live():
+        return {"status": "alive"}
+
+    @app.get("/health/ready")
+    async def ready(request: Request):
+        async def database():
+            async with request.app.state.engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+
+        async def temporal():
+            client = await Client.connect(
+                settings.temporal_address, namespace=settings.temporal_namespace
+            )
+            await client.service_client.check_health()
+
+        def storage():
+            from botocore.config import Config
+
+            client = boto3.client(
+                "s3",
+                endpoint_url=settings.s3_endpoint,
+                aws_access_key_id=settings.s3_access_key.get_secret_value(),
+                aws_secret_access_key=settings.s3_secret_key.get_secret_value(),
+                config=Config(connect_timeout=2, read_timeout=2, retries={"max_attempts": 0}),
+            )
+            try:
+                client.head_bucket(Bucket=settings.s3_bucket)
+            finally:
+                client.close()
+
+        async def check(coro):
+            try:
+                await asyncio.wait_for(coro, settings.dependency_timeout_seconds)
+                return "ready"
+            except Exception:  # noqa: BLE001 -- readiness isolates third-party dependency failures
+                return "unavailable"
+
+        results = await asyncio.gather(
+            check(database()), check(temporal()), check(asyncio.to_thread(storage))
+        )
+        checks = dict(zip(("database", "temporal", "storage"), results))
+        return JSONResponse(
+            status_code=200 if all(x == "ready" for x in results) else 503,
+            content={"checks": checks},
+        )
+
+    @app.get("/api/autoeval/v1/system/capabilities")
+    async def capabilities(request: Request):
+        return {
+            "data": {
+                "workspace_mode": "single",
+                "subject": "local-operator",
+                "foundation": True,
+                "evaluation_enabled": False,
+                "analysis_enabled": False,
+                "aurora_enabled": False,
+                "customer_ssh_enabled": False,
+            },
+            "request_id": request.state.request_id,
+        }
+
+    return app
+
+
+app = create_app()

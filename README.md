@@ -1,14 +1,26 @@
 # AutoEval Demo
 
 <p align="center">
-  <img src="./public/brand/autoeval-logo.svg" alt="AutoEval 智能测评平台" width="300" />
+  <img src="./frontend/public/brand/autoeval-logo.svg" alt="AutoEval 智能测评平台" width="300" />
 </p>
 
 AutoEval 智能测评平台的演示 Demo，本期以精度测评为主线，展示模型配置 → 任务追踪 → 报告查看的完整演示流程。性能测评仅作界面示意，尚未接入性能执行。
 
 采用 React 19、TypeScript、Vite 6 和 Lucide React，包含六个一级菜单、独立任务详情及报告详情。使用正式 SVG 品牌素材，统一紫色主题、字体层级和响应式布局。
 
-> 当前版本仅提供本地示例数据与前端交互。模型连接、测评执行、配置保存、报告生成和自动分析尚未接入后端；页面中的分数、耗时、日志、进度与分析结论均不代表真实测评结果。
+> 当前前端仍使用本地示例数据；仓库已新增后端基础架构，但尚未完成业务接口接入。模型连接、测评执行、配置保存、报告生成和自动分析尚未接入后端；页面中的分数、耗时、日志、进度与分析结论均不代表真实测评结果。
+
+## 当前工程状态
+
+仓库采用 `frontend/`、`backend/`、`deploy/`、`docs/` 分层。前端展示与后端基础架构分别可开发，尚未形成真实测评闭环。
+
+| 部分 | 已具备 | 尚未完成 |
+| --- | --- | --- |
+| 前端 | 配置、任务、报告与榜单静态交互，Vite API代理 | 页面真实API数据替换 |
+| 后端 | FastAPI、请求ID/异常、健康检查、4张基础表迁移、Temporal Worker、Outbox及只读对账入口 | 模型接入、配置管理、测评提交、SSH执行、报告和分析业务 |
+| 部署 | 本地Compose配置、依赖锁与容器构建文件 | Docker环境真实启动和数据库/Temporal/S3联调 |
+
+后端采用Python 3.12。详见 [后端运行说明](./backend/README.md)。无需为了查看静态前端启动全部后端服务。
 
 ## 演示范围
 
@@ -68,9 +80,10 @@ AutoEval 智能测评平台的演示 Demo，本期以精度测评为主线，展
 
 ## 快速开始
 
-准备 Node.js 22 或更高版本，以及 npm。在仓库根目录执行：
+准备 Node.js 22 或更高版本，以及 npm。进入前端目录执行：
 
 ```sh
+cd frontend
 npm ci
 npm run dev
 ```
@@ -82,6 +95,8 @@ npm run dev
 ```sh
 npm run dev -- --host 127.0.0.1 --port 5173 --strictPort
 ```
+
+以下命令均在 `frontend/` 中执行；也可在根目录使用 `npm --prefix frontend run build`。
 
 ## 常用命令
 
@@ -136,27 +151,25 @@ npm run preview
 ## 代码结构
 
 ```text
-public/
-  brand/                  正式横版 Logo、单色 Logo、应用图标
-src/
-  app/
-    App.tsx               页面、Hash 导航、示例数据和交互组件
-    Workflow.tsx          配置管理、共享编辑抽屉、控制台与数据集执行看板
-    ReportView.tsx        多数据集报告总览、分类导航、结果和证据抽屉
-    app.css               主题、字体层级、布局和响应式样式
-  layouts/                基础布局组件预留
-  components/             通用组件预留
-  hooks/                  通用 Hooks 预留
-  utils/                  工具函数预留
-  types/                  类型定义预留
-  assets/                 模块静态资源预留
-  styles/global.css       全局样式入口说明
-  main.tsx                React 挂载入口
-index.html                HTML 入口与浏览器图标
-vite.config.ts            Vite 配置
+demo/
+  frontend/
+    public/brand/         前端品牌静态资源
+    src/app/              App、Workflow、ReportView及页面样式
+    src/layouts/          布局组件
+    src/styles/           全局样式
+    src/main.tsx          React入口
+    package.json          前端依赖及开发命令
+    package-lock.json     前端依赖锁
+    index.html            HTML入口
+    tsconfig.json         TypeScript配置
+    vite.config.ts        Vite及API代理配置
+    dist/                 构建产物（忽略）
+  backend/                FastAPI、Temporal及数据库基础工程
+  deploy/                 后端Dockerfile、Compose及环境示例
+  docs/                   需求、截图和开发文档
 ```
 
-导航、列表和榜单位于 `App.tsx`，报告详情位于 `ReportView.tsx`，配置与测评流程位于 `Workflow.tsx`，后续接入后端时可按页面和领域拆分组件、数据类型及服务层。正式品牌素材位于 `public/brand/`，由所有页面共享。
+导航、列表和榜单位于 `App.tsx`，报告详情位于 `ReportView.tsx`，配置与测评流程位于 `Workflow.tsx`，后续接入后端时可按页面和领域拆分组件、数据类型及服务层。正式品牌素材位于 `frontend/public/brand/`，由所有页面共享。
 
 ## 验证状态
 
@@ -200,3 +213,34 @@ vite.config.ts            Vite 配置
 - 榜单标注受审批任务来源要求。正式异常定义、审批及准入流程待确认，未实现管理员审批。
 
 配置、历史版本和结果均为本地样例。Lite 范围、并行上限、耗时口径、基线与审批规则未确定，不作为正式执行或验收标准。需求实现对照见 [workflow-requirements.md](./docs/workflow-requirements.md)。
+
+## 后端开发
+
+后端运行与Compose说明见 [backend/README.md](./backend/README.md)。Vite开发代理仍将 `/api/autoeval` 转发至 `http://127.0.0.1:8000`。当前页面仍以预置数据展示，目录迁移不代表已完成业务接口接入。
+
+## 后端快速启动与验证
+
+在仓库根目录进入后端（使用独立终端运行）：
+
+```sh
+cd backend
+uv sync --frozen --python 3.12
+# 将 .env.example 复制为 .env，按本地环境填写，不提交真实凭据
+uv run uvicorn autoeval.api:app --host 127.0.0.1 --port 8000 --reload
+```
+
+- API文档：`http://127.0.0.1:8000/docs`
+- 存活检查：`/health/live`
+- 就绪检查：`/health/ready`，依赖未启动或S3 bucket不存在时返回503。
+- 能力状态：`/api/autoeval/v1/system/capabilities`，当前明确显示测评、SSH和分析未启用。
+
+本次后端7项基础测试和Ruff检查通过，Alembic离线SQL生成通过；迁移后前端类型检查与生产构建通过。没有Docker的环境未执行真实数据库迁移或Compose联调，不代表真实测评已可用。后端检查命令：
+
+```sh
+cd backend
+uv run pytest -q
+uv run ruff check .
+uv run alembic upgrade head --sql
+```
+
+容器和迁移命令见 [backend/README.md](./backend/README.md)。依赖、构建产物、缓存、`.env`和本地分享包不纳入提交。

@@ -1,0 +1,35 @@
+from functools import lru_cache
+from typing import Literal
+
+from pydantic import SecretStr, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_prefix="AE_", env_file=".env", extra="ignore")
+    environment: Literal["development", "test", "production"] = "development"
+    auth_mode: Literal["local"] = "local"
+    database_url: SecretStr = SecretStr(
+        "postgresql+asyncpg://autoeval:autoeval@127.0.0.1:5432/autoeval"
+    )
+    temporal_address: str = "127.0.0.1:7233"
+    temporal_namespace: str = "default"
+    s3_endpoint: str = "http://127.0.0.1:9000"
+    s3_bucket: str = "autoeval-evidence"
+    s3_access_key: SecretStr = SecretStr("local-development")
+    s3_secret_key: SecretStr = SecretStr("local-development-only")
+    dependency_timeout_seconds: float = 3.0
+    poll_seconds: float = 5.0
+
+    @model_validator(mode="after")
+    def local_only(self):
+        if self.environment == "production":
+            raise ValueError(
+                "Production identity is not implemented; local auth is development only"
+            )
+        return self
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()

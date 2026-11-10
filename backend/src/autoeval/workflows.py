@@ -42,3 +42,19 @@ class DockerDiagnosticWorkflow:
             heartbeat_timeout=timedelta(seconds=60),
             retry_policy=RetryPolicy(maximum_attempts=1),
         )
+
+
+@workflow.defn
+class GpqaExplorationWorkflow:
+    @workflow.run
+    async def run(self, request: str | dict) -> dict:
+        run_id = request if isinstance(request, str) else request["run_id"]
+        queue = "demo.gpqa.v1" if isinstance(request, str) else request["activity_queue"]
+        return await workflow.execute_activity(
+            "execute_gpqa_exploration",
+            run_id,
+            task_queue=queue,
+            start_to_close_timeout=timedelta(minutes=10),
+            heartbeat_timeout=timedelta(seconds=90),
+            retry_policy=RetryPolicy(maximum_attempts=1),
+        )

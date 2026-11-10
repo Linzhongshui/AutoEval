@@ -3,6 +3,7 @@ import { BackendConnection } from "../components/BackendConnection";
 import { DiagnosticTasks } from "../components/DiagnosticTasks";
 import { DatasetManifests } from "../components/DatasetManifests";
 import { ExecutionBindings } from "../components/ExecutionBindings";
+import { EvaluationRuns } from "../components/EvaluationRuns";
 import {
   Configurations,
   EvaluationConsole,
@@ -370,6 +371,7 @@ export function App() {
         )}
         {
           <div hidden={page !== "tasks"}>
+            {page === "tasks" && <EvaluationRuns />}
             {page === "tasks" && <DiagnosticTasks />}
             <Tasks go={go} />
           </div>

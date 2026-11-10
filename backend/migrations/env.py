@@ -4,6 +4,7 @@ from alembic import context
 
 import autoeval.configuration
 import autoeval.datasets
+import autoeval.evaluations
 import autoeval.profiles
 import autoeval.registry
 import autoeval.resources

@@ -16,8 +16,11 @@ def test_live_and_honest_capabilities():
         assert response.status_code == 200
         assert response.headers["X-Request-ID"] == response.json()["request_id"]
         assert response.json()["data"]["evaluation_enabled"] is False
-        assert client.post("/api/autoeval/v1/runs", json={}).status_code == 404
-        assert client.post("/api/autoeval/v1/runs", json={}).json()["error"]["code"] == "HTTP_ERROR"
+        assert client.post("/api/autoeval/v1/runs", json={}).status_code == 422
+        assert (
+            client.post("/api/autoeval/v1/runs", json={}).json()["error"]["code"]
+            == "VALIDATION_ERROR"
+        )
 
 
 def test_terminal_state_cannot_regress():

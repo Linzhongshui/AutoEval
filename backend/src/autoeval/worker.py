@@ -6,8 +6,14 @@ from temporalio.worker import Worker
 
 from autoeval.activities import analysis_not_configured, execution_not_configured
 from autoeval.config import get_settings
+from autoeval.evaluation_activity import execute_gpqa_exploration
 from autoeval.run_activities import execute_docker_diagnostic
-from autoeval.workflows import AnalysisWorkflow, DockerDiagnosticWorkflow, RunWorkflow
+from autoeval.workflows import (
+    AnalysisWorkflow,
+    DockerDiagnosticWorkflow,
+    GpqaExplorationWorkflow,
+    RunWorkflow,
+)
 
 
 async def serve(role: str):
@@ -15,14 +21,23 @@ async def serve(role: str):
     client = await Client.connect(settings.temporal_address, namespace=settings.temporal_namespace)
     options = {
         "workflow": {
-            "task_queue": "demo.workflow.v1",
-            "workflows": [RunWorkflow, AnalysisWorkflow, DockerDiagnosticWorkflow],
+            "task_queue": settings.gpqa_workflow_queue,
+            "workflows": [
+                RunWorkflow,
+                AnalysisWorkflow,
+                DockerDiagnosticWorkflow,
+                GpqaExplorationWorkflow,
+            ],
         },
         "io": {
             "task_queue": "demo.io.v1",
             "activities": [execution_not_configured, execute_docker_diagnostic],
         },
         "result": {"task_queue": "demo.result.v1", "activities": [analysis_not_configured]},
+        "gpqa": {
+            "task_queue": settings.gpqa_activity_queue,
+            "activities": [execute_gpqa_exploration],
+        },
     }
     async with Worker(client, **options[role]):
         await asyncio.Event().wait()
@@ -30,7 +45,7 @@ async def serve(role: str):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("role", choices=["workflow", "io", "result"])
+    parser.add_argument("role", choices=["workflow", "io", "result", "gpqa"])
     asyncio.run(serve(parser.parse_args().role))
 
 

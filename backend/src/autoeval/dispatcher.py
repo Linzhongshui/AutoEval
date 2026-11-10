@@ -12,7 +12,7 @@ from temporalio.exceptions import WorkflowAlreadyStartedError
 from autoeval.config import get_settings
 from autoeval.db import create_database
 from autoeval.models import Outbox
-from autoeval.workflows import DockerDiagnosticWorkflow, RunWorkflow
+from autoeval.workflows import DockerDiagnosticWorkflow, GpqaExplorationWorkflow, RunWorkflow
 
 log = logging.getLogger(__name__)
 
@@ -37,13 +37,19 @@ async def deliver_once(sessions, client) -> bool:
         try:
             workflow_entry = {
                 "docker_diagnostic": DockerDiagnosticWorkflow.run,
+                "gpqa_exploration": GpqaExplorationWorkflow.run,
             }.get(row.payload.get("workflow_kind"), RunWorkflow.run)
             await asyncio.wait_for(
                 client.start_workflow(
                     workflow_entry,
-                    str(row.run_id),
+                    {
+                        "run_id": str(row.run_id),
+                        "activity_queue": row.payload.get("activity_queue", "demo.gpqa.v1"),
+                    }
+                    if row.payload.get("workflow_kind") == "gpqa_exploration"
+                    else str(row.run_id),
                     id=f"demo/run/{row.run_id}",
-                    task_queue="demo.workflow.v1",
+                    task_queue=row.payload.get("workflow_queue", "demo.workflow.v1"),
                     id_reuse_policy=WorkflowIDReusePolicy.REJECT_DUPLICATE,
                 ),
                 timeout=5,

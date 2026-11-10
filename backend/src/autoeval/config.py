@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     dependency_timeout_seconds: float = 3.0
     poll_seconds: float = 5.0
     secret_store_path: Path = Path(".secrets")
+    aisbench_lock_path: Path = Path("tool-locks/aisbench.json")
+    gpqa_activity_queue: str = "demo.gpqa.v1"
+    gpqa_workflow_queue: str = "demo.workflow.v1"
     allowed_model_hosts: list[str] = ["api.deepseek.com"]
     docker_executable: str = "docker"
 

@@ -14,6 +14,7 @@ from autoeval.config import Settings, get_settings
 from autoeval.configuration import router as configuration_router
 from autoeval.datasets import router as datasets_router
 from autoeval.db import create_database
+from autoeval.evaluations import router as evaluations_router
 from autoeval.profiles import router as profiles_router
 from autoeval.registry import router as registry_router
 from autoeval.resources import router as resources_router
@@ -39,6 +40,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(targets_router)
     app.include_router(resources_router)
     app.include_router(runs_router)
+    app.include_router(evaluations_router)
 
     @app.middleware("http")
     async def correlation(request: Request, call_next):
@@ -132,6 +134,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "subject": "local-operator",
                 "foundation": True,
                 "evaluation_enabled": False,
+                "gpqa_exploration_enabled": True,
                 "analysis_enabled": False,
                 "aurora_enabled": False,
                 "customer_ssh_enabled": False,

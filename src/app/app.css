@@ -2781,3 +2781,51 @@ td small .badge,
     flex: 1;
   }
 }
+.overview .stats strong {
+  font-size: 22px;
+}
+.overview-scope {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.overview-scope .card {
+  padding: 20px 24px;
+}
+.overview-scope p {
+  color: #737a94;
+  font-size: 13px;
+  line-height: 1.8;
+  margin-bottom: 0;
+}
+@media (max-width: 600px) {
+  .overview-scope {
+    grid-template-columns: 1fr;
+  }
+  .overview .stats strong {
+    font-size: 18px;
+  }
+}
+.task-dataset-view {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.execution-body.task-single-dataset {
+  display: block;
+}
+.dataset-execution-summary {
+  border: 1px solid var(--border);
+  padding: 20px;
+  border-radius: 8px;
+  background: #fcfcff;
+}
+.dataset-execution-summary progress {
+  max-width: 700px;
+  display: block;
+  margin: 14px 0;
+}
+.task-overview {
+  border-bottom: 0;
+  padding-bottom: 0;
+}

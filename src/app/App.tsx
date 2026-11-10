@@ -8,6 +8,8 @@ import {
 import { useState, useEffect } from "react";
 import {
   Home,
+  GraduationCap,
+  Zap,
   SlidersHorizontal,
   ClipboardList,
   ChartNoAxesColumnIncreasing,
@@ -637,7 +639,7 @@ function Reports({ go }: { go: (p: string, id?: string) => void }) {
           />
           <Select
             label="数据集"
-            options={["全部数据集", ...reportDatasets.map(d=>d.name)]}
+            options={["全部数据集", ...reportDatasets.map((d) => d.name)]}
             value={dataset}
             onChange={setDataset}
           />
@@ -961,26 +963,26 @@ function Overview({ go }: { go: (p: string, id?: string) => void }) {
     <div className="stack overview">
       <section className="overview-hero">
         <div>
-          <span className="overview-eyebrow">AUTOMATED EVALUATION</span>
-          <h2>从模型接入，到洞察每一次表现。</h2>
+          <span className="overview-eyebrow">AUTOEVAL · DEMO</span>
+          <h2>聚焦精度测评，体验完整流程。</h2>
           <p>
-            统一管理模型测评、追踪执行过程，
+            AutoEval 演示 Demo，当前聚焦精度测评流程，
             <br />
-            在同一工作空间查看结果、分析差距与比较表现。
+            从配置、执行追踪到报告查看；性能测评仅作界面示意。
           </p>
           <div className="inline">
             <button className="primary" onClick={() => go("console")}>
               <Play size={17} />
-              开始测评
+              体验精度测评
             </button>
             <button onClick={() => go("reports")}>
-              浏览测评报告
+              查看示例报告
               <ChevronRight size={16} />
             </button>
           </div>
         </div>
         <div className="hero-workflow">
-          <span className="muted">测评工作流</span>
+          <span className="muted">精度测评演示流程</span>
           {[
             {
               icon: SlidersHorizontal,
@@ -1010,15 +1012,15 @@ function Overview({ go }: { go: (p: string, id?: string) => void }) {
         </div>
       </section>
       <div className="spread">
-        <h3>工作空间概览</h3>
-        <Badge>静态示例</Badge>
+        <h3>本期演示范围</h3>
+        <Badge>精度流程演示 · 性能仅示意</Badge>
       </div>
       <div className="stats">
         {[
-          { name: "接入模型", value: "2", icon: Layers },
-          { name: "测评任务", value: "24", icon: ClipboardList },
-          { name: "执行中", value: "2", icon: Activity },
-          { name: "测评报告", value: String(reports.length), icon: FileText },
+          { name: "精度测评", value: "流程演示", icon: GraduationCap },
+          { name: "任务追踪", value: "流程演示", icon: ClipboardList },
+          { name: "报告查看", value: "示例展示", icon: FileText },
+          { name: "性能测评", value: "仅作示意", icon: Zap },
         ].map((s) => (
           <Card key={s.name}>
             <div className="stat-icon">
@@ -1031,11 +1033,40 @@ function Overview({ go }: { go: (p: string, id?: string) => void }) {
           </Card>
         ))}
       </div>
+      <div className="overview-scope">
+        <Card
+          title={
+            <span className="inline">
+              <GraduationCap size={21} />
+              精度测评 · 本期演示重点
+            </span>
+          }
+        >
+          <Badge>配置 → 任务 → 报告</Badge>
+          <p>
+            围绕 GPQA、MMMU-Pro 与
+            AutomationBench，演示数据集配置、任务追踪和结果查看流程。页面数值为示例。
+          </p>
+        </Card>
+        <Card
+          title={
+            <span className="inline">
+              <Zap size={21} />
+              性能测评 · 仅作示意
+            </span>
+          }
+        >
+          <Badge tone="neutral">尚未接入性能执行</Badge>
+          <p>
+            吞吐量、延迟、性能图表和榜单仅用于展示界面设计，不提供真实性能测试，不作为模型性能结论。
+          </p>
+        </Card>
+      </div>
       <div className="overview-lower">
         <Card
           title={
             <div className="spread">
-              <span>最近报告</span>
+              <span>示例测评报告</span>
               <button className="link" onClick={() => go("reports")}>
                 查看全部
                 <ChevronRight size={14} />
@@ -1097,8 +1128,9 @@ function Overview({ go }: { go: (p: string, id?: string) => void }) {
         </Card>
       </div>
       <Notice>
-        当前为前端静态预览。配置、任务、报告与分析均为示例，不会调用模型或执行真实测评。
+        演示说明：本期仅围绕精度测评打通演示流程。性能测评尚未接入，吞吐、延迟及性能排名仅为示意，不代表实测能力；当前前端预览中的任务与报告均为示例数据。
       </Notice>
     </div>
   );
 }
+

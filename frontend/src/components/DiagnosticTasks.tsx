@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { apiGet, apiPost } from "../services/api";
+import { apiGet, apiGetPage, apiPost } from "../services/api";
+import { OffsetPagination, REGISTRY_PAGE_SIZE } from "./OffsetPagination";
 
 type Resource = { id: string; binding_key: string; version: number };
 type Run = { id: string; state: string };
@@ -9,6 +10,8 @@ const terminal = new Set(["completed", "failed", "cancelled"]);
 export function DiagnosticTasks() {
   const [resources, setResources] = useState<Resource[]>([]);
   const [resource, setResource] = useState("");
+  const [resourceOffset, setResourceOffset] = useState(0);
+  const [resourceNext, setResourceNext] = useState<number | null>(null);
   const [runs, setRuns] = useState<Run[]>([]);
   const [selected, setSelected] = useState("");
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -18,11 +21,11 @@ export function DiagnosticTasks() {
   const submitting = useRef(false);
   useEffect(() => {
     const controller = new AbortController();
-    apiGet<Resource[]>("/resources", controller.signal).then((rows) => {
-      setResources(rows); setResource(rows[0]?.id || "");
+    apiGetPage<Resource[]>(`/resources?offset=${resourceOffset}&limit=${REGISTRY_PAGE_SIZE}`, controller.signal).then((page) => {
+      setResources(page.data); setResourceNext(page.next_offset); setResource(page.data[0]?.id || "");
     }).catch(() => { if (!controller.signal.aborted) setError("无法加载Docker资源，请检查后端连接。"); });
     return () => controller.abort();
-  }, []);
+  }, [resourceOffset]);
   useEffect(() => {
     let active = true;
     let refreshing = false;
@@ -69,6 +72,7 @@ export function DiagnosticTasks() {
       <option value="">请选择已登记资源</option>
       {resources.map((row) => <option key={row.id} value={row.id}>{row.binding_key} v{row.version}</option>)}
     </select></label>
+    <OffsetPagination label="资源" offset={resourceOffset} nextOffset={resourceNext} onChange={setResourceOffset} />
     <button type="button" disabled={busy || !resource} onClick={() => void submit()}>提交Docker诊断</button>
     {error && <p role="alert">{error}</p>}
     <label>已保存诊断任务 <select aria-label="已保存诊断任务" value={selected} onChange={(e) => { setDetail(null); setSelected(e.target.value); }}>

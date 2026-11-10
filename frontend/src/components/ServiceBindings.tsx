@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { apiGetPage } from "../services/api";
+import { OffsetPagination, REGISTRY_PAGE_SIZE } from "./OffsetPagination";
 
 type Model = { id: string; model_id: string };
 type Version = { id: string; version: string };
@@ -15,6 +17,10 @@ export function ServiceBindings() {
   const [models, setModels] = useState<Model[]>([]);
   const [versions, setVersions] = useState<Version[]>([]);
   const [targets, setTargets] = useState<Target[]>([]);
+  const [modelOffset, setModelOffset] = useState(0);
+  const [modelNext, setModelNext] = useState<number | null>(null);
+  const [targetOffset, setTargetOffset] = useState(0);
+  const [targetNext, setTargetNext] = useState<number | null>(null);
   const [versionId, setVersionId] = useState("");
   const [targetId, setTargetId] = useState("");
   const [baseUrl, setBaseUrl] = useState("https://api.deepseek.com");
@@ -22,11 +28,15 @@ export function ServiceBindings() {
   const [key, setKey] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const refresh = async () => {
-    const [m, t] = await Promise.all([api<Model[]>("/models"), api<Target[]>("/target-bindings")]);
-    setModels(m); setTargets(t);
+  const refresh = async (modelPage = modelOffset, targetPage = targetOffset) => {
+    const [m, t] = await Promise.all([
+      apiGetPage<Model[]>(`/models?offset=${modelPage}&limit=${REGISTRY_PAGE_SIZE}`),
+      apiGetPage<Target[]>(`/target-bindings?offset=${targetPage}&limit=${REGISTRY_PAGE_SIZE}`),
+    ]);
+    setModels(m.data); setModelNext(m.next_offset);
+    setTargets(t.data); setTargetNext(t.next_offset);
   };
-  useEffect(() => { refresh().catch(() => setMessage("服务绑定暂不可用")); }, []);
+  useEffect(() => { refresh().catch(() => setMessage("服务绑定暂不可用")); }, [modelOffset, targetOffset]);
   const perform = async (fn: () => Promise<void>) => {
     setBusy(true); setMessage("");
     try { await fn(); } catch (error) { setMessage(error instanceof Error ? error.message : "请求失败"); }
@@ -41,6 +51,8 @@ export function ServiceBindings() {
       try { setVersions(await api<Version[]>(`/models/${e.target.value}/versions`)); }
       catch { setMessage("读取模型版本失败"); }
     }}><option value="">请选择</option>{models.map(m => <option key={m.id} value={m.id}>{m.model_id}</option>)}</select></label>
+    <OffsetPagination label="模型" offset={modelOffset} nextOffset={modelNext} disabled={busy}
+      onChange={(offset) => { setVersionId(""); setVersions([]); setModelOffset(offset); }} />
     <label>模型版本<select aria-label="服务绑定模型版本" value={versionId} onChange={e => setVersionId(e.target.value)}>
       <option value="">请选择</option>{versions.map(v => <option key={v.id} value={v.id}>{v.version}</option>)}
     </select></label>
@@ -59,6 +71,8 @@ export function ServiceBindings() {
     <label>已保存服务<select aria-label="已保存真实服务" value={targetId} onChange={e => { setTargetId(e.target.value); setMessage(""); }}>
       <option value="">请选择</option>{targets.map(t => <option key={t.id} value={t.id}>{t.remote_model} · {t.base_url} · {t.id.slice(0, 8)}</option>)}
     </select></label>
+    <OffsetPagination label="服务" offset={targetOffset} nextOffset={targetNext} disabled={busy}
+      onChange={(offset) => { setTargetId(""); setTargetOffset(offset); }} />
     <button disabled={busy || !targetId} onClick={() => perform(async () => {
       const result = await api<{ outcome: string; details: { models?: string[]; http_status?: number } }>(`/targets/${targetId}/connection-tests`, {});
       setMessage(result.outcome === "matched" ? "鉴权与目标模型匹配成功；未测试生成，测评尚未启用。"

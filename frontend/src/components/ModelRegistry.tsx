@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { apiGetPage } from "../services/api";
+import { OffsetPagination, REGISTRY_PAGE_SIZE } from "./OffsetPagination";
 
 type Params = { output: number; concurrency: number; temperature: number; top_p: number; scope: string };
 type RegisteredModel = { id: string; model_id: string; name: string;
@@ -15,6 +17,10 @@ export function ModelRegistry({ onApply }: {
 }) {
   const [models, setModels] = useState<RegisteredModel[]>([]);
   const [configs, setConfigs] = useState<Config[]>([]);
+  const [modelOffset, setModelOffset] = useState(0);
+  const [modelNext, setModelNext] = useState<number | null>(null);
+  const [configOffset, setConfigOffset] = useState(0);
+  const [configNext, setConfigNext] = useState<number | null>(null);
   const [selected, setSelected] = useState("");
   const [configId, setConfigId] = useState("");
   const [modelId, setModelId] = useState("");
@@ -22,13 +28,15 @@ export function ModelRegistry({ onApply }: {
   const [version, setVersion] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const refresh = async () => {
+  const refresh = async (modelPage = modelOffset, configPage = configOffset) => {
     const [m, c] = await Promise.all([
-      request<RegisteredModel[]>("/models"), request<Config[]>("/test-configs?limit=200"),
+      apiGetPage<RegisteredModel[]>(`/models?offset=${modelPage}&limit=${REGISTRY_PAGE_SIZE}`),
+      apiGetPage<Config[]>(`/test-configs?offset=${configPage}&limit=${REGISTRY_PAGE_SIZE}`),
     ]);
-    setModels(m); setConfigs(c);
+    setModels(m.data); setModelNext(m.next_offset);
+    setConfigs(c.data); setConfigNext(c.next_offset);
   };
-  useEffect(() => { refresh().catch(() => setMessage("模型登记服务不可用，请启动后端与数据库后刷新。")); }, []);
+  useEffect(() => { refresh().catch(() => setMessage("模型登记服务不可用，请启动后端与数据库后刷新。")); }, [modelOffset, configOffset]);
   const perform = async (action: () => Promise<void>) => {
     if (busy) return;
     setBusy(true); setMessage("");
@@ -54,9 +62,13 @@ export function ModelRegistry({ onApply }: {
     <label>已登记模型<select aria-label="已登记模型" value={selected} onChange={e => setSelected(e.target.value)}>
       <option value="">请选择</option>{models.map(m => <option key={m.id} value={m.id}>{m.model_id} · {m.name}</option>)}
     </select></label>
+    <OffsetPagination label="模型" offset={modelOffset} nextOffset={modelNext} disabled={busy}
+      onChange={(offset) => { setSelected(""); setModelOffset(offset); }} />
     <label>默认配置版本<select aria-label="绑定默认配置版本" value={configId} onChange={e => setConfigId(e.target.value)}>
       <option value="">请选择</option>{configs.map(c => <option key={c.id} value={c.id}>{c.display_name} / {c.version_label}</option>)}
     </select></label>
+    <OffsetPagination label="配置" offset={configOffset} nextOffset={configNext} disabled={busy}
+      onChange={(offset) => { setConfigId(""); setConfigOffset(offset); }} />
     <button disabled={busy || !selected || !configId} onClick={() => perform(async () => {
       const model = models.find(m => m.id === selected)!;
       await request(`/models/${selected}/default-test-config`, { method: "PUT",

@@ -1,4 +1,5 @@
 import { ReportView, reportDatasets } from "./ReportView";
+import { BackendConnection } from "../components/BackendConnection";
 import {
   Configurations,
   EvaluationConsole,
@@ -301,6 +302,7 @@ export function App() {
         </div>
       </aside>
       <main className="main">
+        <BackendConnection />
         <div className="breadcrumb">
           {page === "detail" ? (
             <button onClick={() => go("reports")}>报告管理</button>

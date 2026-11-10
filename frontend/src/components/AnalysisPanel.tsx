@@ -1,0 +1,70 @@
+import { useEffect, useState } from "react";
+import { apiGet, apiPost } from "../services/api";
+
+type Statement = { statement: string; evidence_ids: string[] };
+type Analysis = {
+  id: string;
+  state: string;
+  retry_count: number;
+  error_code: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  result: null | {
+    state: string;
+    error_code: string | null;
+    analysis: null | { summary: string; evidence_ids: string[]; facts: Statement[]; inferences: Statement[]; recommended_actions: string[] };
+  };
+};
+
+export function AnalysisPanel({ reportId, status, onStatus }: { reportId: string; status: string; onStatus: (state: string) => void }) {
+  const [analysis, setAnalysis] = useState<Analysis | null>(null);
+  const [revision, setRevision] = useState(0);
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    setAnalysis(null); setMessage("");
+  }, [reportId]);
+  useEffect(() => {
+    if (["not_enabled", "not_queued"].includes(status)) return;
+    const controller = new AbortController();
+    apiGet<Analysis>(`/reports/${reportId}/analysis`, controller.signal).then((row) => {
+      setAnalysis(row); onStatus(row.state);
+    }).catch(() => { if (!controller.signal.aborted) setMessage("分析结果或校验值读取失败；原始报告不受影响。"); });
+    return () => controller.abort();
+  }, [reportId, status, revision]);
+  useEffect(() => {
+    if (!analysis || !["queued", "running"].includes(analysis.state)) return;
+    const timer = setTimeout(() => setRevision((value) => value + 1), 2000);
+    return () => clearTimeout(timer);
+  }, [analysis]);
+  const retry = async () => {
+    setBusy(true); setMessage("");
+    try {
+      const row = await apiPost<Analysis>(`/reports/${reportId}/analysis:retry`);
+      setAnalysis(row); onStatus(row.state); setRevision((value) => value + 1);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "分析未排队；请先查证当前状态。");
+    } finally { setBusy(false); }
+  };
+  const statements = (title: string, rows: Statement[]) => <div><h4>{title}</h4>{rows.length ? <ul>{rows.map((row, index) => <li key={index}>{row.statement}<details><summary>证据引用</summary><code>{row.evidence_ids.join("、") || "证据不足"}</code></details></li>)}</ul> : <p>无</p>}</div>;
+  return <section data-testid="analysis-status">
+    <h3>AutoEval Agent 自动分析</h3>
+    {status === "not_enabled" && <p>未配置独立分析目标与资源；原始报告不受影响。</p>}
+    {status === "not_queued" && <><p>分析尚未排队。</p><button disabled={busy} onClick={() => void retry()}>启动独立分析</button></>}
+    {analysis && <div>
+      <p>状态：{analysis.state}；重试次数：{analysis.retry_count}</p>
+      {analysis.started_at && <p>开始：{analysis.started_at}；完成：{analysis.finished_at || "尚未完成"}</p>}
+      {analysis.error_code && <p role="alert">错误类别：{analysis.error_code}</p>}
+      {analysis.state === "unresolved" && <p role="alert">调用结果待查证，禁止重发分析请求。</p>}
+      {analysis.state === "failed" && analysis.retry_count === 0 && <button disabled={busy} onClick={() => void retry()}>重试失败分析（仅一次）</button>}
+      {analysis.result?.analysis && <div data-testid="analysis-result">
+        <p>{analysis.result.analysis.summary}</p>
+        {statements("报告事实", analysis.result.analysis.facts)}
+        {statements("Agent 推断（非原始成绩）", analysis.result.analysis.inferences)}
+        <h4>建议</h4><ul>{analysis.result.analysis.recommended_actions.map((action, index) => <li key={index}>{action}</li>)}</ul>
+        <details><summary>分析证据引用与原始响应</summary><p>{analysis.result.analysis.evidence_ids.join("、")}</p><pre style={{ overflow: "auto" }}>{JSON.stringify(analysis.result, null, 2)}</pre></details>
+      </div>}
+    </div>}
+    <p role="status">{message}</p>
+  </section>;
+}

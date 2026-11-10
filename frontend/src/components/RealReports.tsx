@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { apiGet, apiGetPage } from "../services/api";
+import { AnalysisPanel } from "./AnalysisPanel";
 
 type Summary = { expected_samples: number; executed_attempts: number; successful_samples: number; failed_samples: number; missing_samples: number; accuracy: number | null; subset_scope: string; dataset_samples: number; metric_scope: string; scoring_status?: string };
-type Report = { id: string; run_id: string; remote_model: string; validity: string; created_at: string; summary: Summary; sha256: string; snapshot_sha256: string; execution_origin: string; baseline_comparison: BaselineComparison };
+type Report = { id: string; run_id: string; remote_model: string; validity: string; created_at: string; summary: Summary; sha256: string; snapshot_sha256: string; execution_origin: string; baseline_comparison: BaselineComparison; analysis_status: string; analysis_id: string | null };
 type BaselineComparison = { status: "matched" | "missing" | "incomparable"; baseline_key: string | null; baseline_version: string | null; baseline_value: number | null; baseline_unit: string | null; baseline_direction: string | null; measured_value: number | null; difference: number | null };
 const validity: Record<string, string> = { complete: "所选清单完整", partial: "部分有效", failed_summary: "执行失败摘要", invalid: "评分无效" };
 
@@ -59,7 +60,7 @@ export function RealReports({ reportId, open }: { reportId?: string; open: (id: 
         {report.baseline_comparison.status === "incomparable" && <p>基准对比：测试条件不一致，不可直接比较；不计算差值。</p>}
         {report.baseline_comparison.status === "matched" && <p>基准对比：{report.baseline_comparison.baseline_key} {report.baseline_comparison.baseline_version}，基准 {report.baseline_comparison.baseline_value}{report.baseline_comparison.baseline_unit}，实测 {report.baseline_comparison.measured_value}{report.baseline_comparison.baseline_unit}，差值 {report.baseline_comparison.difference === null ? "不可计算" : `${report.baseline_comparison.difference > 0 ? "+" : ""}${report.baseline_comparison.difference}pp`}。</p>}
       </div>
-      <p>自动分析：尚未启用；不影响原始报告。</p>
+      <AnalysisPanel reportId={report.id} status={report.analysis_status} onStatus={(state) => setReport((current) => current ? { ...current, analysis_status: state } : current)} />
       <p>运行ID：{report.run_id}（任务页可回溯逐次执行证据）</p>
       <details><summary>报告标识与校验值</summary><p>报告ID：{report.id}</p><p>报告SHA-256：{report.sha256}</p><p>快照SHA-256：{report.snapshot_sha256}</p></details>
       <button onClick={() => setEvidenceRequested(true)}>读取并校验报告证据</button>

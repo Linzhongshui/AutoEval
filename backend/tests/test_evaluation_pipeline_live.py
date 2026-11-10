@@ -12,7 +12,9 @@ from sqlalchemy import select
 from temporalio.client import Client
 from temporalio.worker import Worker
 
-from autoeval import evaluation_activity
+from autoeval import analysis_activity, evaluation_activity
+from autoeval.analysis import ReportAnalysis, retry_existing_analysis
+from autoeval.analysis_activity import execute_report_analysis, read_analysis_result
 from autoeval.api import create_app
 from autoeval.config import get_settings
 from autoeval.datasets import DatasetManifest
@@ -20,7 +22,7 @@ from autoeval.dispatcher import deliver_once
 from autoeval.registry import Asset, AssetVersion
 from autoeval.resources import ResourceBinding
 from autoeval.targets import TargetBinding
-from autoeval.workflows import GpqaExplorationWorkflow
+from autoeval.workflows import GpqaExplorationWorkflow, ReportAnalysisWorkflow
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("AE_GPQA_PIPELINE_TEST"),
@@ -34,8 +36,11 @@ async def test_submit_deduplicate_partial_report_and_cancel(monkeypatch):
             "evaluation_origin": "simulation",
             "gpqa_workflow_queue": "test-wf-" + uuid.uuid4().hex,
             "gpqa_activity_queue": "test-io-" + uuid.uuid4().hex,
+            "analysis_activity_queue": "test-analysis-" + uuid.uuid4().hex,
+            "analysis_max_output_tokens": 64,
         }
     )
+    settings.analysis_workflow_queue = settings.gpqa_workflow_queue
     app = create_app(settings)
     lock = json.loads((Path(__file__).parents[1] / "tool-locks/aisbench.json").read_text())
     calls = []
@@ -58,18 +63,49 @@ async def test_submit_deduplicate_partial_report_and_cancel(monkeypatch):
         }
 
     monkeypatch.setattr(evaluation_activity, "invoke", fake_invoke)
+    monkeypatch.setattr(evaluation_activity, "get_settings", lambda: settings)
     monkeypatch.setattr(evaluation_activity.FileSecretStore, "get", lambda *args: "fixture-only")
+    analysis_calls = []
+
+    def fake_analysis(settings, container_id, payload):
+        analysis_calls.append(payload)
+        if scenario == "cancel":
+            raise OSError("Simulated uncertain analysis transport")
+        invalid = scenario == "partial" and len(analysis_calls) == 1
+        return {
+            "state": "succeeded",
+            "response": json.dumps({
+                "summary": "Evidence-bound analysis",
+                "evidence_ids": ["foreign" if invalid else "run.summary"],
+                "facts": [{"statement": "Report archived", "evidence_ids": ["run.summary"]}],
+                "inferences": [],
+                "recommended_actions": [],
+            }),
+            "finish_reason": "stop",
+            "usage": {"input_tokens": 10, "output_tokens": 5},
+        }
+
+    monkeypatch.setattr(analysis_activity, "invoke", fake_analysis)
+    monkeypatch.setattr(analysis_activity, "get_settings", lambda: settings)
+    monkeypatch.setattr(analysis_activity.FileSecretStore, "get", lambda *args: "fixture-only")
     client = await Client.connect(settings.temporal_address)
     async with (
         app.router.lifespan_context(app),
         httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as api,
         Worker(
-            client, task_queue=settings.gpqa_workflow_queue, workflows=[GpqaExplorationWorkflow]
+            client,
+            task_queue=settings.gpqa_workflow_queue,
+            workflows=[GpqaExplorationWorkflow, ReportAnalysisWorkflow],
         ),
         Worker(
             client,
             task_queue=settings.gpqa_activity_queue,
             activities=[evaluation_activity.execute_gpqa_exploration],
+        ),
+        Worker(
+            client,
+            task_queue=settings.analysis_activity_queue,
+            activities=[execute_report_analysis],
         ),
     ):
         async with app.state.sessions() as session:
@@ -85,6 +121,8 @@ async def test_submit_deduplicate_partial_report_and_cancel(monkeypatch):
                 select(TargetBinding).where(TargetBinding.remote_model == "deepseek-flash").limit(1)
             )
             resource = await session.scalar(select(ResourceBinding).limit(1))
+            settings.analysis_target_id = target.id
+            settings.analysis_resource_id = resource.id
         from autoeval.datasets import read_manifest
 
         members = read_manifest(settings, full)["samples"][:2]
@@ -193,3 +231,58 @@ async def test_submit_deduplicate_partial_report_and_cancel(monkeypatch):
                 "state": detail["state"]
             }
             assert len(calls) == (4 if scenario == "scoring_failure" else 2)
+
+            for _ in range(20):
+                if not await deliver_once(app.state.sessions, client):
+                    break
+            job = None
+            for _ in range(100):
+                async with app.state.sessions() as session:
+                    job = await session.scalar(
+                        select(ReportAnalysis).where(
+                            ReportAnalysis.report_id == uuid.UUID(detail["report"]["id"])
+                        )
+                    )
+                if job is not None and job.state in {"succeeded", "failed", "unresolved"}:
+                    break
+                await asyncio.sleep(0.2)
+            assert job is not None, "Report creation must enqueue independent analysis"
+            assert job.state == (
+                "failed" if scenario == "partial" else "unresolved" if cancelled else "succeeded"
+            )
+            assert job.report_sha256 == detail["report"]["sha256"]
+            assert job.baseline_comparison["status"] == "missing"
+            if scenario == "partial":
+                failed_result = await read_analysis_result(settings, job)
+                assert failed_result["error_code"] == "INVALID_MODEL_OUTPUT"
+                before = len(analysis_calls)
+                async with app.state.sessions() as session, session.begin():
+                    locked = await session.get(ReportAnalysis, job.id)
+                    _, created = await retry_existing_analysis(session, settings, locked)
+                    assert created is True
+                for _ in range(20):
+                    if not await deliver_once(app.state.sessions, client):
+                        break
+                for _ in range(100):
+                    async with app.state.sessions() as session:
+                        job = await session.get(ReportAnalysis, job.id)
+                    if job.state == "succeeded":
+                        break
+                    await asyncio.sleep(0.2)
+                assert job.state == "succeeded"
+                assert len(analysis_calls) == before + 1
+            elif cancelled:
+                before = len(analysis_calls)
+                async with app.state.sessions() as session, session.begin():
+                    locked = await session.get(ReportAnalysis, job.id)
+                    _, created = await retry_existing_analysis(session, settings, locked)
+                    assert created is False
+                assert len(analysis_calls) == before
+            else:
+                result = await read_analysis_result(settings, job)
+                assert result["analysis"]["facts"][0]["statement"] == "Report archived"
+            before = len(analysis_calls)
+            repeated = await execute_report_analysis(str(job.id))
+            assert repeated["state"] == job.state
+            assert len(analysis_calls) == before
+        assert len(analysis_calls) == 4

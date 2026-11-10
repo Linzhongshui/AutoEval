@@ -5,6 +5,7 @@ from temporalio.client import Client
 from temporalio.worker import Worker
 
 from autoeval.activities import analysis_not_configured, execution_not_configured
+from autoeval.analysis_activity import execute_report_analysis
 from autoeval.config import get_settings
 from autoeval.evaluation_activity import execute_gpqa_exploration
 from autoeval.run_activities import execute_docker_diagnostic
@@ -12,6 +13,7 @@ from autoeval.workflows import (
     AnalysisWorkflow,
     DockerDiagnosticWorkflow,
     GpqaExplorationWorkflow,
+    ReportAnalysisWorkflow,
     RunWorkflow,
 )
 
@@ -27,13 +29,21 @@ async def serve(role: str):
                 AnalysisWorkflow,
                 DockerDiagnosticWorkflow,
                 GpqaExplorationWorkflow,
+                ReportAnalysisWorkflow,
             ],
+        },
+        "analysis-workflow": {
+            "task_queue": settings.analysis_workflow_queue,
+            "workflows": [ReportAnalysisWorkflow],
         },
         "io": {
             "task_queue": "demo.io.v1",
             "activities": [execution_not_configured, execute_docker_diagnostic],
         },
-        "result": {"task_queue": "demo.result.v1", "activities": [analysis_not_configured]},
+        "result": {
+            "task_queue": settings.analysis_activity_queue,
+            "activities": [analysis_not_configured, execute_report_analysis],
+        },
         "gpqa": {
             "task_queue": settings.gpqa_activity_queue,
             "activities": [execute_gpqa_exploration],
@@ -45,7 +55,7 @@ async def serve(role: str):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("role", choices=["workflow", "io", "result", "gpqa"])
+    parser.add_argument("role", choices=["workflow", "analysis-workflow", "io", "result", "gpqa"])
     asyncio.run(serve(parser.parse_args().role))
 
 

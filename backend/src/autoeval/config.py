@@ -1,8 +1,9 @@
+import uuid
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import SecretStr, model_validator
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -25,6 +26,11 @@ class Settings(BaseSettings):
     aisbench_lock_path: Path = Path("tool-locks/aisbench.json")
     gpqa_activity_queue: str = "demo.gpqa.v1"
     gpqa_workflow_queue: str = "demo.workflow.v1"
+    analysis_target_id: uuid.UUID | None = None
+    analysis_resource_id: uuid.UUID | None = None
+    analysis_activity_queue: str = "demo.result.v1"
+    analysis_workflow_queue: str = "demo.workflow.v1"
+    analysis_max_output_tokens: int = Field(default=2048, ge=1, le=4096)
     evaluation_origin: Literal["real", "simulation"] = "real"
     allowed_model_hosts: list[str] = ["api.deepseek.com"]
     docker_executable: str = "docker"

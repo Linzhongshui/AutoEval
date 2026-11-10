@@ -232,6 +232,50 @@ async def native_infer(request):
     return result
 
 
+async def native_analyze(request):
+    import aiohttp
+    from ais_bench.benchmark.models.api_models.vllm_custom_api_chat import VLLMCustomAPIChat
+    from ais_bench.benchmark.models.output import RequestOutput
+
+    if request["base_url"] != "https://api.deepseek.com":
+        raise ValueError("Analysis target must use the configured official HTTPS endpoint")
+    if not isinstance(request["model"], str) or not 1 <= len(request["model"]) <= 128:
+        raise ValueError("Invalid analysis model")
+    maximum = request["max_tokens"]
+    if type(maximum) is not int or not 1 <= maximum <= 4096:
+        raise ValueError("Analysis output budget exceeded")
+    prompt = request["prompt"]
+    if not isinstance(prompt, str) or not prompt or len(prompt.encode()) > 12 * 1024 * 1024:
+        raise ValueError("Invalid analysis prompt")
+
+    class RestrictedSession:
+        def __init__(self, session):
+            self.session = session
+
+        def post(self, **kwargs):
+            return self.session.post(**kwargs, allow_redirects=False)
+
+    model = VLLMCustomAPIChat(
+        model=request["model"],
+        url=request["base_url"],
+        api_key=request["api_key"],
+        retry=1,
+        max_out_len=maximum,
+        generation_kwargs={"temperature": 0, "top_p": 1, "thinking": {"type": "disabled"}},
+    )
+    output = RequestOutput()
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=90)) as session:
+        await model.generate(prompt, maximum, output, session=RestrictedSession(session))
+    success = output.success and bool(output.content)
+    return {
+        "state": "succeeded" if success else "failed",
+        "response": output.content if success else None,
+        "finish_reason": output.extra_details_data.get("finish_reason"),
+        "error_code": None if success else "ANALYSIS_INFERENCE_FAILED",
+        "usage": {"input_tokens": output.input_tokens, "output_tokens": output.output_tokens},
+    }
+
+
 def main():
     root, lock_path = Path(sys.argv[1]).resolve(strict=True), Path(sys.argv[2])
     lock = json.loads(lock_path.read_text(encoding="utf-8"))
@@ -253,6 +297,8 @@ def main():
             result = native_score_mmmu(request)
         elif request["operation"] == "infer_gpqa_smoke":
             result = asyncio.run(native_infer(request))
+        elif request["operation"] == "analyze_report":
+            result = asyncio.run(native_analyze(request))
         else:
             raise ValueError("Unsupported native operation")
     print(

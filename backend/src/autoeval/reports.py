@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
+from autoeval.analysis import ReportAnalysis, analysis_status_for
 from autoeval.benchmarks import BenchmarkBaseline, compare_baseline
 from autoeval.datasets import read_manifest
 from autoeval.evaluations import EvaluationReport
@@ -16,7 +17,9 @@ from autoeval.models import EvaluationRun, RunSnapshot
 router = APIRouter(prefix="/api/autoeval/v1/reports", tags=["reports"])
 
 
-def report_data(row, run, snapshot, baselines=()):
+def report_data(
+    row, run, snapshot, baselines=(), *, analysis_status="not_enabled", analysis_id=None
+):
     return {
         "id": str(row.id),
         "run_id": str(row.run_id),
@@ -31,7 +34,8 @@ def report_data(row, run, snapshot, baselines=()):
         "manifest_id": snapshot.canonical_body["manifest_id"],
         "execution_origin": row.execution_origin,
         "gate_status": "not_applicable",
-        "analysis_status": "not_enabled",
+        "analysis_status": analysis_status,
+        "analysis_id": str(analysis_id) if analysis_id else None,
         "baseline_comparison": compare_baseline(
             row.summary, snapshot.canonical_body, baselines
         ),
@@ -59,7 +63,26 @@ async def catalog(request: Request, offset: int = 0, limit: int = 20):
                 )
             ).all()
             baselines = (await session.scalars(select(BenchmarkBaseline))).all()
-            data = [report_data(*row, baselines) for row in rows[:limit]]
+            selected = rows[:limit]
+            analyses = (
+                await session.scalars(
+                    select(ReportAnalysis).where(
+                        ReportAnalysis.report_id.in_([row[0].id for row in selected])
+                    )
+                )
+            ).all() if selected else []
+            jobs = {job.report_id: job for job in analyses}
+            data = [
+                report_data(
+                    *row,
+                    baselines,
+                    analysis_status=analysis_status_for(
+                        jobs.get(row[0].id), request.app.state.settings
+                    ),
+                    analysis_id=jobs.get(row[0].id).id if jobs.get(row[0].id) else None,
+                )
+                for row in selected
+            ]
     except SQLAlchemyError as exc:
         raise HTTPException(503, "Report catalog unavailable") from exc
     return {
@@ -88,7 +111,15 @@ async def detail(report_id: uuid.UUID, request: Request):
             if row is None:
                 raise HTTPException(404, "Report not found")
             baselines = (await session.scalars(select(BenchmarkBaseline))).all()
-            data = report_data(*row, baselines)
+            job = await session.scalar(
+                select(ReportAnalysis).where(ReportAnalysis.report_id == report_id)
+            )
+            data = report_data(
+                *row,
+                baselines,
+                analysis_status=analysis_status_for(job, request.app.state.settings),
+                analysis_id=job.id if job else None,
+            )
     except SQLAlchemyError as exc:
         raise HTTPException(503, "Report database unavailable") from exc
     return {"data": data, "request_id": request.state.request_id}

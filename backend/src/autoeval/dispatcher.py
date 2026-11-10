@@ -12,7 +12,12 @@ from temporalio.exceptions import WorkflowAlreadyStartedError
 from autoeval.config import get_settings
 from autoeval.db import create_database
 from autoeval.models import Outbox
-from autoeval.workflows import DockerDiagnosticWorkflow, GpqaExplorationWorkflow, RunWorkflow
+from autoeval.workflows import (
+    DockerDiagnosticWorkflow,
+    GpqaExplorationWorkflow,
+    ReportAnalysisWorkflow,
+    RunWorkflow,
+)
 
 log = logging.getLogger(__name__)
 
@@ -30,26 +35,42 @@ async def deliver_once(sessions, client) -> bool:
         )
         if row is None:
             return False
-        if row.kind != "START_RUN":
+        if row.kind not in {"START_RUN", "ANALYZE_REPORT"}:
             row.next_retry_at = datetime.now(UTC) + timedelta(minutes=1)
             log.error("Unsupported outbox intent id=%s kind=%s", row.id, row.kind)
             return True
         try:
+            workflow_kind = row.payload.get("workflow_kind")
             workflow_entry = {
                 "docker_diagnostic": DockerDiagnosticWorkflow.run,
                 "gpqa_exploration": GpqaExplorationWorkflow.run,
-            }.get(row.payload.get("workflow_kind"), RunWorkflow.run)
-            await asyncio.wait_for(
-                client.start_workflow(
-                    workflow_entry,
+                "report_analysis": ReportAnalysisWorkflow.run,
+            }.get(workflow_kind, RunWorkflow.run)
+            if row.kind == "ANALYZE_REPORT":
+                analysis_id = row.payload["analysis_id"]
+                request = {
+                    "analysis_id": analysis_id,
+                    "activity_queue": row.payload.get("activity_queue", "demo.result.v1"),
+                }
+                workflow_id = f"demo/analysis/{analysis_id}/{row.payload.get('retry_count', 0)}"
+                default_queue = "demo.workflow.v1"
+            else:
+                request = (
                     {
                         "run_id": str(row.run_id),
                         "activity_queue": row.payload.get("activity_queue", "demo.gpqa.v1"),
                     }
-                    if row.payload.get("workflow_kind") == "gpqa_exploration"
-                    else str(row.run_id),
-                    id=f"demo/run/{row.run_id}",
-                    task_queue=row.payload.get("workflow_queue", "demo.workflow.v1"),
+                    if workflow_kind == "gpqa_exploration"
+                    else str(row.run_id)
+                )
+                workflow_id = f"demo/run/{row.run_id}"
+                default_queue = "demo.workflow.v1"
+            await asyncio.wait_for(
+                client.start_workflow(
+                    workflow_entry,
+                    request,
+                    id=workflow_id,
+                    task_queue=row.payload.get("workflow_queue", default_queue),
                     id_reuse_policy=WorkflowIDReusePolicy.REJECT_DUPLICATE,
                 ),
                 timeout=5,

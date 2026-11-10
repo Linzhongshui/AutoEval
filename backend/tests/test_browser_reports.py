@@ -26,6 +26,7 @@ def test_browser_real_report_evidence_and_direct_reload():
                 "本报告不代表全量成绩"
             )
             expect(page.get_by_test_id("baseline-comparison")).to_contain_text("暂无基准")
+            expect(page.get_by_test_id("analysis-status")).to_contain_text("未配置")
             page.get_by_role("button", name="读取并校验报告证据", exact=True).click()
             expect(page.get_by_test_id("real-report-evidence")).to_contain_text("gpqa-report.v1")
             page.reload()

@@ -306,6 +306,7 @@ async def execute_gpqa_exploration(run_id: str, resume: bool = False):
                 .with_for_update()
             )
             if existing_report is not None:
+                report = existing_report
                 body = await _verified_report(settings, existing_report, identifier, snapshot)
                 if (
                     existing_report.object_key != key
@@ -314,16 +315,32 @@ async def execute_gpqa_exploration(run_id: str, resume: bool = False):
                 ):
                     raise ValueError("Existing report conflicts with recovered execution")
             else:
-                session.add(
-                    EvaluationReport(
-                        execution_origin=frozen.get("execution_origin", "unverified"),
-                        run_id=identifier,
-                        validity=validity,
-                        snapshot_sha256=snapshot.sha256,
-                        summary=summary,
-                        object_key=key,
-                        sha256=digest,
-                    )
+                report = EvaluationReport(
+                    execution_origin=frozen.get("execution_origin", "unverified"),
+                    run_id=identifier,
+                    validity=validity,
+                    snapshot_sha256=snapshot.sha256,
+                    summary=summary,
+                    object_key=key,
+                    sha256=digest,
+                )
+                session.add(report)
+                await session.flush()
+            from autoeval.analysis import (
+                analysis_is_configured,
+                current_baseline_comparison,
+                enqueue_analysis,
+            )
+
+            if analysis_is_configured(settings):
+                comparison = await current_baseline_comparison(session, report, snapshot)
+                await enqueue_analysis(
+                    session,
+                    settings,
+                    report,
+                    snapshot,
+                    trigger="report_created",
+                    baseline_comparison=comparison,
                 )
             await session.execute(delete(ExecutionLease).where(ExecutionLease.run_id == identifier))
         return {"state": final_state, "validity": validity}

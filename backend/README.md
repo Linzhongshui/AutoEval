@@ -56,14 +56,14 @@ uv export --frozen --no-dev --no-emit-project --format requirements-txt --output
 
 ## 下一批实现边界
 
-1. 客户SSH适配、主机指纹、SFTP证据及Docker模拟SSH联调。
+1. 将已验证的SSH控制/SFTP与资源预检接入测评工作流，并验证断网恢复及客户真实环境。
 2. MMMU-Pro真实多模态推理与AutomationBench明确工具/数据契约及执行接入。
 3. 统一前端主流程与已接入区域，补齐正式Release的批准配置/范围/门禁规则。
 4. 生产身份、镜像封装、持久存储、监控及部署验收。
 
 Outbox按payload路由运行、恢复与分析工作流，使用稳定Workflow ID去重。CANCEL_RUN仍为schema占位，取消由运行行意图轮询消费。派发采用单行有界事务持锁；多副本生产前仍需验证锁竞争与派发容量。
 
-已完成有限GPQA模型生成联调，真实SSH尚未实现。本地凭据引用不能替代生产密钥服务。已有开发操作审计，正式身份、最小权限及生产密钥服务尚未完成。
+已完成有限GPQA模型生成联调和Docker OpenSSH协议验证，客户SSH测评工作流尚未完成。本地凭据引用不能替代生产密钥服务。已有开发操作审计，正式身份、最小权限及生产密钥服务尚未完成。
 
 ## Docker诊断联调
 
@@ -157,3 +157,13 @@ execution_origin由服务端运行环境冻结，默认real；模拟测试应用
 reconciler可恢复已有归档GPQA attempt，绝不重放状态未知的生成请求；unknown会保留占用及审计，等待证据查证。诊断清理使用持久状态和所有权边界，不删除客户既有对象。`autoeval.backup`提供备份及空scratch目标恢复；不得将其开发演练当成生产RPO/RTO证明。
 
 AE_REPORTS_TEST=1启用已存在真实报告的只读目录/证据验证；搭配AE_BROWSER_URL及AE_CHROME_PATH可运行浏览器详情测试。它们不发出模型生成请求。
+
+## 客户SSH资源（首批控制层）
+
+控制台提供独立SSH资源登记/预检。API前缀`/api/autoeval/v1/ssh-resources`，POST `/credentials`保存password/private_key并返回引用，POST登记绑定，GET分页，POST `/{id}/validate`显式预检。主机指纹必须为批准的SHA256格式，不提供自动接受首次连接。密钥类型支持未加密RSA/Ed25519/ECDSA；加密私钥尚未支持。
+
+SSHExecutor只开放固定framework_smoke和0—30秒持续时间，不接收任意命令。远程目录限定在workdir/.autoeval/绑定UUID，结果经SFTP收集，只有已确认终止的自有作业允许清理。既有进程和数据不纳入清理范围。控制面需要直连，无常驻Agent或反向组件。
+
+本机协议联调：可用`deploy/ssh-sim.Dockerfile`构建OpenSSH开发镜像，启动名为autoeval-ssh-sim、带autoeval.role=ssh-simulator标签的容器，仅映射127.0.0.1:2222:22；再从backend执行`uv run python ../deploy/setup_ssh_sim.py`。脚本生成本机专用客户端密钥并存于受保护.secrets，私钥不复制进容器。实际本轮使用已安装OpenSSH的独立Python开发容器验证；该Dockerfile构建尚未在受限网络中验收。
+
+AE_SSH_SIM_TEST=1启用真实SSH/SFTP专项，配合AE_BROWSER_URL和AE_CHROME_PATH可验证页面登记预检，不调用模型。资源预检成功不等于工具已接入：当前GPQA探索仍走Docker适配器，SSH测评工作流待下一批。

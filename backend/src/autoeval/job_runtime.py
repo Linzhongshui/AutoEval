@@ -11,7 +11,7 @@ import time
 import uuid
 from pathlib import Path
 
-ROOT = Path("/work/autoeval-jobs")
+ROOT = Path(os.environ.get("AE_JOB_ROOT", "/work/autoeval-jobs"))
 
 
 def atomic_json(path, value):
@@ -131,9 +131,15 @@ def main():
             for path in folder.iterdir():
                 if path.name not in {".lock", "cleanup.json"}:
                     path.unlink()
-            print(json.dumps({
-                "state": "cleaned", "observed_state": observed_state, "cleaned": True,
-            }))
+            print(
+                json.dumps(
+                    {
+                        "state": "cleaned",
+                        "observed_state": observed_state,
+                        "cleaned": True,
+                    }
+                )
+            )
             return
         elif action == "collect":
             state = inspect_job(folder)

@@ -2,6 +2,7 @@ import { createPortal } from "react-dom";
 import { useState, useEffect } from "react";
 import { ModelRegistry } from "../components/ModelRegistry";
 import { ServiceBindings } from "../components/ServiceBindings";
+import { SSHResources } from "../components/SSHResources";
 type Param = {
   output: number;
   concurrency: number;
@@ -816,7 +817,7 @@ export function EvaluationConsole({
               setModel(id); setParams(values); setSelected(Object.keys(values));
               setScopes(Object.fromEntries(Object.entries(values).map(([key, value]) => [key, value.scope])));
               setSaved(false);
-            }} /><ServiceBindings /><div className="form-grid">
+            }} /><ServiceBindings /><SSHResources /><div className="form-grid">
               <label>模型ID</label>
               <select
                 value={model}

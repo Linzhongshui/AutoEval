@@ -10,8 +10,12 @@ class FileSecretStore:
     def __init__(self, root: Path):
         self.root = root.resolve()
 
-    def put(self, secret: str) -> str:
-        if not secret or len(secret) > 65536 or "\n" in secret or "\r" in secret:
+    def put(self, secret: str, *, allow_multiline: bool = False) -> str:
+        if (
+            not secret
+            or len(secret) > 65536
+            or (not allow_multiline and ("\n" in secret or "\r" in secret))
+        ):
             raise ValueError("Invalid secret")
         self.root.mkdir(parents=True, exist_ok=True, mode=0o700)
         reference = uuid.uuid4().hex

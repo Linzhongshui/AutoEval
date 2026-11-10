@@ -13,6 +13,7 @@ import autoeval.profiles
 import autoeval.registry
 import autoeval.resources
 import autoeval.runs
+import autoeval.ssh_resources
 import autoeval.targets  # noqa: F401 -- register endpoint/probe tables
 from autoeval.config import get_settings
 from autoeval.db import create_database

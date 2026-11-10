@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
+from autoeval.benchmarks import BenchmarkBaseline, compare_baseline
 from autoeval.datasets import read_manifest
 from autoeval.evaluations import EvaluationReport
 from autoeval.models import EvaluationRun, RunSnapshot
@@ -15,7 +16,7 @@ from autoeval.models import EvaluationRun, RunSnapshot
 router = APIRouter(prefix="/api/autoeval/v1/reports", tags=["reports"])
 
 
-def report_data(row, run, snapshot):
+def report_data(row, run, snapshot, baselines=()):
     return {
         "id": str(row.id),
         "run_id": str(row.run_id),
@@ -31,6 +32,9 @@ def report_data(row, run, snapshot):
         "execution_origin": row.execution_origin,
         "gate_status": "not_applicable",
         "analysis_status": "not_enabled",
+        "baseline_comparison": compare_baseline(
+            row.summary, snapshot.canonical_body, baselines
+        ),
     }
 
 
@@ -54,7 +58,8 @@ async def catalog(request: Request, offset: int = 0, limit: int = 20):
                     .limit(limit + 1)
                 )
             ).all()
-            data = [report_data(*row) for row in rows[:limit]]
+            baselines = (await session.scalars(select(BenchmarkBaseline))).all()
+            data = [report_data(*row, baselines) for row in rows[:limit]]
     except SQLAlchemyError as exc:
         raise HTTPException(503, "Report catalog unavailable") from exc
     return {
@@ -82,7 +87,8 @@ async def detail(report_id: uuid.UUID, request: Request):
             ).one_or_none()
             if row is None:
                 raise HTTPException(404, "Report not found")
-            data = report_data(*row)
+            baselines = (await session.scalars(select(BenchmarkBaseline))).all()
+            data = report_data(*row, baselines)
     except SQLAlchemyError as exc:
         raise HTTPException(503, "Report database unavailable") from exc
     return {"data": data, "request_id": request.state.request_id}

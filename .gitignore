@@ -12,3 +12,12 @@ __pycache__/
 
 .vite/
 .secrets/
+
+# Local browser artifacts and editor/share output; reusable checks live in backend/tests.
+/.screenshots/
+/.trae/
+/.trae-html-share-packages/
+/backend/validation-*.xml
+/backend/test-results/
+/frontend/test-results/
+/frontend/playwright-report/

@@ -1,0 +1,55 @@
+"""UI contract checks; all API responses are simulated, never real model requests."""
+
+from pathlib import Path
+
+from playwright.sync_api import expect
+
+
+def test_preflight_blocks_requires_confirmation_and_invalidates(browser_page):
+    page, url, _ = browser_page
+    page.add_init_script(path=Path(__file__).with_name("preflight.js"))
+    page.goto(url + "/#console")
+    page.get_by_label("控制台模型服务", exact=True).select_option("target-1")
+    page.get_by_label("控制台执行资源", exact=True).select_option("resource-1")
+    check = page.get_by_role("button", name="检查服务、资源与配置", exact=True)
+    submit = page.get_by_role("button", name="发起测评", exact=True)
+    check.click()
+    expect(page.get_by_text("资源未就绪", exact=False)).to_be_visible()
+    expect(submit).to_be_disabled()
+    page.evaluate("window.hostReady = true")
+    check.click()
+    expect(page.get_by_text("容器就绪", exact=False)).to_be_visible()
+    expect(submit).to_be_disabled()
+    page.locator(".submission-review input[type=checkbox]").check()
+    expect(submit).to_be_enabled()
+    page.get_by_label("控制台执行资源", exact=True).select_option("")
+    expect(submit).to_be_disabled()
+    assert page.evaluate("window.generated") == 0
+
+
+def test_report_charts_comparison_and_missing_values(browser_page):
+    page, url, _ = browser_page
+    page.add_init_script(path=Path(__file__).with_name("charts.js"))
+    page.goto(url + "/#report/chart-fixture")
+    expect(page.locator(".report-charts")).to_contain_text("+5.00 个百分点")
+    meters = page.locator(".report-charts [role=meter]")
+    expect(meters).to_have_count(2)
+
+    def change(code, name):
+        # A new route forces a fresh report request without arbitrary sleeps.
+        page.evaluate(code + f'; location.hash="report/{name}"')
+        expect(page.locator(".breadcrumb")).to_contain_text("测评报告")
+
+    change("window.chartReport.summary.accuracy=0;"
+           "window.chartReport.baseline_comparison.measured_value=0;"
+           "window.chartReport.baseline_comparison.baseline_value=0", "zero")
+    expect(page.locator('.report-charts [aria-valuenow="0"]')).to_have_count(2)
+    change('window.chartReport.baseline_comparison.status="missing"', "missing")
+    expect(meters).to_have_count(1)
+    change('window.chartReport.baseline_comparison.status="matched";'
+           'window.chartReport.validity="partial"', "partial")
+    expect(page.locator(".accuracy-comparison")).to_contain_text("部分覆盖")
+    expect(meters).to_have_count(1)
+    change('window.chartReport.evidence_status="missing"', "unverified")
+    expect(meters).to_have_count(0)
+    expect(page.locator(".performance-chart-empty")).to_contain_text("暂无性能测评数据")

@@ -169,3 +169,7 @@ uv run pytest -q
 ## 开发数据工作台
 
 开发环境新增“数据工作台”菜单，支持报告提名与评审、外部榜单成绩维护、官方 JSON 快照导入和环境诊断。榜单不要求全部来源于报告；不同来源与比较条件独立分组。使用前应用数据库迁移至 `0022_leaderboard_curation`，详见 [使用与接口说明](./docs/data-workbench.md)。尚未对接官网自动同步。
+
+## 浏览器回归检查
+
+临时浏览器脚本已整理至 `backend/tests/browser_checks/`，复用 Playwright，默认不执行。设置 `AE_BROWSER_TEST=1` 运行模拟预检和图表检查；另设 `AE_BROWSER_LIVE_TEST=1` 检查本机任务、报告及工作台只读导航。浏览器可通过 `AE_CHROME_PATH` 配置，截图输出到已忽略的 `.screenshots/browser-checks/`。真实写请求与外部请求会被拦截。运行步骤及验收边界见 [浏览器测试说明](./backend/tests/browser_checks/README.md)。

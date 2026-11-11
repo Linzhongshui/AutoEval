@@ -3,7 +3,9 @@
 import asyncio
 import base64
 import contextlib
+import copy
 import hashlib
+import io
 import json
 import re
 import sys
@@ -121,23 +123,165 @@ def native_prompt_mmmu(request):
     sample = request["sample"]
     if set(sample) != {"content", "answer"}:
         raise ValueError("Invalid MMMU-Pro sample fields")
+    images = validated_mmmu_images(request)
     content = sample["content"]
-    for image in request["images"]:
+    references = re.findall(r"<AIS_IMAGE_START>(.*?)<AIS_CONTENT_TAG>", content)
+    if not references or any(not re.fullmatch(r"image:[0-9a-f]{64}", ref) for ref in references):
+        raise ValueError("Only frozen MMMU-Pro image identities are accepted")
+    if set(references) != {f"image:{digest}" for digest in images}:
+        raise ValueError("MMMU-Pro sample and image identities differ")
+    # The native template only needs a logical image location. Do not materialize
+    # shared files: convert these exact references to data URLs at the API boundary.
+    return MMPromptTemplate(
+        template=mmmu_pro_infer_cfg["prompt_template"]["template"]
+    ).generate_item({"content": content}, output_field="answer")
+
+
+def validated_mmmu_images(request):
+    from PIL import Image
+
+    images = request["images"]
+    if not isinstance(images, list) or not 1 <= len(images) <= 8:
+        raise ValueError("MMMU-Pro pilot requires 1 to 8 images")
+    verified, total = {}, 0
+    for image in images:
+        if (
+            set(image) != {"sha256", "base64"}
+            or not isinstance(image["base64"], str)
+            or len(image["base64"]) > 6 * 1024 * 1024
+        ):
+            raise ValueError("Invalid MMMU-Pro image envelope")
         raw = base64.b64decode(image["base64"], validate=True)
         digest = hashlib.sha256(raw).hexdigest()
-        if digest != image["sha256"] or f"image:{digest}" not in content:
+        if digest != image["sha256"]:
             raise ValueError("MMMU-Pro image identity changed")
-        path = Path("/work/mmmu-runtime-images") / f"{digest}.jpg"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if path.exists() and hashlib.sha256(path.read_bytes()).hexdigest() != digest:
-            raise ValueError("Materialized image identity changed")
-        path.write_bytes(raw)
-        content = content.replace(f"image:{digest}", str(path))
-    if re.search(r"image:[0-9a-f]{64}", content):
-        raise ValueError("MMMU-Pro sample has unresolved image references")
-    return MMPromptTemplate(template=mmmu_pro_infer_cfg["prompt_template"]["template"]).generate_item(
-        {"content": content}, output_field="answer"
+        total += len(raw)
+        if not raw or len(raw) > 4 * 1024 * 1024 or total > 8 * 1024 * 1024:
+            raise ValueError("MMMU-Pro pilot image byte budget exceeded")
+        with Image.open(io.BytesIO(raw)) as decoded:
+            mime = {
+                "JPEG": "image/jpeg",
+                "PNG": "image/png",
+                "GIF": "image/gif",
+                "WEBP": "image/webp",
+            }.get(decoded.format)
+            if not mime or not 1 <= decoded.width <= 8192 or not 1 <= decoded.height <= 8192:
+                raise ValueError("Unsupported MMMU-Pro image format or dimensions")
+            decoded.verify()
+        verified[digest] = {
+            "sha256": digest,
+            "mime_type": mime,
+            "byte_size": len(raw),
+            "data_url": f"data:{mime};base64,{image['base64']}",
+        }
+    return verified
+
+
+def mmmu_model(request):
+    from ais_bench.benchmark.models.api_models.vllm_custom_api_chat import VLLMCustomAPIChat
+
+    if (
+        request.get("base_url") != "https://api.deepseek.com"
+        or request.get("model") != "deepseek-flash"
+    ):
+        raise ValueError("MMMU-Pro pilot only supports the official approved model")
+    maximum = request["max_tokens"]
+    if type(maximum) is not int or not 1 <= maximum <= 64:
+        raise ValueError("MMMU-Pro pilot output budget exceeded")
+    images = validated_mmmu_images(request)
+    prompt = native_prompt_mmmu(request)
+
+    class FrozenImageModel(VLLMCustomAPIChat):
+        async def get_request_body(self, input, max_out_len, output, **args):
+            body = copy.deepcopy(await super().get_request_body(input, max_out_len, output, **args))
+            for message in body["messages"]:
+                content = message["content"]
+                if not isinstance(content, list):
+                    raise TypeError("Expected native multimodal content")
+                for part in content:
+                    if part["type"] == "text":
+                        continue
+                    if message["role"] != "user" or part["type"] != "image_url":
+                        raise ValueError("Unsupported native multimodal content")
+                    url = part["image_url"]["url"]
+                    if (
+                        not re.fullmatch(r"file://image:[0-9a-f]{64}", url)
+                        or url[13:] not in images
+                    ):
+                        raise ValueError("Unapproved file or external image reference")
+                    part["image_url"]["url"] = images[url[13:]]["data_url"]
+            return body
+
+    model = FrozenImageModel(
+        model=request["model"],
+        url=request["base_url"],
+        api_key=request.get("api_key", ""),
+        retry=1,
+        max_out_len=maximum,
+        generation_kwargs={"temperature": 0, "top_p": 1, "thinking": {"type": "disabled"}},
     )
+    manifest = [{k: v for k, v in image.items() if k != "data_url"} for image in images.values()]
+    return model, prompt, manifest
+
+
+async def native_request_mmmu(request):
+    from ais_bench.benchmark.models.output import RequestOutput
+
+    model, prompt, manifest = mmmu_model(request)
+    parsed = model.parse_template(prompt, mode="gen")
+    body = await model.get_request_body(parsed, request["max_tokens"], RequestOutput())
+    return {
+        "prompt": canonical(prompt).decode(),
+        "input_images": manifest,
+        "request_body": body,
+        "request_sha256": hashlib.sha256(canonical(body)).hexdigest(),
+    }
+
+
+async def native_infer_mmmu(request):
+    import aiohttp
+    from ais_bench.benchmark.models.output import RequestOutput
+
+    model, prompt, manifest = mmmu_model(request)
+
+    class EvidenceOutput(RequestOutput):
+        def update_extra_details_data_from_text_response(self, response):
+            choices = response.get("choices", [])
+            self.extra_details_data["choice_count"] = len(choices)
+            self.extra_details_data["finish_reason"] = (
+                choices[0].get("finish_reason") if choices else None
+            )
+
+    class RestrictedSession:
+        def __init__(self, session):
+            self.session = session
+
+        def post(self, **kwargs):
+            return self.session.post(**kwargs, allow_redirects=False)
+
+    output = EvidenceOutput()
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=60)) as session:
+        await model.generate(
+            model.parse_template(prompt, mode="gen"),
+            request["max_tokens"],
+            output,
+            session=RestrictedSession(session),
+        )
+    success = output.success and output.extra_details_data.get("choice_count") == 1
+    result = {
+        "prompt": canonical(prompt).decode(),
+        "input_images": manifest,
+        "state": "succeeded" if success else "failed",
+        "response": output.content if success else None,
+        "finish_reason": output.extra_details_data.get("finish_reason"),
+        "error_code": None if success else "NATIVE_INFERENCE_FAILED",
+        "usage": {"input_tokens": output.input_tokens, "output_tokens": output.output_tokens},
+    }
+    if success:
+        result["scoring"] = native_score_mmmu(
+            {"predictions": [output.content], "references": [request["sample"]["answer"]]}
+        )
+    return result
 
 
 def native_score_mmmu(request):
@@ -295,6 +439,10 @@ def main():
             result = {"prompt": native_prompt_mmmu(request)}
         elif request["operation"] == "score_mmmu_pro_options10_cot":
             result = native_score_mmmu(request)
+        elif request["operation"] == "request_mmmu_pro_options10_cot":
+            result = asyncio.run(native_request_mmmu(request))
+        elif request["operation"] == "infer_mmmu_pro_smoke":
+            result = asyncio.run(native_infer_mmmu(request))
         elif request["operation"] == "infer_gpqa_smoke":
             result = asyncio.run(native_infer(request))
         elif request["operation"] == "analyze_report":

@@ -3497,3 +3497,71 @@ td small .badge,
 .console-workflow .summary-section p { margin-top: 8px; margin-bottom: 8px; }
 @media(max-width:1200px) { .console-workflow .console-config-fields { grid-template-columns: 1fr; gap: 12px; } }
 @media(max-width:650px) { .console-section-heading { align-items: flex-start; flex-wrap: wrap; } }
+
+/* Keep page-size controls aligned with navigation, overriding form label layout. */
+.pagination label.pagination-page-size {
+  display: inline-flex; flex-direction: row; align-items: center;
+  gap: 8px; margin: 0; width: auto;
+}
+.pagination .pagination-page-size select { margin: 0; height: 36px; }
+.pagination button { height: 36px; display: inline-flex; align-items: center; justify-content: center; }
+.pagination { align-items: center; gap: 8px; padding-top: 16px; }
+
+.model-registry { display: grid; gap: 24px; }
+.model-registry .registry-intro { margin: 0; font-size: 12px; }
+.registry-section { display: grid; gap: 16px; padding-bottom: 24px; border-bottom: 1px solid var(--border); }
+.registry-section:last-of-type { border-bottom: 0; padding-bottom: 0; }
+.registry-section h3 { margin: 0; font-size: 15px; }
+.registry-create-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; }
+.registry-identifier { grid-column: 1 / -1; }
+.model-registry label { display: grid; gap: 8px; min-width: 0; font-size: 12px; font-weight: 500; }
+.model-registry input, .model-registry select { width: 100%; min-width: 0; box-sizing: border-box; font-weight: 400; }
+.registry-binding-grid { display: grid; gap: 18px; }
+.registry-binding-field { display: grid; gap: 10px; }
+.registry-binding-field > .inline { justify-content: flex-end; gap: 10px; font-size: 12px; }
+.registry-binding-field > .inline button { padding: 5px 10px; font-size: 12px; }
+.registry-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.registry-actions button { padding: 9px 16px; font-size: 12px; }
+@media(max-width:600px) { .registry-create-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* Management forms remain readable inside the narrow drawer. */
+.management-drawer > header { position: sticky; top: -28px; z-index: 2; background: white; padding-top: 16px; }
+.management-content .resource-management-form { margin: 0; padding: 0; border: 0; box-shadow: none; }
+.management-content .resource-management-form > summary { font-size: 15px; margin-bottom: 16px; }
+.management-content .resource-management-form > label { display: grid; gap: 6px; margin: 0 0 14px; font-size: 13px; }
+.management-content .resource-management-form input,
+.management-content .resource-management-form select,
+.management-content .resource-management-form textarea { width: 100%; min-width: 0; box-sizing: border-box; }
+.management-content .resource-management-form > button { width: auto; margin: 4px 8px 12px 0; }
+.management-content .resource-management-form > .inline { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
+.management-content .resource-management-form > .inline button { height: 36px; padding: 6px 12px; }
+.management-content .resource-management-form > p { font-size: 13px; line-height: 1.7; overflow-wrap: anywhere; }
+.management-content .resource-management-form > p:empty { display: none; }
+.management-content .resource-management-form li { padding: 12px 0; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.management-content .resource-management-form li > button { display: block; margin-top: 10px; }
+@media(max-width:600px) { .management-drawer > header { top: -18px; } }
+
+.management-content .resource-fields-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; align-items: start; }
+.management-content .resource-fields-grid > label { margin: 0; gap: 6px; min-width: 0; }
+.management-content .resource-fields-grid > :not(label),
+.management-content .resource-fields-grid > .field-wide { grid-column: 1 / -1; }
+.management-content .resource-fields-grid > h3 { margin: 0; font-size: 16px; }
+.management-content .resource-fields-grid > p { margin: 0 0 4px; color: var(--muted); }
+.management-content .resource-fields-grid input,
+.management-content .resource-fields-grid select { height: 38px; padding: 7px 10px; font-size: 13px; }
+.management-content .resource-fields-grid textarea { padding: 10px; font-size: 13px; }
+.management-content .resource-fields-grid > button { justify-self: start; margin: 4px 0; }
+@media(max-width:600px) { .management-content .resource-fields-grid { grid-template-columns: minmax(0, 1fr); } }
+
+.searchable-select { position: relative; min-width: 0; width: 100%; }
+.searchable-select > summary { list-style: none; display: flex; justify-content: space-between; gap: 8px; border: 1px solid var(--border); border-radius: 7px; padding: 9px 12px; background: #fafaff; cursor: pointer; font-size: 13px; }
+.searchable-select > summary::-webkit-details-marker { display: none; }
+.searchable-select > summary[aria-disabled="true"] { opacity: .5; cursor: default; }
+.searchable-select-panel { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; right: 0; min-width: 220px; padding: 10px; background: white; border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px #18204820; display: grid; gap: 8px; }
+.searchable-select-panel select { width: 100%; height: auto !important; padding: 0 !important; }
+.searchable-select-panel option { padding: 9px; white-space: normal; }
+.searchable-select-panel input { width: 100%; min-width: 0; }
+
+.saved-service-list article { padding: 14px 0; border-top: 1px solid var(--border); }
+.saved-service-list article p { margin: 6px 0 10px; font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.saved-service-list article .inline { gap: 12px; }

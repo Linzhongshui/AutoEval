@@ -1,5 +1,6 @@
+import { apiGetOptions } from "./api";
 import { useEffect, useRef, useState } from "react";
-import { apiGet, apiGetPage, apiPost } from "./api";
+import { apiGet, apiPost } from "./api";
 import { REGISTRY_PAGE_SIZE } from "../components/OffsetPagination";
 
 export type Config = {
@@ -55,7 +56,7 @@ export function useOptions<T>(path: string) {
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true); setError(""); setRows([]); setNext(null);
-    apiGetPage<T[]>(`${path}?offset=${offset}&limit=${REGISTRY_PAGE_SIZE}`, controller.signal)
+    apiGetOptions<T[]>(`${path}?offset=${offset}&limit=${REGISTRY_PAGE_SIZE}`, controller.signal)
       .then((page) => { if (!controller.signal.aborted) { setRows(page.data); setNext(page.next_offset); } })
       .catch(() => { if (!controller.signal.aborted) setError("选项加载失败，请重试。"); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });

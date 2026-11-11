@@ -20,7 +20,10 @@
     },
     "kimi-k3": {
       "parameter_count": "2.8T total / 104B active",
-      "metadata_source_url": "https://arxiv.org/abs/2607.24653"
+      "metadata_source_url": "https://arxiv.org/abs/2607.24653",
+      "model_release_date": "2026-07-16",
+      "release_date_source_url": "https://epoch.ai/models/kimi-k3",
+      "release_date_kind": "release date reported by independent evaluator Epoch AI"
     },
     "claude-sonnet-5": {
       "model_release_date": "2026-06-30",
@@ -40,7 +43,10 @@
     },
     "glm-5.3-flash": {
       "parameter_count": "320B total / 18B active",
-      "metadata_source_url": "https://huggingface.co/zai-org/GLM-5.3-Flash"
+      "metadata_source_url": "https://huggingface.co/zai-org/GLM-5.3-Flash",
+      "model_release_date": "2026-08-26",
+      "release_date_source_url": "https://docs.z.ai/release-notes/new-released.md",
+      "release_date_kind": "vendor release-notes date"
     },
     "qwen3.8-max": {
       "model_release_date": "2026-08-03",
@@ -57,11 +63,17 @@
     },
     "glm-5.2": {
       "parameter_count": "744B total / 40B active (publisher model table)",
-      "metadata_source_url": "https://github.com/zai-org/GLM-5"
+      "metadata_source_url": "https://github.com/zai-org/GLM-5",
+      "model_release_date": "2026-06-16",
+      "release_date_source_url": "https://docs.z.ai/release-notes/new-released.md",
+      "release_date_kind": "vendor release-notes date"
     },
     "glm-5.3": {
       "parameter_count": "744B total / 40B active (publisher model table)",
-      "metadata_source_url": "https://github.com/zai-org/GLM-5"
+      "metadata_source_url": "https://github.com/zai-org/GLM-5",
+      "model_release_date": "2026-08-18",
+      "release_date_source_url": "https://docs.z.ai/release-notes/new-released.md",
+      "release_date_kind": "vendor release-notes date"
     },
     "gpt-5.6-sol": {
       "model_release_date": "2026-07-09",
@@ -84,6 +96,10 @@
     "gemini-3.8-flash": {
       "model_release_date": "2026-09-02",
       "metadata_source_url": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/3-8-flash-and-3-8-flash-cyber/"
+    },
+    "gpt-6-astra": {
+      "model_release_date": "2026-09-03",
+      "metadata_source_url": "https://openai.com/index/safety-overview-gpt-6-astra/"
     }
   },
   "official_page_excerpts": {

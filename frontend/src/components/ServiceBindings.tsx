@@ -1,6 +1,7 @@
+import { SearchableSelect } from "./SearchableSelect";
 import { useEffect, useState } from "react";
-import { apiGetPage } from "../services/api";
-import { OffsetPagination, REGISTRY_PAGE_SIZE } from "./OffsetPagination";
+import { apiGetOptions } from "../services/api";
+import { REGISTRY_PAGE_SIZE } from "./OffsetPagination";
 
 type Model = { id: string; model_id: string };
 type Version = { id: string; version: string };
@@ -17,12 +18,12 @@ export function ServiceBindings() {
   const [models, setModels] = useState<Model[]>([]);
   const [versions, setVersions] = useState<Version[]>([]);
   const [targets, setTargets] = useState<Target[]>([]);
-  const [modelOffset, setModelOffset] = useState(0);
-  const [modelNext, setModelNext] = useState<number | null>(null);
-  const [targetOffset, setTargetOffset] = useState(0);
-  const [targetNext, setTargetNext] = useState<number | null>(null);
+  const [modelOffset] = useState(0);
+  const [, setModelNext] = useState<number | null>(null);
+  const [targetOffset] = useState(0);
+  const [, setTargetNext] = useState<number | null>(null);
   const [versionId, setVersionId] = useState("");
-  const [targetId, setTargetId] = useState("");
+  const [, setTargetId] = useState("");
   const [baseUrl, setBaseUrl] = useState("https://api.deepseek.com");
   const [remoteModel, setRemoteModel] = useState("deepseek-flash");
   const [key, setKey] = useState("");
@@ -30,8 +31,8 @@ export function ServiceBindings() {
   const [busy, setBusy] = useState(false);
   const refresh = async (modelPage = modelOffset, targetPage = targetOffset) => {
     const [m, t] = await Promise.all([
-      apiGetPage<Model[]>(`/models?offset=${modelPage}&limit=${REGISTRY_PAGE_SIZE}`),
-      apiGetPage<Target[]>(`/target-bindings?offset=${targetPage}&limit=${REGISTRY_PAGE_SIZE}`),
+      apiGetOptions<Model[]>(`/models?offset=${modelPage}&limit=${REGISTRY_PAGE_SIZE}`),
+      apiGetOptions<Target[]>(`/target-bindings?offset=${targetPage}&limit=${REGISTRY_PAGE_SIZE}`),
     ]);
     setModels(m.data); setModelNext(m.next_offset);
     setTargets(t.data); setTargetNext(t.next_offset);
@@ -42,23 +43,21 @@ export function ServiceBindings() {
     try { await fn(); } catch (error) { setMessage(error instanceof Error ? error.message : "请求失败"); }
     finally { setBusy(false); }
   };
-  return <details className="card stack" aria-label="真实服务绑定">
-    <summary>模型服务与连接检测</summary>
+  return <section className="card resource-management-form resource-fields-grid" aria-label="模型服务绑定">
+    <h3>模型服务与连接检测</h3>
     <p>连接检测只查询模型列表，不发送生成请求。成功不代表测评已启用。</p>
-    <label>已登记模型<select aria-label="服务绑定模型" defaultValue="" onChange={async e => {
+    <label>模型标识<SearchableSelect aria-label="服务绑定模型" defaultValue="" onChange={async e => {
       setVersionId(""); setVersions([]);
       if (!e.target.value) return;
       try { setVersions(await api<Version[]>(`/models/${e.target.value}/versions`)); }
       catch { setMessage("读取模型版本失败"); }
-    }}><option value="">请选择</option>{models.map(m => <option key={m.id} value={m.id}>{m.model_id}</option>)}</select></label>
-    <OffsetPagination label="模型" offset={modelOffset} nextOffset={modelNext} disabled={busy}
-      onChange={(offset) => { setVersionId(""); setVersions([]); setModelOffset(offset); }} />
-    <label>模型版本<select aria-label="服务绑定模型版本" value={versionId} onChange={e => setVersionId(e.target.value)}>
+    }}><option value="">请选择</option>{models.map(m => <option key={m.id} value={m.id}>{m.model_id}</option>)}</SearchableSelect></label>
+    <label>模型版本<SearchableSelect aria-label="服务绑定模型版本" value={versionId} onChange={e => setVersionId(e.target.value)}>
       <option value="">请选择</option>{versions.map(v => <option key={v.id} value={v.id}>{v.version}</option>)}
-    </select></label>
-    <label>API地址<input aria-label="真实API地址" value={baseUrl} onChange={e => setBaseUrl(e.target.value)} /></label>
+    </SearchableSelect></label>
+    <label className="field-wide">API地址<input aria-label="真实API地址" value={baseUrl} onChange={e => setBaseUrl(e.target.value)} /></label>
     <label>远程模型名<input aria-label="远程模型名" value={remoteModel} onChange={e => setRemoteModel(e.target.value)} /></label>
-    <label>API Key<input aria-label="真实API Key" type="password" autoComplete="off" value={key} onChange={e => setKey(e.target.value)} /></label>
+    <label className="field-wide">API Key<input aria-label="真实API Key" type="password" autoComplete="off" value={key} onChange={e => setKey(e.target.value)} /></label>
     <button disabled={busy || !key || !versionId} onClick={() => perform(async () => {
       const credential = await api<{ credential_ref: string }>("/credentials", { value: key });
       setKey("");
@@ -68,18 +67,13 @@ export function ServiceBindings() {
       });
       await refresh(); setTargetId(target.id); setMessage("服务绑定已保存，尚未检测。");
     })}>保存服务绑定</button>
-    <label>已保存服务<select aria-label="已保存真实服务" value={targetId} onChange={e => { setTargetId(e.target.value); setMessage(""); }}>
-      <option value="">请选择</option>{targets.map(t => <option key={t.id} value={t.id}>{t.remote_model} · {t.base_url} · {t.id.slice(0, 8)}</option>)}
-    </select></label>
-    <OffsetPagination label="服务" offset={targetOffset} nextOffset={targetNext} disabled={busy}
-      onChange={(offset) => { setTargetId(""); setTargetOffset(offset); }} />
-    <button disabled={busy || !targetId} onClick={() => perform(async () => {
-      const result = await api<{ outcome: string; details: { models?: string[]; http_status?: number } }>(`/targets/${targetId}/connection-tests`, {});
-      setMessage(result.outcome === "matched" ? "鉴权与目标模型匹配成功；未测试生成，测评尚未启用。"
-        : `连接检测：${result.outcome}${result.details.http_status ? `（HTTP ${result.details.http_status}）` : ""}`);
-    })}>检测已保存服务</button>
-    <button disabled={busy} onClick={() => perform(refresh)}>刷新服务列表</button>
-    {targetId && <p><a href={`#evaluate?target=${encodeURIComponent(targetId)}`}>使用此服务创建探索测评</a>（进入后加载模型默认配置；提交前需确认资源，不会自动调用模型）</p>}
+    <div className="saved-service-list"><div className="spread"><h3>已保存服务</h3><button disabled={busy} onClick={() => perform(refresh)}>刷新列表</button></div>
+      {!targets.length && <p className="muted">暂无已保存服务</p>}
+      {targets.map((target) => <article key={target.id}><b>{target.remote_model}</b><p>{target.base_url}</p><div className="inline"><button disabled={busy} onClick={() => perform(async () => {
+        const result = await api<{ outcome: string; details: { http_status?: number } }>(`/targets/${target.id}/connection-tests`, {});
+        setMessage(`${target.remote_model}：${result.outcome === "matched" ? "鉴权与目标模型匹配成功（未调用生成）" : result.outcome}`);
+      })}>检测连接</button><a href={`#evaluate?target=${encodeURIComponent(target.id)}`}>使用此服务</a></div></article>)}
+    </div>
     <p role="status">{message}</p>
-  </details>;
+  </section>;
 }

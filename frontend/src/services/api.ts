@@ -38,3 +38,17 @@ export interface BackendCapabilities {
   analysis_enabled: boolean;
   customer_ssh_enabled: boolean;
 }
+
+// Small registry option sets are fetched across all pages so search is complete.
+export async function apiGetOptions<T>(path: string, signal?: AbortSignal): Promise<{ data: T; next_offset: null }> {
+  const url = new URL(path, "http://local");
+  const rows: unknown[] = []; let offset: number | null = 0;
+  while (offset !== null) {
+    url.searchParams.set("offset", String(offset)); url.searchParams.set("limit", "100");
+    const page: { data: unknown[]; next_offset: number | null } = await apiGetPage(url.pathname + url.search, signal);
+    rows.push(...page.data);
+    if (page.next_offset !== null && page.next_offset <= offset) throw Error("选项分页异常");
+    offset = page.next_offset;
+  }
+  return { data: rows as T, next_offset: null };
+}

@@ -1,6 +1,8 @@
+import { apiGetOptions } from "../services/api";
+import { SearchableSelect } from "./SearchableSelect";
 import { useEffect, useRef, useState } from "react";
-import { apiGet, apiGetPage, apiPost } from "../services/api";
-import { OffsetPagination, REGISTRY_PAGE_SIZE } from "./OffsetPagination";
+import { apiGet, apiPost } from "../services/api";
+import { REGISTRY_PAGE_SIZE } from "./OffsetPagination";
 
 type Resource = { id: string; binding_key: string; version: number };
 type Run = { id: string; state: string };
@@ -10,8 +12,8 @@ const terminal = new Set(["completed", "failed", "cancelled"]);
 export function DiagnosticTasks() {
   const [resources, setResources] = useState<Resource[]>([]);
   const [resource, setResource] = useState("");
-  const [resourceOffset, setResourceOffset] = useState(0);
-  const [resourceNext, setResourceNext] = useState<number | null>(null);
+  const [resourceOffset] = useState(0);
+  const [, setResourceNext] = useState<number | null>(null);
   const [runs, setRuns] = useState<Run[]>([]);
   const [selected, setSelected] = useState("");
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -21,7 +23,7 @@ export function DiagnosticTasks() {
   const submitting = useRef(false);
   useEffect(() => {
     const controller = new AbortController();
-    apiGetPage<Resource[]>(`/resources?offset=${resourceOffset}&limit=${REGISTRY_PAGE_SIZE}`, controller.signal).then((page) => {
+    apiGetOptions<Resource[]>(`/resources?offset=${resourceOffset}&limit=${REGISTRY_PAGE_SIZE}`, controller.signal).then((page) => {
       setResources(page.data); setResourceNext(page.next_offset); setResource(page.data[0]?.id || "");
     }).catch(() => { if (!controller.signal.aborted) setError("无法加载Docker资源，请检查后端连接。"); });
     return () => controller.abort();
@@ -68,11 +70,10 @@ export function DiagnosticTasks() {
   return <details className="diagnostic-tasks" open>
     <summary>本机 Docker 诊断</summary>
     <p>验证提交、执行与取消链路，每次约15秒。不调用模型，不产生测评成绩，发布门禁不适用。</p>
-    <label>诊断执行资源 <select aria-label="诊断执行资源" value={resource} onChange={(e) => setResource(e.target.value)}>
+    <label>诊断执行资源 <SearchableSelect aria-label="诊断执行资源" value={resource} onChange={(e) => setResource(e.target.value)}>
       <option value="">请选择已登记资源</option>
       {resources.map((row) => <option key={row.id} value={row.id}>{row.binding_key} v{row.version}</option>)}
-    </select></label>
-    <OffsetPagination label="资源" offset={resourceOffset} nextOffset={resourceNext} onChange={setResourceOffset} />
+    </SearchableSelect></label>
     <button type="button" disabled={busy || !resource} onClick={() => void submit()}>提交Docker诊断</button>
     {error && <p role="alert">{error}</p>}
     <label>已保存诊断任务 <select aria-label="已保存诊断任务" value={selected} onChange={(e) => { setDetail(null); setSelected(e.target.value); }}>

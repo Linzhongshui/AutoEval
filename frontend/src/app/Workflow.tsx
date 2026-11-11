@@ -1,3 +1,4 @@
+import { SearchableSelect } from "../components/SearchableSelect";
 import { SubmissionReview } from "../components/SubmissionReview";
 import { ManagementDrawer } from "../components/ManagementDrawer";
 import { PageNumbers } from "../components/PageNumbers";
@@ -5,7 +6,6 @@ import { useEffect, useState } from "react";
 import { ModelRegistry } from "../components/ModelRegistry";
 import { ServiceBindings } from "../components/ServiceBindings";
 import { SSHResources } from "../components/SSHResources";
-import { OffsetPagination } from "../components/OffsetPagination";
 import {
   type Config, type Resource, type Target, eligibleConfig, eligibleTarget,
   useDefaultConfig, useExplorationSubmission, useOptions, withSelected,
@@ -293,13 +293,13 @@ export function Configurations({ profiles, setProfiles, go, notify }: {
         <div className="table-wrap">
           <table>
             <thead><tr>{[
-              "配置名称", "模型 / modelId", "配置来源", ...(kind === "自定义配置" ? ["配置版本"] : []), "数据集", "操作",
+              "配置名称", "模型标识", "配置来源", ...(kind === "自定义配置" ? ["配置版本"] : []), "数据集", "操作",
             ].map((h) => <th key={h}>{h}</th>)}</tr></thead>
             <tbody>
               {filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((p) => (
                 <tr key={p.id}>
                   <td>{p.name}</td>
-                  <td>{p.model || "未指定模型"}<small>{p.modelId || (p.official ? "未提供模型ID" : "通用自定义配置")}</small></td>
+                  <td>{p.modelId || "未关联模型"}</td>
                   <td>{p.source}</td>
                   {kind === "自定义配置" && (
                     <td>
@@ -513,12 +513,11 @@ export function EvaluationConsole({ profiles, setProfiles, notify }: {
           </div>
           <div className="stack">
             <label>模型服务
-              <select aria-label="控制台模型服务" value={target?.id || ""} disabled={busy || targets.loading} onChange={(e) => setTarget(targetRows.find((row) => row.id === e.target.value) || null)}>
+              <SearchableSelect aria-label="控制台模型服务" value={target?.id || ""} disabled={busy || targets.loading} onChange={(e) => setTarget(targetRows.find((row) => row.id === e.target.value) || null)}>
                 <option value="">请选择官方 DeepSeek 服务</option>
                 {targetRows.map((row) => <option key={row.id} value={row.id}>{row.model_key} / {row.model_version} · {row.remote_model} · {row.id.slice(0, 8)}</option>)}
-              </select>
+              </SearchableSelect>
             </label>
-            <OffsetPagination label="服务" offset={targets.offset} nextOffset={targets.next} onChange={targets.setOffset} disabled={targets.loading || busy} />
             <label>资源接入方式
               <select aria-label="控制台资源接入方式" value={resourceKind} disabled={busy} onChange={(e) => { setResourceKind(e.target.value); setResource(null); }}>
                 <option value="docker_local">本机Docker</option>
@@ -526,12 +525,11 @@ export function EvaluationConsole({ profiles, setProfiles, notify }: {
               </select>
             </label>
             <label>执行资源
-              <select aria-label="控制台执行资源" value={resource?.id || ""} disabled={busy || resources.loading} onChange={(e) => setResource(resourceRows.find((row) => row.id === e.target.value) || null)}>
+              <SearchableSelect aria-label="控制台执行资源" value={resource?.id || ""} disabled={busy || resources.loading} onChange={(e) => setResource(resourceRows.find((row) => row.id === e.target.value) || null)}>
                 <option value="">请选择已保存资源</option>
                 {resourceRows.map((row) => <option key={row.id} value={row.id}>{row.binding_key}</option>)}
-              </select>
+              </SearchableSelect>
             </label>
-            <OffsetPagination label="资源" offset={resources.offset} nextOffset={resources.next} onChange={resources.setOffset} disabled={resources.loading || busy} />
           </div>
         </section>
         <section className="console-step stack">
@@ -559,19 +557,18 @@ export function EvaluationConsole({ profiles, setProfiles, notify }: {
             </fieldset>
             <label className="evaluation-version-field">
               <span>配置版本</span>
-              <select aria-label="控制台测评配置" value={config?.id || ""} disabled={busy || loadingDefault} onChange={(e) => {
+              <SearchableSelect aria-label="控制台测评配置" value={config?.id || ""} disabled={busy || loadingDefault} onChange={(e) => {
                 setConfig(configRows.find((row) => row.id === e.target.value) || null);
                 setDefaultError("");
               }}>
                 <option value="">请选择已绑定 Profile 的 GPQA Lite 配置</option>
                 {configRows.map((row) => <option key={row.id} value={row.id}>{row.display_name} · {row.version_label}</option>)}
-              </select>
+              </SearchableSelect>
             </label>
           </div>
           {loadingDefault && <p role="status">正在按配置版本ID读取模型默认配置…</p>}
           {defaultError && <p role="status">{defaultError}</p>}
           <div className="console-config-actions"><button disabled={busy || !target || loadingDefault} onClick={reloadDefault}>加载模型默认配置</button>{configKind === "自定义配置" && <button disabled={config?.kind !== "custom"} onClick={openEditor}>编辑配置</button>}</div>
-          <OffsetPagination label="配置" offset={configs.offset} nextOffset={configs.next} onChange={configs.setOffset} disabled={configs.loading || busy} />
           {[configs, targets, resources].some((source) => source.error) && (
             <p role="alert">选项加载失败。<button onClick={() => { configs.retry(); targets.retry(); resources.retry(); }}>重试选项加载</button></p>
           )}
@@ -610,7 +607,7 @@ export function EvaluationConsole({ profiles, setProfiles, notify }: {
       <section className="card stack summary">
         <h2>任务摘要</h2>
         <h3>{target ? `${target.model_key} / ${target.model_version}` : "未选择模型服务"}</h3>
-        <span>{target?.remote_model || "仅支持 deepseek-flash"}</span>
+        <span>模型标识：{target?.model_key || "未选择"}</span>
         <span>配置：{config ? `${config.display_name} · ${config.version_label}` : "未选择"}</span>
         <fieldset className="run-mode-options">
           <legend>运行方式</legend>

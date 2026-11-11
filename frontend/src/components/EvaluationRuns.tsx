@@ -1,3 +1,4 @@
+import { SearchableSelect } from "./SearchableSelect";
 import { CopyIdentifier } from "./CopyIdentifier";
 import { SubmissionReview } from "./SubmissionReview";
 import { ManagementDrawer } from "./ManagementDrawer";
@@ -10,7 +11,6 @@ import {
   useDefaultConfig, useExplorationSubmission, useOptions, withSelected,
 } from "../services/evaluation";
 import { CaseHistory } from "./CaseHistory";
-import { OffsetPagination } from "./OffsetPagination";
 
 type Run = { report_id?: string | null; id: string; state: string; remote_model?: string; resource_kind?: string; created_at: string };
 type Snapshot = { sha256: string; config_version_id: string; config_sha256: string; target_id: string; remote_model: string; resource_kind: string; sample_count: number; parameters: Record<string, unknown>; manifest_id: string; manifest_sha256: string; tool?: Record<string, unknown>; profile_id?: string; max_model_requests?: number; execution_origin: string };
@@ -117,15 +117,12 @@ export function EvaluationRuns({ runId = "", initialTarget = "", allowSubmit = t
         <section className="card stack">
           <div><h2>新建探索测评</h2><p className="muted">GPQA Lite 使用固定原生 AISBench 路径，每次最多 5 个样本、每样本最多 64 输出 tokens，无自动重测。</p></div>
           <p><a href="#console">登记模型、服务与资源</a> · <a href="#config">维护配置、清单与 Profile</a></p>
-          <label>探索模型服务 <select aria-label="探索模型服务" value={target?.id || ""} disabled={busy || targets.loading} onChange={(event) => setTarget(targetRows.find((row) => row.id === event.target.value) || null)}><option value="">请选择官方DeepSeek目标</option>{targetRows.map((row) => <option key={row.id} value={row.id}>{row.model_key} / {row.model_version} · {row.remote_model} · {row.id.slice(0, 8)}</option>)}</select></label>
-          <OffsetPagination label="探索服务" offset={targets.offset} nextOffset={targets.next} onChange={targets.setOffset} disabled={targets.loading || busy} />
-          <label>探索配置 <select aria-label="探索配置" value={config?.id || ""} disabled={busy || loadingDefault} onChange={(event) => { setConfig(configRows.find((row) => row.id === event.target.value) || null); setDefaultError(""); }}><option value="">请选择已绑定Profile的Lite配置</option>{configRows.map((row) => <option key={row.id} value={row.id}>{row.display_name} · {row.version_label}</option>)}</select></label>
+          <label>探索模型服务 <SearchableSelect aria-label="探索模型服务" value={target?.id || ""} disabled={busy || targets.loading} onChange={(event) => setTarget(targetRows.find((row) => row.id === event.target.value) || null)}><option value="">请选择官方DeepSeek目标</option>{targetRows.map((row) => <option key={row.id} value={row.id}>{row.model_key} / {row.model_version} · {row.remote_model} · {row.id.slice(0, 8)}</option>)}</SearchableSelect></label>
+          <label>探索配置 <SearchableSelect aria-label="探索配置" value={config?.id || ""} disabled={busy || loadingDefault} onChange={(event) => { setConfig(configRows.find((row) => row.id === event.target.value) || null); setDefaultError(""); }}><option value="">请选择已绑定Profile的Lite配置</option>{configRows.map((row) => <option key={row.id} value={row.id}>{row.display_name} · {row.version_label}</option>)}</SearchableSelect></label>
           {loadingDefault && <p role="status">正在读取模型默认配置…</p>}{defaultError && <p role="status">{defaultError}</p>}
           <button disabled={busy || !target || loadingDefault} onClick={reloadDefault}>重新加载模型默认配置</button>
-          <OffsetPagination label="探索配置" offset={configs.offset} nextOffset={configs.next} onChange={configs.setOffset} disabled={configs.loading || busy} />
           <label>探索资源接入方式<select aria-label="探索资源接入方式" value={resourceKind} disabled={busy} onChange={(event) => { setResourceKind(event.target.value); setResource(null); }}><option value="docker_local">本机Docker</option><option value="customer_ssh">客户SSH服务器</option></select></label>
-          <label>探索执行资源 <select aria-label="探索执行资源" value={resource?.id || ""} disabled={busy || resources.loading} onChange={(event) => setResource(resourceRows.find((row) => row.id === event.target.value) || null)}><option value="">请选择资源</option>{resourceRows.map((row) => <option key={row.id} value={row.id}>{row.binding_key}</option>)}</select></label>
-          <OffsetPagination label="探索资源" offset={resources.offset} nextOffset={resources.next} onChange={resources.setOffset} disabled={resources.loading || busy} />
+          <label>探索执行资源 <SearchableSelect aria-label="探索执行资源" value={resource?.id || ""} disabled={busy || resources.loading} onChange={(event) => setResource(resourceRows.find((row) => row.id === event.target.value) || null)}><option value="">请选择资源</option>{resourceRows.map((row) => <option key={row.id} value={row.id}>{row.binding_key}</option>)}</SearchableSelect></label>
           {[configs, targets, resources].some((source) => source.error) && <p role="alert">选项加载失败。<button onClick={() => { configs.retry(); targets.retry(); resources.retry(); }}>重试选项加载</button></p>}
           <p className="muted">配置须为 GPQA 单数据集、Lite、并发 1、temperature=0、top_p=1。每页 20 条，翻页保留已选项，提交时后台再次校验。</p>
           <SubmissionReview config={loadingDefault ? null : config} target={target} resource={resource} resourceKind={resourceKind} busy={busy} submit={() => void submit(config, target, resource, resourceKind)} />

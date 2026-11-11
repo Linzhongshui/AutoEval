@@ -98,7 +98,7 @@ export function CaseHistory({ initialRun = "" }: { initialRun?: string }) {
         </div>
       )}
       {rows.length > 0 && !rows.some((row) => !stateFilter || row.state === stateFilter) && <p className="empty">当前页没有符合条件的尝试</p>}
-      {query && <div className="pagination"><button disabled={query.offset === 0} onClick={() => setQuery({ ...query, offset: Math.max(0, query.offset - 20) })}>历史上一页</button><button disabled={next === null} onClick={() => { if (next !== null) setQuery({ ...query, offset: next }); }}>历史下一页</button></div>}
+      {query && <div className="pagination"><button disabled={query.offset === 0} onClick={() => setQuery({ ...query, offset: Math.max(0, query.offset - 20) })}>上一页</button><button disabled={next === null} onClick={() => { if (next !== null) setQuery({ ...query, offset: next }); }}>下一页</button></div>}
       {evidence !== null && createPortal(
         <dialog ref={evidenceDialog} className="management-drawer" aria-label="Case 执行证据" onCancel={() => setEvidence(null)}>
           <header className="spread"><h2>Case 执行证据</h2><button onClick={() => setEvidence(null)}>关闭</button></header>

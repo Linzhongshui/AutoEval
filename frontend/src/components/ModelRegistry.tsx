@@ -1,3 +1,4 @@
+import { isTestModel, isModelScopeId } from "../services/modelIdentities";
 import { SearchableSelect } from "./SearchableSelect";
 import { ModelIdentifierSelect } from "./ModelIdentifierSelect";
 import { useEffect, useState } from "react";
@@ -35,7 +36,7 @@ export function ModelRegistry({ onApply }: {
       apiGetOptions<RegisteredModel[]>(`/models?offset=${modelPage}&limit=${REGISTRY_PAGE_SIZE}`),
       apiGetOptions<Config[]>(`/test-configs?offset=${configPage}&limit=${REGISTRY_PAGE_SIZE}`),
     ]);
-    setModels(m.data); setModelNext(m.next_offset);
+    setModels(m.data.filter((row) => !isTestModel(row.model_id) && isModelScopeId(row.model_id))); setModelNext(m.next_offset);
     setConfigs(c.data); setConfigNext(c.next_offset);
   };
   useEffect(() => { refresh().catch(() => setMessage("模型登记服务不可用，请启动后端与数据库后刷新。")); }, [modelOffset, configOffset]);

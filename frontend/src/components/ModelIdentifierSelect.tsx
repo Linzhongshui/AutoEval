@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { apiGetPage } from "../services/api";
-import { modelIdentities } from "../services/modelIdentities";
+import { modelIdentities, isModelScopeId } from "../services/modelIdentities";
 
 export function ModelIdentifierSelect({ value, onChange, disabled = false }: {
   value: string; onChange: (value: string) => void; disabled?: boolean;
@@ -14,8 +14,8 @@ export function ModelIdentifierSelect({ value, onChange, disabled = false }: {
       for (const path of ["/models", ...(import.meta.env.DEV ? ["/data-workbench/entries"] : [])]) {
         let offset: number | null = 0;
         while (offset !== null) {
-          const page: { data: { model_id?: string; entry?: { model_name: string } }[]; next_offset: number | null } = await apiGetPage(`${path}?offset=${offset}&limit=100`, controller.signal);
-          for (const row of page.data) { const id = row.model_id || row.entry?.model_name; if (id) ids.add(id); }
+          const page: { data: { model_id?: string; entry?: { model_name: string; conditions?: Record<string, unknown> } }[]; next_offset: number | null } = await apiGetPage(`${path}?offset=${offset}&limit=100`, controller.signal);
+          for (const row of page.data) { const mapped = row.entry?.conditions?.modelscope_model_id; const id = row.model_id || (typeof mapped === "string" && isModelScopeId(mapped) ? mapped : row.entry?.model_name && modelIdentities[row.entry.model_name] ? row.entry.model_name : undefined); if (id && isModelScopeId(id)) ids.add(id); }
           if (page.next_offset !== null && page.next_offset <= offset) throw Error("Invalid pagination");
           offset = page.next_offset;
         }

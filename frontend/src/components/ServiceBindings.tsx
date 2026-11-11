@@ -1,3 +1,4 @@
+import { isModelScopeId, isTestModel } from "../services/modelIdentities";
 import { SearchableSelect } from "./SearchableSelect";
 import { useEffect, useState } from "react";
 import { apiGetOptions } from "../services/api";
@@ -34,7 +35,7 @@ export function ServiceBindings() {
       apiGetOptions<Model[]>(`/models?offset=${modelPage}&limit=${REGISTRY_PAGE_SIZE}`),
       apiGetOptions<Target[]>(`/target-bindings?offset=${targetPage}&limit=${REGISTRY_PAGE_SIZE}`),
     ]);
-    setModels(m.data); setModelNext(m.next_offset);
+    setModels(m.data.filter((model) => !isTestModel(model.model_id) && isModelScopeId(model.model_id))); setModelNext(m.next_offset);
     setTargets(t.data); setTargetNext(t.next_offset);
   };
   useEffect(() => { refresh().catch(() => setMessage("服务绑定暂不可用")); }, [modelOffset, targetOffset]);
@@ -46,14 +47,15 @@ export function ServiceBindings() {
   return <section className="card resource-management-form resource-fields-grid" aria-label="模型服务绑定">
     <h3>模型服务与连接检测</h3>
     <p>连接检测只查询模型列表，不发送生成请求。成功不代表测评已启用。</p>
-    <label>模型标识<SearchableSelect aria-label="服务绑定模型" defaultValue="" onChange={async e => {
+    <p>仅显示已登记的 ModelScope 标识；请先在“模型与默认配置”中登记模型及版本，再绑定服务。</p>
+    <label>ModelScope 标识<SearchableSelect aria-label="服务绑定模型" defaultValue="" onChange={async e => {
       setVersionId(""); setVersions([]);
       if (!e.target.value) return;
       try { setVersions(await api<Version[]>(`/models/${e.target.value}/versions`)); }
       catch { setMessage("读取模型版本失败"); }
     }}><option value="">请选择</option>{models.map(m => <option key={m.id} value={m.id}>{m.model_id}</option>)}</SearchableSelect></label>
-    <label>模型版本<SearchableSelect aria-label="服务绑定模型版本" value={versionId} onChange={e => setVersionId(e.target.value)}>
-      <option value="">请选择</option>{versions.map(v => <option key={v.id} value={v.id}>{v.version}</option>)}
+    <label>模型版本<SearchableSelect aria-label="服务绑定模型版本" disabled={busy || !versions.length} value={versionId} onChange={e => setVersionId(e.target.value)}>
+      <option value="">{versions.length ? "请选择模型版本" : "请先选择模型；无版本时需先登记"}</option>{versions.map(v => <option key={v.id} value={v.id}>{v.version}</option>)}
     </SearchableSelect></label>
     <label className="field-wide">API地址<input aria-label="真实API地址" value={baseUrl} onChange={e => setBaseUrl(e.target.value)} /></label>
     <label>远程模型名<input aria-label="远程模型名" value={remoteModel} onChange={e => setRemoteModel(e.target.value)} /></label>

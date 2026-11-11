@@ -56,3 +56,11 @@ export const modelIdentities: Record<string, { vendor: string; huggingface_id: s
     "huggingface_id": "MiniMaxAI/MiniMax-M2.1"
   }
 };
+
+// Test fixture identities remain in storage for historical task references.
+export function isTestModel(id: string): boolean {
+  return /^(?:navigation-[a-f0-9]{32}|model-browser-[a-f0-9]{10})$/.test(id);
+}
+export function isModelScopeId(id: string): boolean {
+  return /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(id) && !isTestModel(id);
+}

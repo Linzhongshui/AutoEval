@@ -3484,3 +3484,16 @@ td small .badge,
 .leaderboard-compact .score progress { width: 80px; height: 5px; }
 .leaderboard-compact .vendor-logo { width: 16px; height: 16px; }
 
+/* Console controls follow the form hierarchy instead of full-width action rows. */
+.console-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--border); margin-bottom: 16px; padding-bottom: 12px; }
+.console-section-heading .console-step-title { border: 0; margin: 0; padding: 0; }
+.console-section-heading .management-toolbar { margin: 0; gap: 16px; padding: 0; }
+.console-config-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.console-config-actions button { width: auto; padding: 8px 14px; }
+.console-workflow .console-config-fields { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: end; gap: 20px; }
+.console-workflow .evaluation-version-field { width: auto; max-width: none; }
+.console-workflow > .summary { max-height: none; overflow: visible; padding: 20px; gap: 10px; }
+.console-workflow .summary-section { padding-bottom: 12px; }
+.console-workflow .summary-section p { margin-top: 8px; margin-bottom: 8px; }
+@media(max-width:1200px) { .console-workflow .console-config-fields { grid-template-columns: 1fr; gap: 12px; } }
+@media(max-width:650px) { .console-section-heading { align-items: flex-start; flex-wrap: wrap; } }

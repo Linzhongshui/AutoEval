@@ -506,45 +506,41 @@ export function EvaluationConsole({ profiles, setProfiles, notify }: {
     <div className="console-grid console-workflow">
       <div className="console-configuration">
         <section className="console-step">
-          <h3 className="console-step-title">模型接入</h3>
+          <div className="console-section-heading"><h3 className="console-step-title">模型接入</h3><div className="management-toolbar"><ManagementDrawer title="管理模型服务" onDismiss={targets.retry}><ServiceBindings /></ManagementDrawer><ManagementDrawer title="管理执行资源" onDismiss={resources.retry}><SSHResources /></ManagementDrawer></div></div>
           <div className="tabs">
             <button className="active">API接入</button>
             <button disabled title="当前探索路径不支持 IP/Port 拉起">IP/Port 拉起</button>
           </div>
-          <div className="management-toolbar">
-          <ManagementDrawer title="管理模型与默认配置" onDismiss={() => { targets.retry(); configs.retry(); }}><ModelRegistry onApply={(_id, _values, configKey, versionLabel) => {
-            const match = configs.rows.find((row) => row.config_key === configKey && row.version_label === versionLabel && eligibleConfig(row));
-            if (match) setConfig(match);
-            else notify("默认配置已读取；请选择已保存服务，按不可变配置版本ID加载探索参数。");
-          }} /></ManagementDrawer>
-          <ManagementDrawer title="管理模型服务" onDismiss={targets.retry}><ServiceBindings /></ManagementDrawer>
-          <ManagementDrawer title="管理执行资源" onDismiss={resources.retry}><SSHResources /></ManagementDrawer>
-          </div>
           <div className="stack">
-            <label>控制台模型服务
+            <label>模型服务
               <select aria-label="控制台模型服务" value={target?.id || ""} disabled={busy || targets.loading} onChange={(e) => setTarget(targetRows.find((row) => row.id === e.target.value) || null)}>
                 <option value="">请选择官方 DeepSeek 服务</option>
                 {targetRows.map((row) => <option key={row.id} value={row.id}>{row.model_key} / {row.model_version} · {row.remote_model} · {row.id.slice(0, 8)}</option>)}
               </select>
             </label>
-            <OffsetPagination label="控制台服务" offset={targets.offset} nextOffset={targets.next} onChange={targets.setOffset} disabled={targets.loading || busy} />
-            <label>控制台资源接入方式
+            <OffsetPagination label="服务" offset={targets.offset} nextOffset={targets.next} onChange={targets.setOffset} disabled={targets.loading || busy} />
+            <label>资源接入方式
               <select aria-label="控制台资源接入方式" value={resourceKind} disabled={busy} onChange={(e) => { setResourceKind(e.target.value); setResource(null); }}>
                 <option value="docker_local">本机Docker</option>
                 <option value="customer_ssh">客户SSH服务器</option>
               </select>
             </label>
-            <label>控制台执行资源
+            <label>执行资源
               <select aria-label="控制台执行资源" value={resource?.id || ""} disabled={busy || resources.loading} onChange={(e) => setResource(resourceRows.find((row) => row.id === e.target.value) || null)}>
                 <option value="">请选择已保存资源</option>
                 {resourceRows.map((row) => <option key={row.id} value={row.id}>{row.binding_key}</option>)}
               </select>
             </label>
-            <OffsetPagination label="控制台资源" offset={resources.offset} nextOffset={resources.next} onChange={resources.setOffset} disabled={resources.loading || busy} />
+            <OffsetPagination label="资源" offset={resources.offset} nextOffset={resources.next} onChange={resources.setOffset} disabled={resources.loading || busy} />
           </div>
         </section>
         <section className="console-step stack">
-          <h3 className="console-step-title">测评配置</h3>
+          <div className="console-section-heading"><h3 className="console-step-title">测评配置</h3>          <ManagementDrawer title="模型与默认配置" onDismiss={() => { targets.retry(); configs.retry(); }}><ModelRegistry onApply={(_id, _values, configKey, versionLabel) => {
+            const match = configs.rows.find((row) => row.config_key === configKey && row.version_label === versionLabel && eligibleConfig(row));
+            if (match) setConfig(match);
+            else notify("默认配置已读取；请选择已保存服务，按不可变配置版本ID加载探索参数。");
+          }} /></ManagementDrawer>
+</div>
           <div className="console-config-fields">
             <fieldset className="console-config-type">
               <legend>配置类型</legend>
@@ -574,13 +570,13 @@ export function EvaluationConsole({ profiles, setProfiles, notify }: {
           </div>
           {loadingDefault && <p role="status">正在按配置版本ID读取模型默认配置…</p>}
           {defaultError && <p role="status">{defaultError}</p>}
-          <button disabled={busy || !target || loadingDefault} onClick={reloadDefault}>重新加载模型默认配置</button>
-          <OffsetPagination label="控制台配置" offset={configs.offset} nextOffset={configs.next} onChange={configs.setOffset} disabled={configs.loading || busy} />
+          <div className="console-config-actions"><button disabled={busy || !target || loadingDefault} onClick={reloadDefault}>加载模型默认配置</button>{configKind === "自定义配置" && <button disabled={config?.kind !== "custom"} onClick={openEditor}>编辑配置</button>}</div>
+          <OffsetPagination label="配置" offset={configs.offset} nextOffset={configs.next} onChange={configs.setOffset} disabled={configs.loading || busy} />
           {[configs, targets, resources].some((source) => source.error) && (
             <p role="alert">选项加载失败。<button onClick={() => { configs.retry(); targets.retry(); resources.retry(); }}>重试选项加载</button></p>
           )}
           <Note>配置须为单 GPQA 数据集、Lite 且已绑定 Profile；提交时后台再次校验，未绑定的配置不会出现在选项中。</Note>
-          <button disabled={config?.kind !== "custom"} onClick={openEditor}>编辑自定义配置</button>
+
         </section>
         <section className="console-step">
           <h3 className="console-step-title">测评数据集</h3>

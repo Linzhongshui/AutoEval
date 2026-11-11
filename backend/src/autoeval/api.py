@@ -16,6 +16,7 @@ from autoeval.audit import router as audit_router
 from autoeval.case_history import router as case_history_router
 from autoeval.config import Settings, get_settings
 from autoeval.configuration import router as configuration_router
+from autoeval.data_workbench import router as data_workbench_router
 from autoeval.datasets import router as datasets_router
 from autoeval.db import create_database
 from autoeval.evaluations import router as evaluations_router
@@ -40,6 +41,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         await app.state.engine.dispose()
 
     app = FastAPI(title="AutoEval Backend", version="0.1.0", lifespan=lifespan)
+    app.include_router(data_workbench_router)
     app.include_router(configuration_router)
     app.include_router(case_history_router)
     app.include_router(datasets_router)

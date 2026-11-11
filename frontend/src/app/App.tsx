@@ -1,5 +1,5 @@
 import { BackendConnection } from "../components/BackendConnection";
-import { DiagnosticTasks } from "../components/DiagnosticTasks";
+import { DataWorkbench, PublishedLeaderboard } from "../components/DataWorkbench";
 import { DatasetManifests } from "../components/DatasetManifests";
 import { ExecutionBindings } from "../components/ExecutionBindings";
 import { ManagementDrawer } from "../components/ManagementDrawer";
@@ -21,6 +21,7 @@ import {
   Layers,
   Play,
   SlidersHorizontal,
+  Database,
   Sparkles,
   Trophy,
   Zap,
@@ -35,6 +36,7 @@ const menus = [
   { id: "tasks", label: "任务管理", icon: ClipboardList },
   { id: "reports", label: "报告管理", icon: ChartNoAxesColumnIncreasing },
   { id: "leaderboard", label: "测评榜单", icon: Trophy },
+  ...(import.meta.env.DEV ? [{ id: "data-workbench", label: "数据工作台", icon: Database }] : []),
 ];
 
 function Card({
@@ -104,7 +106,8 @@ export function App() {
     config: "按模型与数据集分别维护测试参数、清单和执行绑定。",
     tasks: "追踪每一次测评，定位每一个问题。",
     reports: "查看测评报告，追溯历史结果。",
-    leaderboard: "在相同清单、工具版本与执行参数下比较真实完整报告。",
+    leaderboard: "按来源与比较条件查看模型成绩。",
+    "data-workbench": "评审报告成绩、维护榜单数据及导入官方来源。",
   };
 
   return (
@@ -189,8 +192,8 @@ export function App() {
             open={(id) => go(`report/${id}`)}
           />
         )}
-        {page === "leaderboard" && <RealLeaderboard open={(id) => go(`report/${id}`)} />}
-        {import.meta.env.DEV && <div className="developer-entry"><ManagementDrawer title="开发工具"><DiagnosticTasks /></ManagementDrawer></div>}
+        {page === "leaderboard" && (import.meta.env.DEV ? <div className="stack"><PublishedLeaderboard /><details><summary>平台运行报告候选成绩（未人工评审）</summary><RealLeaderboard open={(id) => go(`report/${id}`)} /></details></div> : <RealLeaderboard open={(id) => go(`report/${id}`)} />)}
+        {import.meta.env.DEV && page === "data-workbench" && <DataWorkbench />}
 
         <footer className="page-foot">
           AutoEval · 智能测评平台

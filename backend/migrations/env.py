@@ -8,6 +8,7 @@ import autoeval.benchmarks
 import autoeval.case_history
 import autoeval.cleanup
 import autoeval.configuration
+import autoeval.data_workbench
 import autoeval.datasets
 import autoeval.evaluations
 import autoeval.profiles

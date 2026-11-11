@@ -1,0 +1,122 @@
+[
+  {
+    "modelscope_id": "deepseek-ai/DeepSeek-R1",
+    "source_url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-R1/summary",
+    "status": "numeric_rows_imported",
+    "fetch_status": "table"
+  },
+  {
+    "modelscope_id": "deepseek-ai/DeepSeek-R1-0528",
+    "source_url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-R1-0528/summary",
+    "status": "numeric_rows_imported",
+    "fetch_status": "table"
+  },
+  {
+    "modelscope_id": "deepseek-ai/DeepSeek-V3-0324",
+    "source_url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-V3-0324/summary",
+    "status": "requires_image_or_html_review",
+    "fetch_status": "no_table"
+  },
+  {
+    "modelscope_id": "deepseek-ai/DeepSeek-V3.1",
+    "source_url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-V3.1/summary",
+    "status": "numeric_rows_imported",
+    "fetch_status": "table"
+  },
+  {
+    "modelscope_id": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "source_url": "https://modelscope.cn/models/Qwen/Qwen3-235B-A22B-Instruct-2507/summary",
+    "status": "numeric_rows_imported",
+    "fetch_status": "table"
+  },
+  {
+    "modelscope_id": "Qwen/Qwen3-30B-A3B-Instruct-2507",
+    "source_url": "https://modelscope.cn/models/Qwen/Qwen3-30B-A3B-Instruct-2507/summary",
+    "status": "numeric_rows_imported",
+    "fetch_status": "table"
+  },
+  {
+    "modelscope_id": "Qwen/Qwen3-32B",
+    "source_url": "https://modelscope.cn/models/Qwen/Qwen3-32B/summary",
+    "status": "requires_image_or_html_review",
+    "fetch_status": "no_table"
+  },
+  {
+    "modelscope_id": "Qwen/QwQ-32B",
+    "source_url": "https://modelscope.cn/models/Qwen/QwQ-32B/summary",
+    "status": "requires_image_or_html_review",
+    "fetch_status": "no_table"
+  },
+  {
+    "modelscope_id": "ZhipuAI/GLM-4.5",
+    "source_url": "https://modelscope.cn/models/ZhipuAI/GLM-4.5/summary",
+    "status": "requires_image_or_html_review",
+    "fetch_status": "table"
+  },
+  {
+    "modelscope_id": "ZhipuAI/GLM-4.5-Air",
+    "source_url": "https://modelscope.cn/models/ZhipuAI/GLM-4.5-Air/summary",
+    "status": "requires_image_or_html_review",
+    "fetch_status": "no_table"
+  },
+  {
+    "modelscope_id": "moonshotai/Kimi-K2-Instruct",
+    "source_url": "https://modelscope.cn/models/moonshotai/Kimi-K2-Instruct/summary",
+    "status": "requires_image_or_html_review",
+    "fetch_status": "table"
+  },
+  {
+    "modelscope_id": "moonshotai/Kimi-K2-Instruct-0905",
+    "source_url": "https://modelscope.cn/models/moonshotai/Kimi-K2-Instruct-0905/summary",
+    "status": "numeric_rows_imported",
+    "fetch_status": "table"
+  },
+  {
+    "modelscope_id": "Shanghai_AI_Laboratory/InternVL3-78B",
+    "source_url": "https://modelscope.cn/models/Shanghai_AI_Laboratory/InternVL3-78B/summary",
+    "status": "requires_image_or_html_review",
+    "fetch_status": "table"
+  },
+  {
+    "modelscope_id": "OpenGVLab/InternVL3-8B",
+    "source_url": "https://modelscope.cn/models/OpenGVLab/InternVL3-8B/summary",
+    "status": "requires_image_or_html_review",
+    "fetch_status": "table"
+  },
+  {
+    "modelscope_id": "Qwen/Qwen2.5-72B-Instruct",
+    "source_url": "https://modelscope.cn/models/Qwen/Qwen2.5-72B-Instruct/summary",
+    "status": "requires_image_or_html_review",
+    "fetch_status": "no_table"
+  },
+  {
+    "modelscope_id": "Qwen/Qwen2.5-32B-Instruct",
+    "source_url": "https://modelscope.cn/models/Qwen/Qwen2.5-32B-Instruct/summary",
+    "status": "requires_image_or_html_review",
+    "fetch_status": "no_table"
+  },
+  {
+    "modelscope_id": "Qwen/Qwen2.5-7B-Instruct",
+    "source_url": "https://modelscope.cn/models/Qwen/Qwen2.5-7B-Instruct/summary",
+    "status": "requires_image_or_html_review",
+    "fetch_status": "no_table"
+  },
+  {
+    "modelscope_id": "Qwen/Qwen2.5-VL-32B-Instruct",
+    "source_url": "https://modelscope.cn/models/Qwen/Qwen2.5-VL-32B-Instruct/summary",
+    "status": "numeric_rows_imported",
+    "fetch_status": "table"
+  },
+  {
+    "modelscope_id": "Qwen/Qwen3-VL-8B-Instruct",
+    "source_url": "https://modelscope.cn/models/Qwen/Qwen3-VL-8B-Instruct/summary",
+    "status": "requires_image_or_html_review",
+    "fetch_status": "no_table"
+  },
+  {
+    "modelscope_id": "Qwen/Qwen3-VL-235B-A22B-Instruct",
+    "source_url": "https://modelscope.cn/models/Qwen/Qwen3-VL-235B-A22B-Instruct/summary",
+    "status": "requires_image_or_html_review",
+    "fetch_status": "no_table"
+  }
+]

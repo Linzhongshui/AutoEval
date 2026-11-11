@@ -1,0 +1,594 @@
+[
+  {
+    "source_key": "official-ms-d743e738b704c927bb34908c1b61ca2d",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-R1/summary",
+    "sha256": "d26d26ddb518fee60c6c6bf7a708bd751b1619d93a4944f188143693d956c77f",
+    "column_header": "DeepSeek R1",
+    "column_index": 7,
+    "source_row": "| English | MMLU (Pass@1) | 88.3 | 87.2 | 88.5 | 85.2 | **91.8** | 90.8 |"
+  },
+  {
+    "source_key": "official-ms-5e0f97b25862b2e560b9f19f01a4653b",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-R1/summary",
+    "sha256": "d26d26ddb518fee60c6c6bf7a708bd751b1619d93a4944f188143693d956c77f",
+    "column_header": "DeepSeek R1",
+    "column_index": 7,
+    "source_row": "| | MMLU-Redux (EM) | 88.9 | 88.0 | 89.1 | 86.7 | - | **92.9** |"
+  },
+  {
+    "source_key": "official-ms-8d81eec0a67414a5a1543c390aba9598",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-R1/summary",
+    "sha256": "d26d26ddb518fee60c6c6bf7a708bd751b1619d93a4944f188143693d956c77f",
+    "column_header": "DeepSeek R1",
+    "column_index": 7,
+    "source_row": "| | MMLU-Pro (EM) | 78.0 | 72.6 | 75.9 | 80.3 | - | **84.0** |"
+  },
+  {
+    "source_key": "official-ms-b7c6cdaa12dac3feb7dd315a8b57a137",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-R1/summary",
+    "sha256": "d26d26ddb518fee60c6c6bf7a708bd751b1619d93a4944f188143693d956c77f",
+    "column_header": "DeepSeek R1",
+    "column_index": 7,
+    "source_row": "| | DROP (3-shot F1) | 88.3 | 83.7 | 91.6 | 83.9 | 90.2 | **92.2** |"
+  },
+  {
+    "source_key": "official-ms-f79016dfb9c9e4e82ebde80a6be5e499",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-R1/summary",
+    "sha256": "d26d26ddb518fee60c6c6bf7a708bd751b1619d93a4944f188143693d956c77f",
+    "column_header": "DeepSeek R1",
+    "column_index": 7,
+    "source_row": "| | IF-Eval (Prompt Strict) | **86.5** | 84.3 | 86.1 | 84.8 | - | 83.3 |"
+  },
+  {
+    "source_key": "official-ms-7a59047ee7a263fc420e4e96bb1f8ac6",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-R1/summary",
+    "sha256": "d26d26ddb518fee60c6c6bf7a708bd751b1619d93a4944f188143693d956c77f",
+    "column_header": "DeepSeek R1",
+    "column_index": 7,
+    "source_row": "| | GPQA-Diamond (Pass@1) | 65.0 | 49.9 | 59.1 | 60.0 | **75.7** | 71.5 |"
+  },
+  {
+    "source_key": "official-ms-25e7f982219b13005921acc1688a0f00",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-R1/summary",
+    "sha256": "d26d26ddb518fee60c6c6bf7a708bd751b1619d93a4944f188143693d956c77f",
+    "column_header": "DeepSeek R1",
+    "column_index": 7,
+    "source_row": "| | SimpleQA (Correct) | 28.4 | 38.2 | 24.9 | 7.0 | **47.0** | 30.1 |"
+  },
+  {
+    "source_key": "official-ms-5fa52124dd3326915377ca2485d81d99",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-R1/summary",
+    "sha256": "d26d26ddb518fee60c6c6bf7a708bd751b1619d93a4944f188143693d956c77f",
+    "column_header": "DeepSeek R1",
+    "column_index": 7,
+    "source_row": "| | FRAMES (Acc.) | 72.5 | 80.5 | 73.3 | 76.9 | - | **82.5** |"
+  },
+  {
+    "source_key": "official-ms-f8e94311774dbed38561d8232c8eb11c",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-R1/summary",
+    "sha256": "d26d26ddb518fee60c6c6bf7a708bd751b1619d93a4944f188143693d956c77f",
+    "column_header": "DeepSeek R1",
+    "column_index": 7,
+    "source_row": "| | AlpacaEval2.0 (LC-winrate) | 52.0 | 51.1 | 70.0 | 57.8 | - | **87.6** |"
+  },
+  {
+    "source_key": "official-ms-e91518aac38914923636af1676e8884d",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-R1/summary",
+    "sha256": "d26d26ddb518fee60c6c6bf7a708bd751b1619d93a4944f188143693d956c77f",
+    "column_header": "DeepSeek R1",
+    "column_index": 7,
+    "source_row": "| Code | LiveCodeBench (Pass@1-COT) | 33.8 | 34.2 | - | 53.8 | 63.4 | **65.9** |"
+  },
+  {
+    "source_key": "official-ms-3502059856d534e71c44f1404f076640",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-R1/summary",
+    "sha256": "d26d26ddb518fee60c6c6bf7a708bd751b1619d93a4944f188143693d956c77f",
+    "column_header": "DeepSeek R1",
+    "column_index": 7,
+    "source_row": "| Math | AIME 2024 (Pass@1) | 16.0 | 9.3 | 39.2 | 63.6 | 79.2 | **79.8** |"
+  },
+  {
+    "source_key": "official-ms-d771263479bfaa29a390b2bd63f69c09",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-R1/summary",
+    "sha256": "d26d26ddb518fee60c6c6bf7a708bd751b1619d93a4944f188143693d956c77f",
+    "column_header": "DeepSeek R1",
+    "column_index": 7,
+    "source_row": "| | MATH-500 (Pass@1) | 78.3 | 74.6 | 90.2 | 90.0 | 96.4 | **97.3** |"
+  },
+  {
+    "source_key": "official-ms-16d6977de6048b3c4f04b6d264cb3563",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-R1/summary",
+    "sha256": "d26d26ddb518fee60c6c6bf7a708bd751b1619d93a4944f188143693d956c77f",
+    "column_header": "DeepSeek R1",
+    "column_index": 7,
+    "source_row": "| Chinese | CLUEWSC (EM) | 85.4 | 87.9 | 90.9 | 89.9 | - | **92.8** |"
+  },
+  {
+    "source_key": "official-ms-f4e2e5717947ae9e01d02d2e1257d713",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-R1/summary",
+    "sha256": "d26d26ddb518fee60c6c6bf7a708bd751b1619d93a4944f188143693d956c77f",
+    "column_header": "DeepSeek R1",
+    "column_index": 7,
+    "source_row": "| | C-Eval (EM) | 76.7 | 76.0 | 86.5 | 68.9 | - | **91.8** |"
+  },
+  {
+    "source_key": "official-ms-23a955f983df6b674b98d8b49bfc6686",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-R1/summary",
+    "sha256": "d26d26ddb518fee60c6c6bf7a708bd751b1619d93a4944f188143693d956c77f",
+    "column_header": "DeepSeek R1",
+    "column_index": 7,
+    "source_row": "| | C-SimpleQA (Correct) | 55.4 | 58.7 | **68.0** | 40.3 | - | 63.7 |"
+  },
+  {
+    "source_key": "official-ms-3f2a29d71d8951765551a1c1d019f1d4",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-R1-0528/summary",
+    "sha256": "d5de0a81ec6fba4ccc3e16f8f971f7a1b4ba4081e5b7159be8ef262593e4a82a",
+    "column_header": "DeepSeek R1 0528",
+    "column_index": 3,
+    "source_row": "|          | MMLU-Redux (EM)                   | 92.9            | 93.4"
+  },
+  {
+    "source_key": "official-ms-6f4b45959e03edba9c46a4ff5f7cec9e",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-R1-0528/summary",
+    "sha256": "d5de0a81ec6fba4ccc3e16f8f971f7a1b4ba4081e5b7159be8ef262593e4a82a",
+    "column_header": "DeepSeek R1 0528",
+    "column_index": 3,
+    "source_row": "|          | MMLU-Pro (EM)                     | 84.0            | 85.0"
+  },
+  {
+    "source_key": "official-ms-61e68b1a0bb378b7581421b403b48603",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-R1-0528/summary",
+    "sha256": "d5de0a81ec6fba4ccc3e16f8f971f7a1b4ba4081e5b7159be8ef262593e4a82a",
+    "column_header": "DeepSeek R1 0528",
+    "column_index": 3,
+    "source_row": "|          | GPQA-Diamond (Pass@1)             | 71.5            | 81.0"
+  },
+  {
+    "source_key": "official-ms-f5a35b1f7d01873c26d0c8f9fa1a452c",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-R1-0528/summary",
+    "sha256": "d5de0a81ec6fba4ccc3e16f8f971f7a1b4ba4081e5b7159be8ef262593e4a82a",
+    "column_header": "DeepSeek R1 0528",
+    "column_index": 3,
+    "source_row": "|          | SimpleQA (Correct)                | 30.1            | 27.8"
+  },
+  {
+    "source_key": "official-ms-5fd8aacb690854594a6eb89292da8a00",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-R1-0528/summary",
+    "sha256": "d5de0a81ec6fba4ccc3e16f8f971f7a1b4ba4081e5b7159be8ef262593e4a82a",
+    "column_header": "DeepSeek R1 0528",
+    "column_index": 3,
+    "source_row": "|          | FRAMES (Acc.)                     | 82.5            | 83.0"
+  },
+  {
+    "source_key": "official-ms-17a8a8690e32f9c7a6869d0fd9e0268d",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-R1-0528/summary",
+    "sha256": "d5de0a81ec6fba4ccc3e16f8f971f7a1b4ba4081e5b7159be8ef262593e4a82a",
+    "column_header": "DeepSeek R1 0528",
+    "column_index": 3,
+    "source_row": "|          | LiveCodeBench (2408-2505) (Pass@1)        | 63.5          | 73.3"
+  },
+  {
+    "source_key": "official-ms-9a4e5dcc42f7bf179b5e5e203a9167e1",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-R1-0528/summary",
+    "sha256": "d5de0a81ec6fba4ccc3e16f8f971f7a1b4ba4081e5b7159be8ef262593e4a82a",
+    "column_header": "DeepSeek R1 0528",
+    "column_index": 3,
+    "source_row": "|          | AIME 2024 (Pass@1)                | 79.8            | 91.4"
+  },
+  {
+    "source_key": "official-ms-cc18b14dcc4cb4e5e7a4aec1390543d7",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-R1-0528/summary",
+    "sha256": "d5de0a81ec6fba4ccc3e16f8f971f7a1b4ba4081e5b7159be8ef262593e4a82a",
+    "column_header": "DeepSeek R1 0528",
+    "column_index": 3,
+    "source_row": "|          | AIME 2025 (Pass@1)                     | 70.0           | 87.5"
+  },
+  {
+    "source_key": "official-ms-d91702c3281713d170d18d27a8cbcd1b",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-R1-0528/summary",
+    "sha256": "d5de0a81ec6fba4ccc3e16f8f971f7a1b4ba4081e5b7159be8ef262593e4a82a",
+    "column_header": "DeepSeek R1 0528",
+    "column_index": 3,
+    "source_row": "|          | HMMT 2025 (Pass@1)            | 41.7 | 79.4 |"
+  },
+  {
+    "source_key": "official-ms-7a6f8cd03dc385a701e51b3d2a56c8ff",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-V3.1/summary",
+    "sha256": "8cfb790cabd0b2e9a208d657dcf7e7ea97a1601fe2d60bc386525df42079247d",
+    "column_header": "DeepSeek V3.1-NonThinking",
+    "column_index": 2,
+    "source_row": "|          | MMLU-Redux (EM)              | 91.8     | 90.5    | 93.7          | 93.4"
+  },
+  {
+    "source_key": "official-ms-ea0078bed9436747fc57ae3723199fe0",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-V3.1/summary",
+    "sha256": "8cfb790cabd0b2e9a208d657dcf7e7ea97a1601fe2d60bc386525df42079247d",
+    "column_header": "DeepSeek V3.1-NonThinking",
+    "column_index": 2,
+    "source_row": "|          | MMLU-Pro (EM)                  | 83.7  | 81.2    | 84.8          | 85.0"
+  },
+  {
+    "source_key": "official-ms-56a6dd9854fd8da9184dd928cbfa3af6",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-V3.1/summary",
+    "sha256": "8cfb790cabd0b2e9a208d657dcf7e7ea97a1601fe2d60bc386525df42079247d",
+    "column_header": "DeepSeek V3.1-NonThinking",
+    "column_index": 2,
+    "source_row": "|          | GPQA-Diamond (Pass@1)           | 74.9   | 68.4   | 80.1            | 81.0"
+  },
+  {
+    "source_key": "official-ms-265addf399b51fca9838815dac026d75",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-V3.1/summary",
+    "sha256": "8cfb790cabd0b2e9a208d657dcf7e7ea97a1601fe2d60bc386525df42079247d",
+    "column_header": "DeepSeek V3.1-NonThinking",
+    "column_index": 2,
+    "source_row": "|          | LiveCodeBench (2408-2505) (Pass@1)     | 56.4    | 43.0    | 74.8          | 73.3"
+  },
+  {
+    "source_key": "official-ms-66e2e09db245592fa25c29f712c19347",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-V3.1/summary",
+    "sha256": "8cfb790cabd0b2e9a208d657dcf7e7ea97a1601fe2d60bc386525df42079247d",
+    "column_header": "DeepSeek V3.1-NonThinking",
+    "column_index": 2,
+    "source_row": "|          | SWE-bench Multilingual (Agent mode)         | 54.5    | 29.3   | -            | 30.5"
+  },
+  {
+    "source_key": "official-ms-eb9f72fd8288e584e94200bd22c53d03",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-V3.1/summary",
+    "sha256": "8cfb790cabd0b2e9a208d657dcf7e7ea97a1601fe2d60bc386525df42079247d",
+    "column_header": "DeepSeek V3.1-NonThinking",
+    "column_index": 2,
+    "source_row": "|          | Terminal-bench (Terminus 1 framework)       | 31.3     | 13.3      | -         | 5.7"
+  },
+  {
+    "source_key": "official-ms-262e1d97cc1c2512888f81cb999301e6",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-V3.1/summary",
+    "sha256": "8cfb790cabd0b2e9a208d657dcf7e7ea97a1601fe2d60bc386525df42079247d",
+    "column_header": "DeepSeek V3.1-NonThinking",
+    "column_index": 2,
+    "source_row": "|          | AIME 2024 (Pass@1)                | 66.3     | 59.4     | 93.1      | 91.4"
+  },
+  {
+    "source_key": "official-ms-9c6cac65f3726d15d271c29ef310be9d",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-V3.1/summary",
+    "sha256": "8cfb790cabd0b2e9a208d657dcf7e7ea97a1601fe2d60bc386525df42079247d",
+    "column_header": "DeepSeek V3.1-NonThinking",
+    "column_index": 2,
+    "source_row": "|          | AIME 2025 (Pass@1)                     | 49.8  | 51.3 | 88.4          | 87.5"
+  },
+  {
+    "source_key": "official-ms-349b04b8e8ecf689ed66445c81939e10",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-V3.1/summary",
+    "sha256": "8cfb790cabd0b2e9a208d657dcf7e7ea97a1601fe2d60bc386525df42079247d",
+    "column_header": "DeepSeek V3.1-NonThinking",
+    "column_index": 2,
+    "source_row": "|          | HMMT 2025 (Pass@1)        | 33.5    | 29.2   | 84.2 | 79.4 |"
+  },
+  {
+    "source_key": "official-ms-94d174d660fde106d5994ab611cf4ab3",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-V3.1/summary",
+    "sha256": "8cfb790cabd0b2e9a208d657dcf7e7ea97a1601fe2d60bc386525df42079247d",
+    "column_header": "DeepSeek V3.1-Thinking",
+    "column_index": 4,
+    "source_row": "|          | MMLU-Redux (EM)              | 91.8     | 90.5    | 93.7          | 93.4"
+  },
+  {
+    "source_key": "official-ms-7a9a074c85ced3cf0b612c63b2731eb8",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-V3.1/summary",
+    "sha256": "8cfb790cabd0b2e9a208d657dcf7e7ea97a1601fe2d60bc386525df42079247d",
+    "column_header": "DeepSeek V3.1-Thinking",
+    "column_index": 4,
+    "source_row": "|          | MMLU-Pro (EM)                  | 83.7  | 81.2    | 84.8          | 85.0"
+  },
+  {
+    "source_key": "official-ms-4031ba8f65db6f49654b10b4fe1508b3",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-V3.1/summary",
+    "sha256": "8cfb790cabd0b2e9a208d657dcf7e7ea97a1601fe2d60bc386525df42079247d",
+    "column_header": "DeepSeek V3.1-Thinking",
+    "column_index": 4,
+    "source_row": "|          | GPQA-Diamond (Pass@1)           | 74.9   | 68.4   | 80.1            | 81.0"
+  },
+  {
+    "source_key": "official-ms-993ea982f2d0227682a6037151256277",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-V3.1/summary",
+    "sha256": "8cfb790cabd0b2e9a208d657dcf7e7ea97a1601fe2d60bc386525df42079247d",
+    "column_header": "DeepSeek V3.1-Thinking",
+    "column_index": 4,
+    "source_row": "|          | SimpleQA             | -      | -    | 93.4  | 92.3"
+  },
+  {
+    "source_key": "official-ms-6563b06b622b7b533af8ccfc8d9ac061",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-V3.1/summary",
+    "sha256": "8cfb790cabd0b2e9a208d657dcf7e7ea97a1601fe2d60bc386525df42079247d",
+    "column_header": "DeepSeek V3.1-Thinking",
+    "column_index": 4,
+    "source_row": "|          | LiveCodeBench (2408-2505) (Pass@1)     | 56.4    | 43.0    | 74.8          | 73.3"
+  },
+  {
+    "source_key": "official-ms-6db6afa933b54d1c29043686a29b8238",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-V3.1/summary",
+    "sha256": "8cfb790cabd0b2e9a208d657dcf7e7ea97a1601fe2d60bc386525df42079247d",
+    "column_header": "DeepSeek V3.1-Thinking",
+    "column_index": 4,
+    "source_row": "|          | AIME 2024 (Pass@1)                | 66.3     | 59.4     | 93.1      | 91.4"
+  },
+  {
+    "source_key": "official-ms-cab83783cc9c6f995b9baaad9e407f17",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-V3.1/summary",
+    "sha256": "8cfb790cabd0b2e9a208d657dcf7e7ea97a1601fe2d60bc386525df42079247d",
+    "column_header": "DeepSeek V3.1-Thinking",
+    "column_index": 4,
+    "source_row": "|          | AIME 2025 (Pass@1)                     | 49.8  | 51.3 | 88.4          | 87.5"
+  },
+  {
+    "source_key": "official-ms-62fc8c295b7f19cfacf9d11c87a328c7",
+    "url": "https://modelscope.cn/models/deepseek-ai/DeepSeek-V3.1/summary",
+    "sha256": "8cfb790cabd0b2e9a208d657dcf7e7ea97a1601fe2d60bc386525df42079247d",
+    "column_header": "DeepSeek V3.1-Thinking",
+    "column_index": 4,
+    "source_row": "|          | HMMT 2025 (Pass@1)        | 33.5    | 29.2   | 84.2 | 79.4 |"
+  },
+  {
+    "source_key": "official-ms-0dc0c5ef9c1ae9d3673b3887e789a130",
+    "url": "https://modelscope.cn/models/Qwen/Qwen3-235B-A22B-Instruct-2507/summary",
+    "sha256": "af233f6e013228859d81a2088521781d4e6a06c5960ab3b7ceee6466f550b5f6",
+    "column_header": "Qwen3-235B-A22B-Instruct-2507",
+    "column_index": 6,
+    "source_row": "| MMLU-Pro | 81.2 | 79.8 | **86.6** | 81.1 | 75.2 | 83.0 |"
+  },
+  {
+    "source_key": "official-ms-38e75d013a1beccbcead971ed4fb5e9b",
+    "url": "https://modelscope.cn/models/Qwen/Qwen3-235B-A22B-Instruct-2507/summary",
+    "sha256": "af233f6e013228859d81a2088521781d4e6a06c5960ab3b7ceee6466f550b5f6",
+    "column_header": "Qwen3-235B-A22B-Instruct-2507",
+    "column_index": 6,
+    "source_row": "| MMLU-Redux | 90.4 | 91.3 | **94.2** | 92.7 | 89.2 | 93.1 |"
+  },
+  {
+    "source_key": "official-ms-ed1f76e592554894dcae5d4a69bce75c",
+    "url": "https://modelscope.cn/models/Qwen/Qwen3-235B-A22B-Instruct-2507/summary",
+    "sha256": "af233f6e013228859d81a2088521781d4e6a06c5960ab3b7ceee6466f550b5f6",
+    "column_header": "Qwen3-235B-A22B-Instruct-2507",
+    "column_index": 6,
+    "source_row": "| GPQA | 68.4 | 66.9 | 74.9 | 75.1 | 62.9 | **77.5** |"
+  },
+  {
+    "source_key": "official-ms-9fea0082eacde9c0668dfc70e84dd3b3",
+    "url": "https://modelscope.cn/models/Qwen/Qwen3-235B-A22B-Instruct-2507/summary",
+    "sha256": "af233f6e013228859d81a2088521781d4e6a06c5960ab3b7ceee6466f550b5f6",
+    "column_header": "Qwen3-235B-A22B-Instruct-2507",
+    "column_index": 6,
+    "source_row": "| SuperGPQA | 57.3 | 51.0 | 56.5 | 57.2 | 48.2 | **62.6** |"
+  },
+  {
+    "source_key": "official-ms-deadc2314e01d43f9710e207d36559be",
+    "url": "https://modelscope.cn/models/Qwen/Qwen3-235B-A22B-Instruct-2507/summary",
+    "sha256": "af233f6e013228859d81a2088521781d4e6a06c5960ab3b7ceee6466f550b5f6",
+    "column_header": "Qwen3-235B-A22B-Instruct-2507",
+    "column_index": 6,
+    "source_row": "| SimpleQA | 27.2 | 40.3 | 22.8 | 31.0 | 12.2 | **54.3** |"
+  },
+  {
+    "source_key": "official-ms-c88a7b1657fabc37150e520e674c2dac",
+    "url": "https://modelscope.cn/models/Qwen/Qwen3-235B-A22B-Instruct-2507/summary",
+    "sha256": "af233f6e013228859d81a2088521781d4e6a06c5960ab3b7ceee6466f550b5f6",
+    "column_header": "Qwen3-235B-A22B-Instruct-2507",
+    "column_index": 6,
+    "source_row": "| CSimpleQA | 71.1 | 60.2 | 68.0 | 74.5 | 60.8 | **84.3** |"
+  },
+  {
+    "source_key": "official-ms-9c01cae50280c3818bdacedec4f62ef4",
+    "url": "https://modelscope.cn/models/Qwen/Qwen3-235B-A22B-Instruct-2507/summary",
+    "sha256": "af233f6e013228859d81a2088521781d4e6a06c5960ab3b7ceee6466f550b5f6",
+    "column_header": "Qwen3-235B-A22B-Instruct-2507",
+    "column_index": 6,
+    "source_row": "| AIME25 | 46.6 | 26.7 | 33.9 | 49.5 | 24.7 | **70.3** |"
+  },
+  {
+    "source_key": "official-ms-06977b34d57e95457c1ee09eafa74bae",
+    "url": "https://modelscope.cn/models/Qwen/Qwen3-235B-A22B-Instruct-2507/summary",
+    "sha256": "af233f6e013228859d81a2088521781d4e6a06c5960ab3b7ceee6466f550b5f6",
+    "column_header": "Qwen3-235B-A22B-Instruct-2507",
+    "column_index": 6,
+    "source_row": "| HMMT25 | 27.5 | 7.9 | 15.9 | 38.8 | 10.0 | **55.4** |"
+  },
+  {
+    "source_key": "official-ms-b53cbc32926e1ab64cbc1bb16d909048",
+    "url": "https://modelscope.cn/models/Qwen/Qwen3-235B-A22B-Instruct-2507/summary",
+    "sha256": "af233f6e013228859d81a2088521781d4e6a06c5960ab3b7ceee6466f550b5f6",
+    "column_header": "Qwen3-235B-A22B-Instruct-2507",
+    "column_index": 6,
+    "source_row": "| LiveCodeBench v6 (25.02-25.05) | 45.2 | 35.8 | 44.6 | 48.9 | 32.9 | **51.8** |"
+  },
+  {
+    "source_key": "official-ms-30e2fb766cc0678df7d138b918004d66",
+    "url": "https://modelscope.cn/models/Qwen/Qwen3-235B-A22B-Instruct-2507/summary",
+    "sha256": "af233f6e013228859d81a2088521781d4e6a06c5960ab3b7ceee6466f550b5f6",
+    "column_header": "Qwen3-235B-A22B-Instruct-2507",
+    "column_index": 6,
+    "source_row": "| IFEval | 82.3 | 83.9 | 87.4 | **89.8** | 83.2 | 88.7 |"
+  },
+  {
+    "source_key": "official-ms-ab42672712ff675020129fb288c39ece",
+    "url": "https://modelscope.cn/models/Qwen/Qwen3-235B-A22B-Instruct-2507/summary",
+    "sha256": "af233f6e013228859d81a2088521781d4e6a06c5960ab3b7ceee6466f550b5f6",
+    "column_header": "Qwen3-235B-A22B-Instruct-2507",
+    "column_index": 6,
+    "source_row": "| Arena-Hard v2* | 45.6 | 61.9 | 51.5 | 66.1 | 52.0 | **79.2** |"
+  },
+  {
+    "source_key": "official-ms-fc366e6ad8f2e5477b5c5ac279d767e1",
+    "url": "https://modelscope.cn/models/Qwen/Qwen3-235B-A22B-Instruct-2507/summary",
+    "sha256": "af233f6e013228859d81a2088521781d4e6a06c5960ab3b7ceee6466f550b5f6",
+    "column_header": "Qwen3-235B-A22B-Instruct-2507",
+    "column_index": 6,
+    "source_row": "| MMLU-ProX | 75.8 | 76.2 | - | 74.5 | 73.2 | **79.4** |"
+  },
+  {
+    "source_key": "official-ms-820d1f582868433f1ef4dc9e27c49089",
+    "url": "https://modelscope.cn/models/Qwen/Qwen3-235B-A22B-Instruct-2507/summary",
+    "sha256": "af233f6e013228859d81a2088521781d4e6a06c5960ab3b7ceee6466f550b5f6",
+    "column_header": "Qwen3-235B-A22B-Instruct-2507",
+    "column_index": 6,
+    "source_row": "| PolyMATH | 32.2 | 25.5 | 30.0 | 44.8 | 27.0 | **50.2** |"
+  },
+  {
+    "source_key": "official-ms-60af7e167241029a3379098111ee7df0",
+    "url": "https://modelscope.cn/models/Qwen/Qwen3-30B-A3B-Instruct-2507/summary",
+    "sha256": "5d25d4b43cdfaf83e3d71df8f3436703ab26d92c07305053be667f577a49bb9e",
+    "column_header": "Qwen3-30B-A3B-Instruct-2507",
+    "column_index": 6,
+    "source_row": "| MMLU-Pro | **81.2** | 79.8 | 81.1 | 75.2 | 69.1 | 78.4 |"
+  },
+  {
+    "source_key": "official-ms-65432407ac3af419c4085ad64de50ddd",
+    "url": "https://modelscope.cn/models/Qwen/Qwen3-30B-A3B-Instruct-2507/summary",
+    "sha256": "5d25d4b43cdfaf83e3d71df8f3436703ab26d92c07305053be667f577a49bb9e",
+    "column_header": "Qwen3-30B-A3B-Instruct-2507",
+    "column_index": 6,
+    "source_row": "| MMLU-Redux | 90.4 | **91.3** | 90.6 | 89.2 | 84.1 | 89.3 |"
+  },
+  {
+    "source_key": "official-ms-6e5bfe9fc3138c37a815606f1e5f940e",
+    "url": "https://modelscope.cn/models/Qwen/Qwen3-30B-A3B-Instruct-2507/summary",
+    "sha256": "5d25d4b43cdfaf83e3d71df8f3436703ab26d92c07305053be667f577a49bb9e",
+    "column_header": "Qwen3-30B-A3B-Instruct-2507",
+    "column_index": 6,
+    "source_row": "| GPQA | 68.4 | 66.9 | **78.3** | 62.9 | 54.8 | 70.4 |"
+  },
+  {
+    "source_key": "official-ms-a4925a339da1ffc1d022dc632262e1dc",
+    "url": "https://modelscope.cn/models/Qwen/Qwen3-30B-A3B-Instruct-2507/summary",
+    "sha256": "5d25d4b43cdfaf83e3d71df8f3436703ab26d92c07305053be667f577a49bb9e",
+    "column_header": "Qwen3-30B-A3B-Instruct-2507",
+    "column_index": 6,
+    "source_row": "| SuperGPQA | **57.3** | 51.0 | 54.6 | 48.2 | 42.2 | 53.4 |"
+  },
+  {
+    "source_key": "official-ms-0c2d258e5bffd0a2649136997b536b7b",
+    "url": "https://modelscope.cn/models/Qwen/Qwen3-30B-A3B-Instruct-2507/summary",
+    "sha256": "5d25d4b43cdfaf83e3d71df8f3436703ab26d92c07305053be667f577a49bb9e",
+    "column_header": "Qwen3-30B-A3B-Instruct-2507",
+    "column_index": 6,
+    "source_row": "| AIME25 | 46.6 | 26.7 | **61.6** | 24.7 | 21.6 | 61.3 |"
+  },
+  {
+    "source_key": "official-ms-3efc0ca8451a59d60c077b8b5d5315d5",
+    "url": "https://modelscope.cn/models/Qwen/Qwen3-30B-A3B-Instruct-2507/summary",
+    "sha256": "5d25d4b43cdfaf83e3d71df8f3436703ab26d92c07305053be667f577a49bb9e",
+    "column_header": "Qwen3-30B-A3B-Instruct-2507",
+    "column_index": 6,
+    "source_row": "| HMMT25 | 27.5 | 7.9 | **45.8** | 10.0 | 12.0 | 43.0 |"
+  },
+  {
+    "source_key": "official-ms-4aa58c1a0fe9320a77d132f447dced02",
+    "url": "https://modelscope.cn/models/Qwen/Qwen3-30B-A3B-Instruct-2507/summary",
+    "sha256": "5d25d4b43cdfaf83e3d71df8f3436703ab26d92c07305053be667f577a49bb9e",
+    "column_header": "Qwen3-30B-A3B-Instruct-2507",
+    "column_index": 6,
+    "source_row": "| LiveCodeBench v6 (25.02-25.05) | **45.2** | 35.8 | 40.1 | 32.9 | 29.0 | 43.2 |"
+  },
+  {
+    "source_key": "official-ms-6c3e300413a6c6c500eb5d1d1da63eae",
+    "url": "https://modelscope.cn/models/Qwen/Qwen3-30B-A3B-Instruct-2507/summary",
+    "sha256": "5d25d4b43cdfaf83e3d71df8f3436703ab26d92c07305053be667f577a49bb9e",
+    "column_header": "Qwen3-30B-A3B-Instruct-2507",
+    "column_index": 6,
+    "source_row": "| IFEval | 82.3 | 83.9 | 84.3 | 83.2 | 83.7 | **84.7** |"
+  },
+  {
+    "source_key": "official-ms-bad6c5f5e3e710c5b86b7722f2ce7c1b",
+    "url": "https://modelscope.cn/models/Qwen/Qwen3-30B-A3B-Instruct-2507/summary",
+    "sha256": "5d25d4b43cdfaf83e3d71df8f3436703ab26d92c07305053be667f577a49bb9e",
+    "column_header": "Qwen3-30B-A3B-Instruct-2507",
+    "column_index": 6,
+    "source_row": "| Arena-Hard v2* | 45.6 | 61.9 | 58.3 | 52.0 | 24.8 | **69.0** |"
+  },
+  {
+    "source_key": "official-ms-128bf367314ceb9913a28621f1340766",
+    "url": "https://modelscope.cn/models/Qwen/Qwen3-30B-A3B-Instruct-2507/summary",
+    "sha256": "5d25d4b43cdfaf83e3d71df8f3436703ab26d92c07305053be667f577a49bb9e",
+    "column_header": "Qwen3-30B-A3B-Instruct-2507",
+    "column_index": 6,
+    "source_row": "| MMLU-ProX | 75.8 | 76.2 | **78.3** | 73.2 | 65.1 | 72.0 |"
+  },
+  {
+    "source_key": "official-ms-21dc0aa684e6be7d55727141d46abf83",
+    "url": "https://modelscope.cn/models/Qwen/Qwen3-30B-A3B-Instruct-2507/summary",
+    "sha256": "5d25d4b43cdfaf83e3d71df8f3436703ab26d92c07305053be667f577a49bb9e",
+    "column_header": "Qwen3-30B-A3B-Instruct-2507",
+    "column_index": 6,
+    "source_row": "| PolyMATH | 32.2 | 25.5 | 41.9 | 27.0 | 23.3 | **43.1** |"
+  },
+  {
+    "source_key": "official-ms-d9b16df4d45349615a6feb52222413c9",
+    "url": "https://modelscope.cn/models/Qwen/Qwen2.5-VL-32B-Instruct/summary",
+    "sha256": "f576ef438e49b68663cfab48303cdd1366982498c679344c14a335ac0962d0fb",
+    "column_header": "Qwen2.5-VL-32B",
+    "column_index": 3,
+    "source_row": "| MMMU |**70.2** | 64.5 | 70 |"
+  },
+  {
+    "source_key": "official-ms-d8e675c63baea8e7e53102fc53f14227",
+    "url": "https://modelscope.cn/models/Qwen/Qwen2.5-VL-32B-Instruct/summary",
+    "sha256": "f576ef438e49b68663cfab48303cdd1366982498c679344c14a335ac0962d0fb",
+    "column_header": "Qwen2.5-VL-32B",
+    "column_index": 3,
+    "source_row": "| MMMU Pro |**51.1** | 46.2 | 49.5 |"
+  },
+  {
+    "source_key": "official-ms-8836928bca120fb638857860d2181d4e",
+    "url": "https://modelscope.cn/models/Qwen/Qwen2.5-VL-32B-Instruct/summary",
+    "sha256": "f576ef438e49b68663cfab48303cdd1366982498c679344c14a335ac0962d0fb",
+    "column_header": "Qwen2.5-VL-32B",
+    "column_index": 3,
+    "source_row": "| MMStar | **70.8** | 68.3 | 69.5 |"
+  },
+  {
+    "source_key": "official-ms-6f22e96c1388efd1dca6ab7137da9a63",
+    "url": "https://modelscope.cn/models/Qwen/Qwen2.5-VL-32B-Instruct/summary",
+    "sha256": "f576ef438e49b68663cfab48303cdd1366982498c679344c14a335ac0962d0fb",
+    "column_header": "Qwen2.5-VL-32B",
+    "column_index": 3,
+    "source_row": "| MathVista | **74.8** | 70.5 | 74.7 |"
+  },
+  {
+    "source_key": "official-ms-de418294ef50c9700e5d03fb61873211",
+    "url": "https://modelscope.cn/models/Qwen/Qwen2.5-VL-32B-Instruct/summary",
+    "sha256": "f576ef438e49b68663cfab48303cdd1366982498c679344c14a335ac0962d0fb",
+    "column_header": "Qwen2.5-VL-32B",
+    "column_index": 3,
+    "source_row": "| MathVision |38.1 | 25.9 | **40.0**|"
+  },
+  {
+    "source_key": "official-ms-e5d2c06805845beec5379e831dc2dc01",
+    "url": "https://modelscope.cn/models/moonshotai/Kimi-K2-Instruct-0905/summary",
+    "sha256": "fbb70f67df597c48b15ac095a504247b083b0b65139e34f89426f0ce0775da59",
+    "column_header": "K2-Instruct-0905",
+    "column_index": 2,
+    "source_row": "| SWE-Bench verified     | ACC    | 69.2 ± 0.63      | 65.8             | 69.6*  | 64.2*  | 66.0*  | 72.7*            | 72.5*          |"
+  },
+  {
+    "source_key": "official-ms-a823346869e86f27fec73a8b55da6028",
+    "url": "https://modelscope.cn/models/moonshotai/Kimi-K2-Instruct-0905/summary",
+    "sha256": "fbb70f67df597c48b15ac095a504247b083b0b65139e34f89426f0ce0775da59",
+    "column_header": "K2-Instruct-0905",
+    "column_index": 2,
+    "source_row": "| SWE-Bench Multilingual | ACC    | 55.9 ± 0.72      | 47.3             | 54.7*  | 52.7   | 54.5*  | 53.3*           | -             |"
+  },
+  {
+    "source_key": "official-ms-db9dce3099732b8a0393fc44ce82de18",
+    "url": "https://modelscope.cn/models/moonshotai/Kimi-K2-Instruct-0905/summary",
+    "sha256": "fbb70f67df597c48b15ac095a504247b083b0b65139e34f89426f0ce0775da59",
+    "column_header": "K2-Instruct-0905",
+    "column_index": 2,
+    "source_row": "| Multi-SWE-Bench        | ACC    | 33.5 ± 0.28      | 31.3             | 32.7   | 31.7   | 29.0   | 35.7            | -             |"
+  },
+  {
+    "source_key": "official-ms-4728237fd8caa56f728f1736bcdf9078",
+    "url": "https://modelscope.cn/models/moonshotai/Kimi-K2-Instruct-0905/summary",
+    "sha256": "fbb70f67df597c48b15ac095a504247b083b0b65139e34f89426f0ce0775da59",
+    "column_header": "K2-Instruct-0905",
+    "column_index": 2,
+    "source_row": "| Terminal-Bench         | ACC    | 44.5 ± 2.03      | 37.5             | 37.5*  | 39.9*  | 31.3*  | 36.4*           | 43.2*         |"
+  }
+]

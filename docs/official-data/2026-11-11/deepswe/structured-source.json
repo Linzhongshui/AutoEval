@@ -1,0 +1,5 @@
+{
+  "url": "https://deepswe.datacurve.ai/artifacts/v1.1/leaderboard-live.json",
+  "sha256": "a7c15d66288fd249c020b9931c017b92d1a3b90e480b3ff34974b752bd030019",
+  "note": "Generated_at and latest_job.finished_at are not per-model evaluation timestamps. Original imported rounded scores preserved."
+}

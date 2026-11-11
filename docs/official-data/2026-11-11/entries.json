@@ -1,0 +1,117 @@
+[
+  {
+    "source_key": "modelscope-qwen25vl-3b-mmmu-0b6da5a154b9",
+    "source_type": "official",
+    "model_name": "Qwen/Qwen2.5-VL-3B-Instruct",
+    "dataset": "MMMU",
+    "metric": "accuracy",
+    "value": 53.1,
+    "unit": "%",
+    "direction": "higher_is_better",
+    "scope": "full",
+    "conditions": {
+      "split": "validation",
+      "evaluation_protocol": "publisher model card",
+      "tool_revision": "unknown",
+      "prompt_template": "unknown",
+      "modelscope_model_id": "Qwen/Qwen2.5-VL-3B-Instruct"
+    },
+    "source_name": "Qwen official ModelScope model card",
+    "source_url": "https://modelscope.cn/models/Qwen/Qwen2.5-VL-3B-Instruct/summary",
+    "source_version": "sha256:0b6da5a154b923da4dc66e416140c9b7f235f9b08fbbcc27fd9df7b586e3150d",
+    "source_sha256": "0b6da5a154b923da4dc66e416140c9b7f235f9b08fbbcc27fd9df7b586e3150d",
+    "notes": "Official published reference, not reproduced by AutoEval; full denotes the published validation split, not AutoEval full execution. Tool and prompt were not disclosed in the extracted table. Not a release gate baseline."
+  },
+  {
+    "source_key": "modelscope-qwen25vl-3b-mmmu-pro-0b6da5a154b9",
+    "source_type": "official",
+    "model_name": "Qwen/Qwen2.5-VL-3B-Instruct",
+    "dataset": "MMMU-Pro",
+    "metric": "accuracy",
+    "value": 31.6,
+    "unit": "%",
+    "direction": "higher_is_better",
+    "scope": "full",
+    "conditions": {
+      "split": "validation",
+      "evaluation_protocol": "publisher model card",
+      "tool_revision": "unknown",
+      "prompt_template": "unknown",
+      "modelscope_model_id": "Qwen/Qwen2.5-VL-3B-Instruct"
+    },
+    "source_name": "Qwen official ModelScope model card",
+    "source_url": "https://modelscope.cn/models/Qwen/Qwen2.5-VL-3B-Instruct/summary",
+    "source_version": "sha256:0b6da5a154b923da4dc66e416140c9b7f235f9b08fbbcc27fd9df7b586e3150d",
+    "source_sha256": "0b6da5a154b923da4dc66e416140c9b7f235f9b08fbbcc27fd9df7b586e3150d",
+    "notes": "Official published reference, not reproduced by AutoEval; full denotes the published validation split, not AutoEval full execution. Tool and prompt were not disclosed in the extracted table. Not a release gate baseline."
+  },
+  {
+    "source_key": "modelscope-qwen25vl-7b-mmmu-1fa65dbb08bc",
+    "source_type": "official",
+    "model_name": "Qwen/Qwen2.5-VL-7B-Instruct",
+    "dataset": "MMMU",
+    "metric": "accuracy",
+    "value": 58.6,
+    "unit": "%",
+    "direction": "higher_is_better",
+    "scope": "full",
+    "conditions": {
+      "split": "validation",
+      "evaluation_protocol": "publisher model card",
+      "tool_revision": "unknown",
+      "prompt_template": "unknown",
+      "modelscope_model_id": "Qwen/Qwen2.5-VL-7B-Instruct"
+    },
+    "source_name": "Qwen official ModelScope model card",
+    "source_url": "https://modelscope.cn/models/Qwen/Qwen2.5-VL-7B-Instruct/summary",
+    "source_version": "sha256:1fa65dbb08bc9ffe0b020409c8686f08b23008c5a68554353305fd2de6f2b81e",
+    "source_sha256": "1fa65dbb08bc9ffe0b020409c8686f08b23008c5a68554353305fd2de6f2b81e",
+    "notes": "Official published reference, not reproduced by AutoEval; full denotes the published validation split, not AutoEval full execution. Tool and prompt were not disclosed in the extracted table. Not a release gate baseline."
+  },
+  {
+    "source_key": "modelscope-qwen25vl-7b-mmmu-pro-1fa65dbb08bc",
+    "source_type": "official",
+    "model_name": "Qwen/Qwen2.5-VL-7B-Instruct",
+    "dataset": "MMMU-Pro",
+    "metric": "accuracy",
+    "value": 41.0,
+    "unit": "%",
+    "direction": "higher_is_better",
+    "scope": "full",
+    "conditions": {
+      "split": "validation",
+      "evaluation_protocol": "publisher model card",
+      "tool_revision": "unknown",
+      "prompt_template": "unknown",
+      "modelscope_model_id": "Qwen/Qwen2.5-VL-7B-Instruct"
+    },
+    "source_name": "Qwen official ModelScope model card",
+    "source_url": "https://modelscope.cn/models/Qwen/Qwen2.5-VL-7B-Instruct/summary",
+    "source_version": "sha256:1fa65dbb08bc9ffe0b020409c8686f08b23008c5a68554353305fd2de6f2b81e",
+    "source_sha256": "1fa65dbb08bc9ffe0b020409c8686f08b23008c5a68554353305fd2de6f2b81e",
+    "notes": "Official published reference, not reproduced by AutoEval; full denotes the published validation split, not AutoEval full execution. Tool and prompt were not disclosed in the extracted table. Not a release gate baseline."
+  },
+  {
+    "source_key": "modelscope-qwen25vl-72b-mmmu-f5e8c36e69c3",
+    "source_type": "official",
+    "model_name": "Qwen/Qwen2.5-VL-72B-Instruct",
+    "dataset": "MMMU",
+    "metric": "accuracy",
+    "value": 70.2,
+    "unit": "%",
+    "direction": "higher_is_better",
+    "scope": "full",
+    "conditions": {
+      "split": "validation",
+      "evaluation_protocol": "publisher model card",
+      "tool_revision": "unknown",
+      "prompt_template": "unknown",
+      "modelscope_model_id": "Qwen/Qwen2.5-VL-72B-Instruct"
+    },
+    "source_name": "Qwen official ModelScope model card",
+    "source_url": "https://modelscope.cn/models/Qwen/Qwen2.5-VL-72B-Instruct/summary",
+    "source_version": "sha256:f5e8c36e69c39b0afe7545a8fe21d262826cc63ed7bbbfa0fd6ce12983edadcd",
+    "source_sha256": "f5e8c36e69c39b0afe7545a8fe21d262826cc63ed7bbbfa0fd6ce12983edadcd",
+    "notes": "Official published reference, not reproduced by AutoEval; full denotes the published validation split, not AutoEval full execution. Tool and prompt were not disclosed in the extracted table. Not a release gate baseline."
+  }
+]

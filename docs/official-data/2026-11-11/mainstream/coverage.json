@@ -1,0 +1,42 @@
+[
+  {
+    "modelscope_id": "deepseek-ai/DeepSeek-R1",
+    "mode": "reasoning",
+    "importable_scores": 15
+  },
+  {
+    "modelscope_id": "deepseek-ai/DeepSeek-R1-0528",
+    "mode": "reasoning",
+    "importable_scores": 9
+  },
+  {
+    "modelscope_id": "deepseek-ai/DeepSeek-V3.1",
+    "mode": "non-thinking",
+    "importable_scores": 9
+  },
+  {
+    "modelscope_id": "deepseek-ai/DeepSeek-V3.1",
+    "mode": "thinking",
+    "importable_scores": 8
+  },
+  {
+    "modelscope_id": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "mode": "non-thinking",
+    "importable_scores": 13
+  },
+  {
+    "modelscope_id": "Qwen/Qwen3-30B-A3B-Instruct-2507",
+    "mode": "non-thinking",
+    "importable_scores": 11
+  },
+  {
+    "modelscope_id": "Qwen/Qwen2.5-VL-32B-Instruct",
+    "mode": "publisher default",
+    "importable_scores": 5
+  },
+  {
+    "modelscope_id": "moonshotai/Kimi-K2-Instruct-0905",
+    "mode": "publisher default",
+    "importable_scores": 4
+  }
+]

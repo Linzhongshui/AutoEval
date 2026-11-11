@@ -1,0 +1,101 @@
+{
+  "metadata": {
+    "deepseek-v4-pro": {
+      "model_release_date": "2026-04-24",
+      "parameter_count": "1.6T total / 49B active",
+      "metadata_source_url": "https://deepseek.com/en/news/v4-preview/"
+    },
+    "deepseek-v4-flash": {
+      "model_release_date": "2026-04-24",
+      "parameter_count": "284B total / 13B active",
+      "metadata_source_url": "https://deepseek.com/en/news/v4-preview/"
+    },
+    "claude-opus-5": {
+      "model_release_date": "2026-07-24",
+      "metadata_source_url": "https://www.anthropic.com/news/claude-opus-5"
+    },
+    "claude-fable-5": {
+      "model_release_date": "2026-06-09",
+      "metadata_source_url": "https://www.anthropic.com/news/claude-fable-5-mythos-5"
+    },
+    "kimi-k3": {
+      "parameter_count": "2.8T total / 104B active",
+      "metadata_source_url": "https://arxiv.org/abs/2607.24653"
+    },
+    "claude-sonnet-5": {
+      "model_release_date": "2026-06-30",
+      "metadata_source_url": "https://www.anthropic.com/news/claude-sonnet-5"
+    },
+    "claude-opus-4.8": {
+      "model_release_date": "2026-05-28",
+      "metadata_source_url": "https://www.anthropic.com/news/claude-opus-4-8"
+    },
+    "grok-4.6": {
+      "model_release_date": "2026-08-12",
+      "metadata_source_url": "https://x.ai/news/grok-4-6"
+    },
+    "gemini-3.7-flash": {
+      "model_release_date": "2026-08-13",
+      "metadata_source_url": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/introducing-gemini-3-7-flash/"
+    },
+    "glm-5.3-flash": {
+      "parameter_count": "320B total / 18B active",
+      "metadata_source_url": "https://huggingface.co/zai-org/GLM-5.3-Flash"
+    },
+    "qwen3.8-max": {
+      "model_release_date": "2026-08-03",
+      "parameter_count": "2.4T total / 95B active",
+      "metadata_source_url": "https://www.alibabacloud.com/en/press-room/alibaba-unveils-qwen3-8-max"
+    },
+    "muse-spark-1.2": {
+      "model_release_date": "2026-08-05",
+      "metadata_source_url": "https://research.meta.ai/blog/introducing-muse-code-and-muse-spark-1-2"
+    },
+    "gpt-5.5": {
+      "model_release_date": "2026-04-23",
+      "metadata_source_url": "https://openai.com/index/introducing-gpt-5-5/"
+    },
+    "glm-5.2": {
+      "parameter_count": "744B total / 40B active (publisher model table)",
+      "metadata_source_url": "https://github.com/zai-org/GLM-5"
+    },
+    "glm-5.3": {
+      "parameter_count": "744B total / 40B active (publisher model table)",
+      "metadata_source_url": "https://github.com/zai-org/GLM-5"
+    },
+    "gpt-5.6-sol": {
+      "model_release_date": "2026-07-09",
+      "release_date_kind": "general availability; earlier limited preview exists",
+      "metadata_source_url": "https://openai.com/index/gpt-5-6/"
+    },
+    "gpt-5.6-luna": {
+      "model_release_date": "2026-07-09",
+      "release_date_kind": "general availability; earlier limited preview exists",
+      "metadata_source_url": "https://openai.com/index/gpt-5-6/"
+    },
+    "gemini-3.5-flash": {
+      "model_release_date": "2026-05-19",
+      "metadata_source_url": "https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-5-flash"
+    },
+    "gemini-3.6-flash": {
+      "model_release_date": "2026-07-21",
+      "metadata_source_url": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-6-flash-3-5-flash-lite-3-5-flash-cyber/"
+    },
+    "gemini-3.8-flash": {
+      "model_release_date": "2026-09-02",
+      "metadata_source_url": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/3-8-flash-and-3-8-flash-cyber/"
+    }
+  },
+  "official_page_excerpts": {
+    "deepseek": {
+      "url": "https://deepseek.com/en/news/v4-preview/",
+      "date": "2026-04-24",
+      "pro": "1.6T total / 49B active",
+      "flash": "284B total / 13B active"
+    },
+    "opus": {
+      "url": "https://www.anthropic.com/news/claude-opus-5",
+      "published": "Jul 24, 2026"
+    }
+  }
+}

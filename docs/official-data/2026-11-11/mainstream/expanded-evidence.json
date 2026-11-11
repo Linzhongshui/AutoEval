@@ -1,0 +1,330 @@
+[
+  {
+    "source_key": "official-ms-9e68c5feabf82528e6255770c84554a2",
+    "url": "https://modelscope.cn/models/ZhipuAI/GLM-4.7/summary",
+    "sha256": "ad072cbe81374f18149a107f2e1cbed93f27a6b220409a6bb34ba97a4d36757e",
+    "column_header": "GLM-4.7",
+    "column_index": 1,
+    "source_row": "| MMLU-Pro                       |  84.3   |  83.2   |       84.6       |     85.0      |      90.1      |       88.2        |    87.5    |     87.0     |"
+  },
+  {
+    "source_key": "official-ms-392dbda8151dfe114f9424708b655c5d",
+    "url": "https://modelscope.cn/models/ZhipuAI/GLM-4.7/summary",
+    "sha256": "ad072cbe81374f18149a107f2e1cbed93f27a6b220409a6bb34ba97a4d36757e",
+    "column_header": "GLM-4.7",
+    "column_index": 1,
+    "source_row": "| GPQA-Diamond                   |  85.7   |  81.0   |       84.5       |     82.4      |      91.9      |       83.4        |    85.7    |     88.1     |"
+  },
+  {
+    "source_key": "official-ms-1f9f820fe886c72d64a5e14d9264f700",
+    "url": "https://modelscope.cn/models/ZhipuAI/GLM-4.7/summary",
+    "sha256": "ad072cbe81374f18149a107f2e1cbed93f27a6b220409a6bb34ba97a4d36757e",
+    "column_header": "GLM-4.7",
+    "column_index": 1,
+    "source_row": "| AIME 2025                      |  95.7   |  93.9   |       94.5       |     93.1      |      95.0      |       87.0        |    94.6    |     94.0     |"
+  },
+  {
+    "source_key": "official-ms-cfa6f2a20711213f716f4d7d15b152a3",
+    "url": "https://modelscope.cn/models/ZhipuAI/GLM-4.7/summary",
+    "sha256": "ad072cbe81374f18149a107f2e1cbed93f27a6b220409a6bb34ba97a4d36757e",
+    "column_header": "GLM-4.7",
+    "column_index": 1,
+    "source_row": "| HMMT Feb. 2025                 |  97.1   |  89.2   |       89.4       |     92.5      |      97.5      |       79.2        |    88.3    |     96.3     |"
+  },
+  {
+    "source_key": "official-ms-677aee641fe000e39927ead4bb328a6a",
+    "url": "https://modelscope.cn/models/ZhipuAI/GLM-4.7/summary",
+    "sha256": "ad072cbe81374f18149a107f2e1cbed93f27a6b220409a6bb34ba97a4d36757e",
+    "column_header": "GLM-4.7",
+    "column_index": 1,
+    "source_row": "| HMMT Nov. 2025                 |  93.5   |  87.7   |       89.2       |     90.2      |      93.3      |       81.7        |    89.2    |      -       |"
+  },
+  {
+    "source_key": "official-ms-3effe06f8d4baf52885ca47953ceddd2",
+    "url": "https://modelscope.cn/models/ZhipuAI/GLM-4.7/summary",
+    "sha256": "ad072cbe81374f18149a107f2e1cbed93f27a6b220409a6bb34ba97a4d36757e",
+    "column_header": "GLM-4.7",
+    "column_index": 1,
+    "source_row": "| IMOAnswerBench                 |  82.0   |  73.5   |       78.6       |     78.3      |      83.3      |       65.8        |    76.0    |      -       |"
+  },
+  {
+    "source_key": "official-ms-41402e59d9ad8732e694b128c292789b",
+    "url": "https://modelscope.cn/models/ZhipuAI/GLM-4.7/summary",
+    "sha256": "ad072cbe81374f18149a107f2e1cbed93f27a6b220409a6bb34ba97a4d36757e",
+    "column_header": "GLM-4.7",
+    "column_index": 1,
+    "source_row": "| LiveCodeBench-v6               |  84.9   |  82.8   |       83.1       |     83.3      |      90.7      |       64.0        |    87.0    |     87.0     |"
+  },
+  {
+    "source_key": "official-ms-2897bea804e80a9595a444f43fcd6588",
+    "url": "https://modelscope.cn/models/ZhipuAI/GLM-4.7/summary",
+    "sha256": "ad072cbe81374f18149a107f2e1cbed93f27a6b220409a6bb34ba97a4d36757e",
+    "column_header": "GLM-4.7",
+    "column_index": 1,
+    "source_row": "| SWE-bench Verified             |  73.8   |  68.0   |       71.3       |     73.1      |      76.2      |       77.2        |    74.9    |     76.3     |"
+  },
+  {
+    "source_key": "official-ms-7b4bc2eb3ff046fe72c8a6f515ea96f3",
+    "url": "https://modelscope.cn/models/ZhipuAI/GLM-4.7/summary",
+    "sha256": "ad072cbe81374f18149a107f2e1cbed93f27a6b220409a6bb34ba97a4d36757e",
+    "column_header": "GLM-4.7",
+    "column_index": 1,
+    "source_row": "| SWE-bench Multilingual         |  66.7   |  53.8   |       61.1       |     70.2      |       -        |       68.0        |    55.3    |      -       |"
+  },
+  {
+    "source_key": "official-ms-27d22728dd97bebc040e9d2dee885fe7",
+    "url": "https://modelscope.cn/models/ZhipuAI/GLM-4.7/summary",
+    "sha256": "ad072cbe81374f18149a107f2e1cbed93f27a6b220409a6bb34ba97a4d36757e",
+    "column_header": "GLM-4.7",
+    "column_index": 1,
+    "source_row": "| Terminal Bench Hard            |  33.3   |  23.6   |       30.6       |   35.4   |      39.0      |       33.3        |    30.5    |     43.0     |"
+  },
+  {
+    "source_key": "official-ms-0118db649df0dd4727d780fee8122a99",
+    "url": "https://modelscope.cn/models/ZhipuAI/GLM-4.7/summary",
+    "sha256": "ad072cbe81374f18149a107f2e1cbed93f27a6b220409a6bb34ba97a4d36757e",
+    "column_header": "GLM-4.7",
+    "column_index": 1,
+    "source_row": "| Terminal Bench 2.0             |  41.0   |  24.5   |       35.7       |     46.4      |      54.2      |       42.8        |    35.2    |     47.6     |"
+  },
+  {
+    "source_key": "official-ms-bfb688666045fd2ccfc9c37a7f818c21",
+    "url": "https://modelscope.cn/models/moonshotai/Kimi-K2-Thinking/summary",
+    "sha256": "8343341da86d2a74ee576768ea2f8c0be2d3e9cf1cb51838a794581e7a1466cd",
+    "column_header": "K2 Thinking",
+    "column_index": 2,
+    "source_row": "| **AIME25** | no tools | 94.5 | 94.6 | 87.0 | 51.0 | 89.3 | 91.7 |"
+  },
+  {
+    "source_key": "official-ms-7a2b92a20e2ef3e25bc73987a3e47cdf",
+    "url": "https://modelscope.cn/models/moonshotai/Kimi-K2-Thinking/summary",
+    "sha256": "8343341da86d2a74ee576768ea2f8c0be2d3e9cf1cb51838a794581e7a1466cd",
+    "column_header": "K2 Thinking",
+    "column_index": 2,
+    "source_row": "| **HMMT25** | no tools | 89.4 | 93.3 | 74.6* | 38.8 | 83.6 | 90.0 |"
+  },
+  {
+    "source_key": "official-ms-7919c65f020c7c2155d21815aa7fbac1",
+    "url": "https://modelscope.cn/models/moonshotai/Kimi-K2-Thinking/summary",
+    "sha256": "8343341da86d2a74ee576768ea2f8c0be2d3e9cf1cb51838a794581e7a1466cd",
+    "column_header": "K2 Thinking",
+    "column_index": 2,
+    "source_row": "| **IMO-AnswerBench** | no tools | 78.6 | 76.0* | 65.9* | 45.8 | 76.0* | 73.1 |"
+  },
+  {
+    "source_key": "official-ms-97870a0e89cabc0450a0db2285f939ae",
+    "url": "https://modelscope.cn/models/moonshotai/Kimi-K2-Thinking/summary",
+    "sha256": "8343341da86d2a74ee576768ea2f8c0be2d3e9cf1cb51838a794581e7a1466cd",
+    "column_header": "K2 Thinking",
+    "column_index": 2,
+    "source_row": "| **GPQA** | no tools | 84.5 | 85.7 | 83.4 | 74.2 | 79.9 | 87.5 |"
+  },
+  {
+    "source_key": "official-ms-4a2d97ce5206de8e89d190c61b47f951",
+    "url": "https://modelscope.cn/models/moonshotai/Kimi-K2-Thinking/summary",
+    "sha256": "8343341da86d2a74ee576768ea2f8c0be2d3e9cf1cb51838a794581e7a1466cd",
+    "column_header": "K2 Thinking",
+    "column_index": 2,
+    "source_row": "| **MMLU-Pro** | no tools | 84.6 | 87.1 | 87.5 | 81.9 | 85.0 |"
+  },
+  {
+    "source_key": "official-ms-182dd9c377f8e977c37a02f6396c1dbf",
+    "url": "https://modelscope.cn/models/moonshotai/Kimi-K2-Thinking/summary",
+    "sha256": "8343341da86d2a74ee576768ea2f8c0be2d3e9cf1cb51838a794581e7a1466cd",
+    "column_header": "K2 Thinking",
+    "column_index": 2,
+    "source_row": "| **MMLU-Redux** | no tools | 94.4 | 95.3 | 95.6 | 92.7 | 93.7 |"
+  },
+  {
+    "source_key": "official-ms-107df2bb584c397ac9bc23e8a050d79e",
+    "url": "https://modelscope.cn/models/moonshotai/Kimi-K2-Thinking/summary",
+    "sha256": "8343341da86d2a74ee576768ea2f8c0be2d3e9cf1cb51838a794581e7a1466cd",
+    "column_header": "K2 Thinking",
+    "column_index": 2,
+    "source_row": "| **Frames** | w/ tools | 87.0 | 86.0* | 85.0* | 58.1 | 80.2* |"
+  },
+  {
+    "source_key": "official-ms-7bb32ecab77ecd534d7c13d0bac9995d",
+    "url": "https://modelscope.cn/models/moonshotai/Kimi-K2-Thinking/summary",
+    "sha256": "8343341da86d2a74ee576768ea2f8c0be2d3e9cf1cb51838a794581e7a1466cd",
+    "column_header": "K2 Thinking",
+    "column_index": 2,
+    "source_row": "| **SWE-bench Verified** | w/ tools | 71.3 | 74.9 | 77.2 | 69.2 | 67.8 |"
+  },
+  {
+    "source_key": "official-ms-505784998aa27ea5f7795032eae8bb4c",
+    "url": "https://modelscope.cn/models/moonshotai/Kimi-K2-Thinking/summary",
+    "sha256": "8343341da86d2a74ee576768ea2f8c0be2d3e9cf1cb51838a794581e7a1466cd",
+    "column_header": "K2 Thinking",
+    "column_index": 2,
+    "source_row": "| **SWE-bench Multilingual** | w/ tools | 61.1 | 55.3* | 68.0 | 55.9 | 57.9 |"
+  },
+  {
+    "source_key": "official-ms-b05a18d28abb824538b82c3fb9986d66",
+    "url": "https://modelscope.cn/models/moonshotai/Kimi-K2-Thinking/summary",
+    "sha256": "8343341da86d2a74ee576768ea2f8c0be2d3e9cf1cb51838a794581e7a1466cd",
+    "column_header": "K2 Thinking",
+    "column_index": 2,
+    "source_row": "| **Multi-SWE-bench** | w/ tools | 41.9 | 39.3* | 44.3 | 33.5 | 30.6 |"
+  },
+  {
+    "source_key": "official-ms-3d55e16feedc6d76a771e612cee25141",
+    "url": "https://modelscope.cn/models/moonshotai/Kimi-K2-Thinking/summary",
+    "sha256": "8343341da86d2a74ee576768ea2f8c0be2d3e9cf1cb51838a794581e7a1466cd",
+    "column_header": "K2 Thinking",
+    "column_index": 2,
+    "source_row": "| **LiveCodeBenchV6** | no tools | 83.1 | 87.0* | 64.0* | 56.1* | 74.1 |"
+  },
+  {
+    "source_key": "official-ms-8acbd071fbfd55aa5e0ad0dc999cab6a",
+    "url": "https://modelscope.cn/models/moonshotai/Kimi-K2-Thinking/summary",
+    "sha256": "8343341da86d2a74ee576768ea2f8c0be2d3e9cf1cb51838a794581e7a1466cd",
+    "column_header": "K2 Thinking",
+    "column_index": 2,
+    "source_row": "| **Terminal-Bench** | w/ simulated tools (JSON) | 47.1 | 43.8 | 51.0 | 44.5 | 37.7 |"
+  },
+  {
+    "source_key": "official-ms-25d4b8359732573aea98d49fda254d06",
+    "url": "https://modelscope.cn/models/MiniMax/MiniMax-M2/summary",
+    "sha256": "a9b0e3b1f649531ebffb24952de6de97d340b5ef6a944a872cabe00060357965",
+    "column_header": "MiniMax-M2",
+    "column_index": 1,
+    "source_row": "| **SWE-bench Verified** | 69.4 | 72.7 * | 77.2 * | 63.8 * | 74.9 * | 68 * | 69.2 * | 67.8 * |"
+  },
+  {
+    "source_key": "official-ms-1632219fa56f0dbb309dd5abc2ea3248",
+    "url": "https://modelscope.cn/models/MiniMax/MiniMax-M2/summary",
+    "sha256": "a9b0e3b1f649531ebffb24952de6de97d340b5ef6a944a872cabe00060357965",
+    "column_header": "MiniMax-M2",
+    "column_index": 1,
+    "source_row": "| **Multi-SWE-Bench** | 36.2 | 35.7 * | 44.3 | / | / | 30 | 33.5 | 30.6 |"
+  },
+  {
+    "source_key": "official-ms-fc8dd6eb0cf1bb743713ca4619f2d88b",
+    "url": "https://modelscope.cn/models/MiniMax/MiniMax-M2/summary",
+    "sha256": "a9b0e3b1f649531ebffb24952de6de97d340b5ef6a944a872cabe00060357965",
+    "column_header": "MiniMax-M2",
+    "column_index": 1,
+    "source_row": "| **SWE-bench Multilingual** | 56.5 | 56.9 * | 68 | / | / | 53.8 | 55.9 * | 57.9 * |"
+  },
+  {
+    "source_key": "official-ms-ecf9672062a2ec1cb9ed72af21b2ec7e",
+    "url": "https://modelscope.cn/models/MiniMax/MiniMax-M2/summary",
+    "sha256": "a9b0e3b1f649531ebffb24952de6de97d340b5ef6a944a872cabe00060357965",
+    "column_header": "MiniMax-M2",
+    "column_index": 1,
+    "source_row": "| **Terminal-Bench** | 46.3 | 36.4 * | 50 * | 25.3 * | 43.8 * | 40.5 * | 44.5 * | 37.7 * |"
+  },
+  {
+    "source_key": "official-ms-736f627138dc723e8d291900034f3d2a",
+    "url": "https://modelscope.cn/models/MiniMax/MiniMax-M2/summary",
+    "sha256": "a9b0e3b1f649531ebffb24952de6de97d340b5ef6a944a872cabe00060357965",
+    "column_header": "MiniMax-M2",
+    "column_index": 1,
+    "source_row": "| AIME25 | 78 | 74 | 88 | 88 | 94 | 86 | 57 | 88 |"
+  },
+  {
+    "source_key": "official-ms-1942b6a99e3b64acaee5e28088b251f4",
+    "url": "https://modelscope.cn/models/MiniMax/MiniMax-M2/summary",
+    "sha256": "a9b0e3b1f649531ebffb24952de6de97d340b5ef6a944a872cabe00060357965",
+    "column_header": "MiniMax-M2",
+    "column_index": 1,
+    "source_row": "| MMLU-Pro | 82 | 84 | 88 | 86 | 87 | 83 | 82 | 85 |"
+  },
+  {
+    "source_key": "official-ms-ec8786bacda4af5f7d62185d8f9878ab",
+    "url": "https://modelscope.cn/models/MiniMax/MiniMax-M2/summary",
+    "sha256": "a9b0e3b1f649531ebffb24952de6de97d340b5ef6a944a872cabe00060357965",
+    "column_header": "MiniMax-M2",
+    "column_index": 1,
+    "source_row": "| GPQA-Diamond | 78 | 78 | 83 | 84 | 85 | 78 | 77 | 80 |"
+  },
+  {
+    "source_key": "official-ms-e4c4c1f7b1e86cddf4b8f90a754984f4",
+    "url": "https://modelscope.cn/models/MiniMax/MiniMax-M2/summary",
+    "sha256": "a9b0e3b1f649531ebffb24952de6de97d340b5ef6a944a872cabe00060357965",
+    "column_header": "MiniMax-M2",
+    "column_index": 1,
+    "source_row": "| LiveCodeBench (LCB) | 83 | 66 | 71 | 80 | 85 | 70 | 61 | 79 |"
+  },
+  {
+    "source_key": "official-ms-6ba8c3755bdb99081b6c333171c21baa",
+    "url": "https://modelscope.cn/models/MiniMax/MiniMax-M2/summary",
+    "sha256": "a9b0e3b1f649531ebffb24952de6de97d340b5ef6a944a872cabe00060357965",
+    "column_header": "MiniMax-M2",
+    "column_index": 1,
+    "source_row": "| Terminal-Bench-Hard | 24 | 30 | 33 | 25 | 31 | 23 | 23 | 29 |"
+  },
+  {
+    "source_key": "official-ms-d9881590e4f1a06bd8dd3a398d975713",
+    "url": "https://modelscope.cn/models/MiniMax/MiniMax-M2.1/summary",
+    "sha256": "459e6ef0bfc12d151386e3711df97515a7bf8a2dc8cab7df8d9045fee1e0c7f1",
+    "column_header": "MiniMax-M2.1",
+    "column_index": 1,
+    "source_row": "| SWE-bench Verified | 74.0 | 69.4 | 77.2 | 80.9 | 78.0 | 80.0 | 73.1 |"
+  },
+  {
+    "source_key": "official-ms-245ef3e51b3e9807bf9a20818c8724d5",
+    "url": "https://modelscope.cn/models/MiniMax/MiniMax-M2.1/summary",
+    "sha256": "459e6ef0bfc12d151386e3711df97515a7bf8a2dc8cab7df8d9045fee1e0c7f1",
+    "column_header": "MiniMax-M2.1",
+    "column_index": 1,
+    "source_row": "| Multi-SWE-bench | 49.4 | 36.2 | 44.3 | 50.0 | 42.7 | x | 37.4 |"
+  },
+  {
+    "source_key": "official-ms-2c4074faabff1612cc497f388051fa3d",
+    "url": "https://modelscope.cn/models/MiniMax/MiniMax-M2.1/summary",
+    "sha256": "459e6ef0bfc12d151386e3711df97515a7bf8a2dc8cab7df8d9045fee1e0c7f1",
+    "column_header": "MiniMax-M2.1",
+    "column_index": 1,
+    "source_row": "| SWE-bench Multilingual | 72.5 | 56.5 | 68 | 77.5 | 65.0 | 72.0 | 70.2 |"
+  },
+  {
+    "source_key": "official-ms-8dc38bd5a8612c421930766dedd45910",
+    "url": "https://modelscope.cn/models/MiniMax/MiniMax-M2.1/summary",
+    "sha256": "459e6ef0bfc12d151386e3711df97515a7bf8a2dc8cab7df8d9045fee1e0c7f1",
+    "column_header": "MiniMax-M2.1",
+    "column_index": 1,
+    "source_row": "| Terminal-bench 2.0 | 47.9 | 30.0 | 50.0 | 57.8 | 54.2 | 54.0 | 46.4 |"
+  },
+  {
+    "source_key": "official-ms-95a04ca53fe01d709b4fbf81439a7cfb",
+    "url": "https://modelscope.cn/models/MiniMax/MiniMax-M2.1/summary",
+    "sha256": "459e6ef0bfc12d151386e3711df97515a7bf8a2dc8cab7df8d9045fee1e0c7f1",
+    "column_header": "MiniMax-M2.1",
+    "column_index": 1,
+    "source_row": "| SWE-bench Verified (Droid) | 71.3 | 68.1 | 72.3 | 75.2 | x | x | 67.0 |"
+  },
+  {
+    "source_key": "official-ms-f43971f622fd12f263a810ab7ff89f1b",
+    "url": "https://modelscope.cn/models/MiniMax/MiniMax-M2.1/summary",
+    "sha256": "459e6ef0bfc12d151386e3711df97515a7bf8a2dc8cab7df8d9045fee1e0c7f1",
+    "column_header": "MiniMax-M2.1",
+    "column_index": 1,
+    "source_row": "| SWE-bench Verified (mini-swe-agent) | 67.0 | 61.0 | 70.6 | 74.4 | 71.8 | 74.2 | 60.0 |"
+  },
+  {
+    "source_key": "official-ms-0ea22518e038d9ccbd0c5c3bd6e82864",
+    "url": "https://modelscope.cn/models/MiniMax/MiniMax-M2.1/summary",
+    "sha256": "459e6ef0bfc12d151386e3711df97515a7bf8a2dc8cab7df8d9045fee1e0c7f1",
+    "column_header": "MiniMax-M2.1",
+    "column_index": 1,
+    "source_row": "| AIME25 | 83.0 | 78.0 | 88.0 | 91.0 | 96.0 | 98.0 | 92.0 |"
+  },
+  {
+    "source_key": "official-ms-690420c3241a1c0f19b77a41a7a2706d",
+    "url": "https://modelscope.cn/models/MiniMax/MiniMax-M2.1/summary",
+    "sha256": "459e6ef0bfc12d151386e3711df97515a7bf8a2dc8cab7df8d9045fee1e0c7f1",
+    "column_header": "MiniMax-M2.1",
+    "column_index": 1,
+    "source_row": "| MMLU-Pro | 88.0 | 82.0 | 88.0 | 90.0 | 90.0 | 87.0 | 86.0 |"
+  },
+  {
+    "source_key": "official-ms-eb0920ef466b87a1aee28d9f8939fd2c",
+    "url": "https://modelscope.cn/models/MiniMax/MiniMax-M2.1/summary",
+    "sha256": "459e6ef0bfc12d151386e3711df97515a7bf8a2dc8cab7df8d9045fee1e0c7f1",
+    "column_header": "MiniMax-M2.1",
+    "column_index": 1,
+    "source_row": "| GPQA-D | 83.0 | 78.0 | 83.0 | 87.0 | 91.0 | 90.0 | 84.0 |"
+  }
+]

@@ -1,0 +1,22 @@
+[
+  {
+    "modelscope_id": "ZhipuAI/GLM-4.7",
+    "mode": "publisher default",
+    "importable_scores": 11
+  },
+  {
+    "modelscope_id": "moonshotai/Kimi-K2-Thinking",
+    "mode": "thinking",
+    "importable_scores": 12
+  },
+  {
+    "modelscope_id": "MiniMax/MiniMax-M2",
+    "mode": "publisher default",
+    "importable_scores": 9
+  },
+  {
+    "modelscope_id": "MiniMax/MiniMax-M2.1",
+    "mode": "publisher default",
+    "importable_scores": 9
+  }
+]

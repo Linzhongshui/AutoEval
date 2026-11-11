@@ -1,0 +1,7 @@
+{
+  "url": "https://modelscope.cn/api/v1/models/Qwen/Qwen2.5-VL-72B-Instruct/repo?Revision=master&FilePath=README.md",
+  "sha256": "f5e8c36e69c39b0afe7545a8fe21d262826cc63ed7bbbfa0fd6ce12983edadcd",
+  "modelscope_model_id": "Qwen/Qwen2.5-VL-72B-Instruct",
+  "table_row": "| MMMU<sub>val</sub>    | 70.3      | 70.4              | 70.7            | 70.1                 | 64.5         | 70.2          |",
+  "retrieved_date": "2026-11-11"
+}

@@ -7,6 +7,7 @@ export function OffsetPagination({ label, offset, nextOffset, onChange, disabled
   onChange: (offset: number) => void;
   disabled?: boolean;
 }) {
+  if (offset === 0 && nextOffset === null) return null;
   return <div className="inline" aria-label={`${label}分页`}>
     <button disabled={disabled || offset === 0}
       onClick={() => onChange(Math.max(0, offset - REGISTRY_PAGE_SIZE))}>上一页{label}</button>

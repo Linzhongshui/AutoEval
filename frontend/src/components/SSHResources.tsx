@@ -40,7 +40,7 @@ export function SSHResources() {
   };
   const labels: Record<keyof typeof fields, string> = { binding_key: "SSH资源名称", host: "SSH主机地址", port: "SSH端口", username: "SSH用户名", fingerprint: "已批准主机指纹", workdir: "SSH执行目录" };
   return <details className="diagnostic-tasks">
-    <summary>客户SSH服务器（真实后端）</summary>
+    <summary>客户SSH服务器</summary>
     <p>仅直连控制，不安装常驻Agent。主机指纹须来自已批准输入；不会自动信任首次连接。作业仅在执行目录内的专属.autoeval子目录中创建和清理。</p>
     {Object.entries(labels).map(([key, label]) => <label key={key}>{label}<input aria-label={label} value={fields[key as keyof typeof fields]} onChange={(event) => setFields({ ...fields, [key]: event.target.value })} /></label>)}
     <label>原生工具目录（可选）<input aria-label="SSH原生工具目录" value={toolRoot} onChange={(event) => setToolRoot(event.target.value)} /></label>

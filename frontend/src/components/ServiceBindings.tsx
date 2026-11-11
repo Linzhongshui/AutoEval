@@ -43,7 +43,7 @@ export function ServiceBindings() {
     finally { setBusy(false); }
   };
   return <details className="card stack" aria-label="真实服务绑定">
-    <summary>真实模型服务绑定与连接检测</summary>
+    <summary>模型服务与连接检测</summary>
     <p>连接检测只查询模型列表，不发送生成请求。成功不代表测评已启用。</p>
     <label>已登记模型<select aria-label="服务绑定模型" defaultValue="" onChange={async e => {
       setVersionId(""); setVersions([]);

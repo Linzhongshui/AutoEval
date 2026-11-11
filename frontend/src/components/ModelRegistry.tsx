@@ -45,7 +45,7 @@ export function ModelRegistry({ onApply }: {
     } finally { setBusy(false); }
   };
   return <details className="card stack" aria-label="持久化模型登记">
-    <summary>已登记模型与默认配置（真实后端）</summary>
+    <summary>已登记模型与默认配置</summary>
     <p>登记后在下方服务绑定中配置端点和凭据。探索测评将从该模型的默认配置版本加载参数。</p>
     <div className="form-grid">
       <label>新模型ID<input aria-label="登记模型ID" value={modelId} onChange={e => setModelId(e.target.value)} /></label>

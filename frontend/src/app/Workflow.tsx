@@ -1,3 +1,5 @@
+import { SubmissionReview } from "../components/SubmissionReview";
+import { ManagementDrawer } from "../components/ManagementDrawer";
 import { PageNumbers } from "../components/PageNumbers";
 import { useEffect, useState } from "react";
 import { ModelRegistry } from "../components/ModelRegistry";
@@ -220,7 +222,7 @@ export function Configurations({ profiles, setProfiles, go, notify }: {
   const [kind, setKind] = useState("标准配置");
   const [officialVersion, setOfficialVersion] = useState("");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(15);
+  const [pageSize, setPageSize] = useState(5);
   const [query, setQuery] = useState("");
   const [versions, setVersions] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState<Profile | null>(null);
@@ -258,7 +260,7 @@ export function Configurations({ profiles, setProfiles, go, notify }: {
   return (
     <div className="stack">
       <Note>
-        标准与自定义配置均从后端加载；标准配置只读，自定义配置保存为新版本。接口未提供的模型创建者与仓库 tag 不作展示。
+        标准配置只读；自定义配置保存为新版本，历史版本保持不变。
       </Note>
       <div className="config-toolbar">
         <input aria-label="搜索配置" placeholder="搜索配置名称或来源" value={query} onChange={(e) => setQuery(e.target.value)} />
@@ -502,25 +504,22 @@ export function EvaluationConsole({ profiles, setProfiles, notify }: {
 
   return (
     <div className="console-grid console-workflow">
-      <div className="card console-configuration">
-        <header className="console-configuration-heading">
-          <h2>发起测评</h2>
-          <p>选择已保存的模型服务、配置与资源，创建真实 GPQA Lite 探索测评。</p>
-          <span className="console-demo-note">仅支持 deepseek-flash、单数据集串行、最多 5 次模型请求；其他路径未开放。</span>
-        </header>
+      <div className="console-configuration">
         <section className="console-step">
-          <h3 className="console-step-title"><span className="step-number">1</span>模型与服务</h3>
+          <h3 className="console-step-title">模型接入</h3>
           <div className="tabs">
             <button className="active">API接入</button>
             <button disabled title="当前探索路径不支持 IP/Port 拉起">IP/Port 拉起</button>
           </div>
-          <ModelRegistry onApply={(_id, _values, configKey, versionLabel) => {
+          <div className="management-toolbar">
+          <ManagementDrawer title="管理模型与默认配置" onDismiss={() => { targets.retry(); configs.retry(); }}><ModelRegistry onApply={(_id, _values, configKey, versionLabel) => {
             const match = configs.rows.find((row) => row.config_key === configKey && row.version_label === versionLabel && eligibleConfig(row));
             if (match) setConfig(match);
             else notify("默认配置已读取；请选择已保存服务，按不可变配置版本ID加载探索参数。");
-          }} />
-          <ServiceBindings />
-          <SSHResources />
+          }} /></ManagementDrawer>
+          <ManagementDrawer title="管理模型服务" onDismiss={targets.retry}><ServiceBindings /></ManagementDrawer>
+          <ManagementDrawer title="管理执行资源" onDismiss={resources.retry}><SSHResources /></ManagementDrawer>
+          </div>
           <div className="stack">
             <label>控制台模型服务
               <select aria-label="控制台模型服务" value={target?.id || ""} disabled={busy || targets.loading} onChange={(e) => setTarget(targetRows.find((row) => row.id === e.target.value) || null)}>
@@ -545,7 +544,7 @@ export function EvaluationConsole({ profiles, setProfiles, notify }: {
           </div>
         </section>
         <section className="console-step stack">
-          <h3 className="console-step-title"><span className="step-number">2</span>测评配置</h3>
+          <h3 className="console-step-title">测评配置</h3>
           <div className="console-config-fields">
             <fieldset className="console-config-type">
               <legend>配置类型</legend>
@@ -584,7 +583,7 @@ export function EvaluationConsole({ profiles, setProfiles, notify }: {
           <button disabled={config?.kind !== "custom"} onClick={openEditor}>编辑自定义配置</button>
         </section>
         <section className="console-step">
-          <h3 className="console-step-title"><span className="step-number">3</span>测评数据集</h3>
+          <h3 className="console-step-title">测评数据集</h3>
           <div className="dataset-selection-toolbar">
             <input aria-label="搜索可选数据集" placeholder="搜索数据集" value={datasetSearch} onChange={(e) => setDatasetSearch(e.target.value)} />
             <span>已选 {config ? 1 : 0} 个</span>
@@ -613,7 +612,7 @@ export function EvaluationConsole({ profiles, setProfiles, notify }: {
         </section>
       </div>
       <section className="card stack summary">
-        <h2>本次测评</h2>
+        <h2>任务摘要</h2>
         <h3>{target ? `${target.model_key} / ${target.model_version}` : "未选择模型服务"}</h3>
         <span>{target?.remote_model || "仅支持 deepseek-flash"}</span>
         <span>配置：{config ? `${config.display_name} · ${config.version_label}` : "未选择"}</span>
@@ -643,7 +642,7 @@ export function EvaluationConsole({ profiles, setProfiles, notify }: {
         <div className="console-submit-status" role="status">
           {message || (!target ? "请选择已保存的 DeepSeek 服务。" : !config ? "请选择符合探索条件的配置。" : !resource ? "请选择执行资源。" : "提交将创建真实测评任务，可能产生模型调用费用。")}
         </div>
-        <button className="primary" disabled={busy || loadingDefault || !config || !target || !resource} onClick={() => void submit(config, target, resource, resourceKind)}>发起真实GPQA Lite测评</button>
+        <SubmissionReview config={loadingDefault ? null : config} target={target} resource={resource} resourceKind={resourceKind} busy={busy} submit={() => void submit(config, target, resource, resourceKind)} />
       </section>
       {view && viewParams && (
         <div className="dataset-overlay" onClick={() => setView(null)}>

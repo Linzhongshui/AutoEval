@@ -52,7 +52,7 @@ export function ExecutionBindings() {
     finally { setBusy(false); }
   };
   return <details className="diagnostic-tasks">
-    <summary>Profile与配置执行绑定（真实后端）</summary>
+    <summary>Profile与配置执行绑定</summary>
     <p>Profile固定清单、工具提交版本与评分规则摘要。登记契约不代表已完成原生工具验证，不会开放正式执行。</p>
     <details><summary>登记Profile契约</summary>
       <p>JSON包含profile_key、version、dataset_name、full_manifest_id、可选lite_manifest_id和tool。tool包含family、source_url、revision、scorer_reference、scorer_sha256、parallelism_owner；填写已核实的实际输入。</p>

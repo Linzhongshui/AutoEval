@@ -62,7 +62,7 @@ async def list_runs(request: Request, offset: int = 0, limit: int = 50):
         async with request.app.state.sessions() as session:
             rows = (
                 await session.execute(
-                    select(EvaluationRun, RunSnapshot)
+                    select(EvaluationRun, RunSnapshot, EvaluationReport.id)
                     .join(RunSnapshot, RunSnapshot.run_id == EvaluationRun.id)
                     .outerjoin(EvaluationReport, EvaluationReport.run_id == EvaluationRun.id)
                     .where(EvaluationRun.trigger_scope == "local-operator:evaluation")
@@ -84,13 +84,14 @@ async def list_runs(request: Request, offset: int = 0, limit: int = 50):
                     {
                         "id": str(r.id),
                         "state": r.state,
+                        "report_id": str(report_id) if report_id else None,
                         "created_at": r.created_at.isoformat(),
                         "remote_model": snapshot.canonical_body.get("remote_model"),
                         "resource_kind": snapshot.canonical_body.get(
                             "resource_kind", "docker_local"
                         ),
                     }
-                    for r, snapshot in rows[:limit]
+                    for r, snapshot, report_id in rows[:limit]
                 ],
                 "next_offset": offset + limit if len(rows) > limit else None,
                 "request_id": request.state.request_id,
@@ -333,6 +334,9 @@ async def detail(run_id: uuid.UUID, request: Request):
             data = {
                 "id": str(row.id),
                 "state": row.state,
+                "created_at": row.created_at.isoformat(),
+                "updated_at": events[-1].created_at.isoformat() if events else row.created_at.isoformat(),
+                "cancel_requested_at": row.cancel_requested_at.isoformat() if row.cancel_requested_at else None,
                 "run_mode": row.run_mode,
                 "snapshot": {
                     "sha256": snapshot.sha256,
@@ -342,6 +346,10 @@ async def detail(run_id: uuid.UUID, request: Request):
                             "config_version_id",
                             "config_sha256",
                             "parameters",
+                            "tool",
+                            "profile_id",
+                            "profile_sha256",
+                            "max_model_requests",
                             "target_id",
                             "model_version_id",
                             "remote_model",
@@ -364,7 +372,10 @@ async def detail(run_id: uuid.UUID, request: Request):
                     ),
                 ),
                 "execution_unresolved": bool(events and events[-1].type == "execution_unresolved"),
-                "events": [{"seq": e.seq, "type": e.type} for e in events],
+                "events": [
+                    {"seq": e.seq, "type": e.type, "created_at": e.created_at.isoformat()}
+                    for e in events
+                ],
                 "report": {
                     "id": str(report.id),
                     "validity": report.validity,

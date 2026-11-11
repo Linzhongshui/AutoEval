@@ -2,7 +2,7 @@ import { BackendConnection } from "../components/BackendConnection";
 import { DiagnosticTasks } from "../components/DiagnosticTasks";
 import { DatasetManifests } from "../components/DatasetManifests";
 import { ExecutionBindings } from "../components/ExecutionBindings";
-import { CaseHistory } from "../components/CaseHistory";
+import { ManagementDrawer } from "../components/ManagementDrawer";
 import { EvaluationRuns } from "../components/EvaluationRuns";
 import { RealReports } from "../components/RealReports";
 import { RealLeaderboard } from "../components/RealLeaderboard";
@@ -102,8 +102,8 @@ export function App() {
     home: "从一次测评开始，让模型能力与执行证据清晰可见。",
     console: "选择已保存的模型服务、配置与执行资源，发起 GPQA Lite 探索测评。",
     config: "按模型与数据集分别维护测试参数、清单和执行绑定。",
-    tasks: "追踪真实测评状态、冻结配置、case 执行记录与资源清理。",
-    reports: "查看已归档的真实测评报告、基准对比与独立分析。",
+    tasks: "追踪每一次测评，定位每一个问题。",
+    reports: "查看测评报告，追溯历史结果。",
     leaderboard: "在相同清单、工具版本与执行参数下比较真实完整报告。",
   };
 
@@ -134,7 +134,7 @@ export function App() {
           ))}
         </nav>
         <div className="sidebar-foot">
-          <span className="dot" /> AutoEval <small>开发联调 · v0.2</small>
+          <span className="dot" /> AutoEval <small>v0.2</small>
         </div>
       </aside>
       <main className="main">
@@ -154,7 +154,7 @@ export function App() {
         <header className="page-heading">
           <div>
             <h1>{title}</h1>
-            <p>{descriptions[page] || descriptions[page.split("/")[0]] || "查看真实运行与证据。"}</p>
+            <p>{descriptions[page] || descriptions[page.split("/")[0]] || "查看执行概况、测评结果与历史证据。"}</p>
           </div>
         </header>
 
@@ -162,8 +162,10 @@ export function App() {
         {page === "console" && (
           <EvaluationConsole profiles={profiles} setProfiles={setProfiles} notify={setToast} />
         )}
-        {page === "config" && <DatasetManifests />}
-        {page === "config" && <ExecutionBindings />}
+        {page === "config" && <div className="management-toolbar">
+          <ManagementDrawer title="管理样本清单"><DatasetManifests /></ManagementDrawer>
+          <ManagementDrawer title="执行规则与绑定"><ExecutionBindings /></ManagementDrawer>
+        </div>}
         {(page === "config" || page.startsWith("config/")) && (
           <Configurations profiles={profiles} setProfiles={setProfiles} go={go} notify={setToast} />
         )}
@@ -178,8 +180,7 @@ export function App() {
               }
               allowSubmit={page.startsWith("evaluate?")}
             />
-            {page === "tasks" && <DiagnosticTasks />}
-            {page === "tasks" && <CaseHistory />}
+
           </div>
         )}
         {(page === "reports" || page.startsWith("report/")) && (
@@ -189,6 +190,8 @@ export function App() {
           />
         )}
         {page === "leaderboard" && <RealLeaderboard open={(id) => go(`report/${id}`)} />}
+        {import.meta.env.DEV && <div className="developer-entry"><ManagementDrawer title="开发工具"><DiagnosticTasks /></ManagementDrawer></div>}
+
         <footer className="page-foot">
           AutoEval · 智能测评平台
           <span>页面数据来自当前后端；未启用能力与缺失指标以页面说明为准</span>
@@ -269,7 +272,7 @@ function Overview({ go }: { go: (path: string) => void }) {
       </section>
       <div className="spread">
         <h3>当前执行范围</h3>
-        <Badge>GPQA Lite · 真实后端</Badge>
+        <Badge>GPQA Lite · 探索测评</Badge>
       </div>
       <div className="stats">
         {[

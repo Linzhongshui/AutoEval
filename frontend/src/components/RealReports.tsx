@@ -11,9 +11,12 @@ const validityLabels: Record<string, string> = {
 };
 
 export function RealReports({ reportId, open }: { reportId?: string; open: (id: string) => void }) {
+  const [query, setQuery] = useState("");
+  const [model, setModel] = useState("");
+  const [analysis, setAnalysis] = useState("");
   const [rows, setRows] = useState<Report[]>([]);
   const [offset, setOffset] = useState(0);
-  const [pageSize,setPageSize] = useState(15);
+  const [pageSize,setPageSize] = useState(5);
   const [next, setNext] = useState<number | null>(null);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -52,78 +55,72 @@ export function RealReports({ reportId, open }: { reportId?: string; open: (id: 
     );
   }
 
+  const analysisLabel = (value: string) => ({ completed: "分析成功", succeeded: "分析成功", failed: "分析失败", pending: "待分析", running: "分析中", not_requested: "未分析" }[value] || "暂无分析");
+  const filteredRows = rows.filter((row) => (!model || row.remote_model === model) && (!analysis || row.analysis_status === analysis) && `${row.id} ${row.run_id} ${row.remote_model}`.toLowerCase().includes(query.toLowerCase()));
   return (
     <div className="stack" data-testid="real-report-catalog">
-      <section className="card">
-        <div className="spread">
-          <div>
-            <h2>全部报告 <span className="badge">{rows.length}</span></h2>
-            <p className="muted">每次真实探索测评独立保留报告；模拟及来源未核验的产物不进入目录。</p>
-          </div>
-          <button onClick={() => setRefresh((value) => value + 1)}>刷新报告目录</button>
-        </div>
-        <p className="muted">当前页统计不代表全局数量；发布门禁不适用，运行 completed 不等于报告 complete。</p>
-        <p role="status">{message || (loading ? "报告目录加载中…" : "")}</p>
+      <section className="card report-filters filters" aria-label="当前页报告筛选">
+        <label className="select-field"><span>模型</span><select value={model} onChange={(e) => setModel(e.target.value)}><option value="">全部模型</option>{[...new Set(rows.map((row) => row.remote_model))].map((value) => <option key={value}>{value}</option>)}</select></label>
+        <label className="select-field"><span>分析状态</span><select value={analysis} onChange={(e) => setAnalysis(e.target.value)}><option value="">全部分析状态</option>{[...new Set(rows.map((row) => row.analysis_status))].map((value) => <option key={value} value={value}>{analysisLabel(value)}</option>)}</select></label>
+        <input aria-label="搜索报告或任务" placeholder="搜索报告或任务" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <button onClick={() => setRefresh((value) => value + 1)}>刷新</button>
       </section>
-
       <section className="card table-card">
+        <div className="report-list-heading"><h2>全部报告 <span className="badge">{rows.length}</span></h2><span className="muted">每次测评独立保留报告 · 当前页统计与筛选</span></div>
+        {(message || loading) && <p role="status">{message || "报告加载中…"}</p>}
         <div className="table-wrap">
           <table className="reports-table">
             <thead>
               <tr>
-                <th>报告 / run_id</th>
-                <th>remote_model</th>
-                <th>validity / 来源</th>
+                <th>报告 / 任务</th>
+                <th>模型</th>
+                <th>报告状态</th>
                 <th>结果覆盖</th>
-                <th>accuracy</th>
-                <th>created_at</th>
+                <th>准确率</th>
+                <th>生成时间</th><th>分析状态</th>
                 <th>操作</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
+              {filteredRows.map((row) => (
                 <tr key={row.id}>
                   <td>
                     <b>{row.id.slice(0, 8)}</b>
-                    <small>run_id：{row.run_id}</small>
+                    <small title={row.run_id}>任务：{row.run_id.slice(0, 8)}</small>
                   </td>
                   <td>{row.remote_model}</td>
                   <td>
                     <span className={`coverage ${row.validity === "complete" ? "complete" : row.validity === "partial" ? "partial" : "error"}`}>
-                      {row.validity} · {validityLabels[row.validity] || row.validity}
+                      {validityLabels[row.validity] || "状态待确认"}
                     </span>
-                    <small>execution_origin：{row.execution_origin}</small>
-                    <small>gate_status：{row.gate_status}</small>
-                    {row.evidence_status !== "verified" && <small>原始证据未验证：{row.evidence_status}；历史索引不作为有效成绩。</small>}
+                    <small>探索测评 · 不适用发布门禁</small>
+                    {row.evidence_status !== "verified" && <small>原始证据暂不可用，成绩不参与比较。</small>}
                   </td>
                   <td>
                     {row.summary.successful_samples}/{row.summary.expected_samples}
                     <small>
-                      executed {row.summary.executed_attempts} · failed {row.summary.failed_samples} · missing {row.summary.missing_samples}
+                      执行 {row.summary.executed_attempts} 次 · 失败 {row.summary.failed_samples} · 缺测 {row.summary.missing_samples}
                     </small>
                     <small>
-                      {row.summary.subset_scope} · dataset_samples {row.summary.dataset_samples}
-                    </small>
-                    <small>
-                      {row.summary.metric_scope} · scoring_status {row.summary.scoring_status || "—"}
+                      GPQA · {row.summary.subset_scope === "lite" ? "Lite" : row.summary.subset_scope}
                     </small>
                   </td>
                   <td>
                     {row.evidence_status !== "verified" || row.summary.accuracy === null ? "—" : `${row.summary.accuracy}%`}
                     {row.validity === "partial" && <small>仅成功样本</small>}
                   </td>
-                  <td>{row.created_at}</td>
+                  <td>{new Date(row.created_at).toLocaleString("zh-CN")}</td><td><span className="badge">{analysisLabel(row.analysis_status)}</span></td>
                   <td>
                     <button className="link" onClick={() => open(row.id)}>
-                      查看报告 {row.id.slice(0, 8)}
+                      查看报告
                     </button>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {!loading && !rows.length && !message && (
-            <div className="empty">当前页暂无真实报告。</div>
+          {!loading && !filteredRows.length && !message && (
+            <div className="empty">当前页没有符合条件的报告。</div>
           )}
         </div>
       </section>

@@ -36,7 +36,7 @@ export function DatasetManifests() {
     finally { setBusy(false); }
   };
   return <details className="diagnostic-tasks">
-    <summary>数据集样本清单（真实后端）</summary>
+    <summary>数据集样本清单</summary>
     <p>登记Full或Lite的确定性样本范围。这里只保存样本ID及SHA-256，不上传题目或答案；登记不代表工具已验证或配置已批准。</p>
     <p>JSON字段：dataset_key、name、version、manifest_key、scope（full/lite）、samples（sample_id、sha256）。Lite另需parent_id引用同版本Full清单。</p>
     <label>样本清单JSON<textarea aria-label="样本清单JSON" rows={8} value={content} onChange={(event) => setContent(event.target.value)} style={{ display: "block", width: "100%" }} /></label>

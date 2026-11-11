@@ -1,0 +1,4 @@
+# Preserve captured source bytes so stored SHA-256 evidence survives checkout.
+*.md -text
+*.json -text
+*.png -text

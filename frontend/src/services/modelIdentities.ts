@@ -54,6 +54,50 @@ export const modelIdentities: Record<string, { vendor: string; huggingface_id: s
   "MiniMax/MiniMax-M2.1": {
     "vendor": "MiniMax",
     "huggingface_id": "MiniMaxAI/MiniMax-M2.1"
+  },
+  "ZhipuAI/GLM-5.2": {
+    "vendor": "智谱 AI",
+    "huggingface_id": "zai-org/GLM-5.2"
+  },
+  "ZhipuAI/GLM-5.3": {
+    "vendor": "智谱 AI",
+    "huggingface_id": "zai-org/GLM-5.3"
+  },
+  "moonshotai/Kimi-K3": {
+    "vendor": "Moonshot AI（月之暗面）",
+    "huggingface_id": "moonshotai/Kimi-K3"
+  },
+  "moonshotai/Kimi-K3.1-Pro": {
+    "vendor": "Moonshot AI（月之暗面）",
+    "huggingface_id": "moonshotai/Kimi-K3.1-Pro"
+  },
+  "MiniMax/MiniMax-M3.1-Flash": {
+    "vendor": "MiniMax",
+    "huggingface_id": "MiniMaxAI/MiniMax-M3.1-Flash"
+  },
+  "deepseek-ai/DeepSeek-V4.1-Flash": {
+    "vendor": "DeepSeek",
+    "huggingface_id": "deepseek-ai/DeepSeek-V4.1-Flash"
+  },
+  "deepseek-ai/DeepSeek-V4.1-Flash-1017": {
+    "vendor": "DeepSeek",
+    "huggingface_id": "deepseek-ai/DeepSeek-V4.1-Flash-1017"
+  },
+  "Qwen/Qwen3.8-2.4T-A95B": {
+    "vendor": "阿里通义千问",
+    "huggingface_id": "Qwen/Qwen3.8-2.4T-A95B"
+  },
+  "Qwen/Qwen3.8-27B": {
+    "vendor": "阿里通义千问",
+    "huggingface_id": "Qwen/Qwen3.8-27B"
+  },
+  "Qwen/Qwen3.8-Flash-Next": {
+    "vendor": "阿里通义千问",
+    "huggingface_id": "Qwen/Qwen3.8-Flash-Next"
+  },
+  "ZhipuAI/GLM-5.3-Flash": {
+    "vendor": "智谱 AI",
+    "huggingface_id": "zai-org/GLM-5.3-Flash"
   }
 };
 

@@ -1,0 +1,46 @@
+{
+  "ZhipuAI/GLM-5.2": {
+    "huggingface_id": "zai-org/GLM-5.2",
+    "modelscope_id": "ZhipuAI/GLM-5.2"
+  },
+  "ZhipuAI/GLM-5.3": {
+    "huggingface_id": "zai-org/GLM-5.3",
+    "modelscope_id": "ZhipuAI/GLM-5.3"
+  },
+  "moonshotai/Kimi-K3": {
+    "huggingface_id": "moonshotai/Kimi-K3",
+    "modelscope_id": "moonshotai/Kimi-K3"
+  },
+  "moonshotai/Kimi-K3.1-Pro": {
+    "huggingface_id": "moonshotai/Kimi-K3.1-Pro",
+    "modelscope_id": "moonshotai/Kimi-K3.1-Pro"
+  },
+  "MiniMax/MiniMax-M3.1-Flash": {
+    "huggingface_id": "MiniMaxAI/MiniMax-M3.1-Flash",
+    "modelscope_id": "MiniMax/MiniMax-M3.1-Flash"
+  },
+  "deepseek-ai/DeepSeek-V4.1-Flash": {
+    "huggingface_id": "deepseek-ai/DeepSeek-V4.1-Flash",
+    "modelscope_id": "deepseek-ai/DeepSeek-V4.1-Flash"
+  },
+  "deepseek-ai/DeepSeek-V4.1-Flash-1017": {
+    "huggingface_id": "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+    "modelscope_id": "deepseek-ai/DeepSeek-V4.1-Flash-1017"
+  },
+  "Qwen/Qwen3.8-2.4T-A95B": {
+    "huggingface_id": "Qwen/Qwen3.8-2.4T-A95B",
+    "modelscope_id": "Qwen/Qwen3.8-2.4T-A95B"
+  },
+  "Qwen/Qwen3.8-27B": {
+    "huggingface_id": "Qwen/Qwen3.8-27B",
+    "modelscope_id": "Qwen/Qwen3.8-27B"
+  },
+  "Qwen/Qwen3.8-Flash-Next": {
+    "huggingface_id": "Qwen/Qwen3.8-Flash-Next",
+    "modelscope_id": "Qwen/Qwen3.8-Flash-Next"
+  },
+  "ZhipuAI/GLM-5.3-Flash": {
+    "huggingface_id": "zai-org/GLM-5.3-Flash",
+    "modelscope_id": "ZhipuAI/GLM-5.3-Flash"
+  }
+}

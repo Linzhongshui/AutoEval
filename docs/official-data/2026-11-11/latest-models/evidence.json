@@ -1,0 +1,736 @@
+[
+  {
+    "source_key": "latest-official-f1cc74e377bb0989aa25938f6775784a",
+    "source_file": "zai-org--GLM-5.2.md",
+    "sha256": "7ba22185651d8f69fbf6227ee718eb680fd834ec8e79ba78df6fa54896614b3d",
+    "column_index": 1,
+    "column_header": "GLM-5.2",
+    "source_row": [
+      "GPQA-Diamond",
+      "91.2",
+      "86.2",
+      "90",
+      "93",
+      "90.1",
+      "93.6",
+      "93.6",
+      "94.3"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-e99d7372cd53f2e035a93b067dff8363",
+    "source_file": "zai-org--GLM-5.2.md",
+    "sha256": "7ba22185651d8f69fbf6227ee718eb680fd834ec8e79ba78df6fa54896614b3d",
+    "column_index": 1,
+    "column_header": "GLM-5.2",
+    "source_row": [
+      "DeepSWE",
+      "46.2",
+      "18",
+      "18",
+      "20",
+      "8",
+      "58",
+      "70",
+      "10"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-7ea55e64ce561052dbc3bb9aa86f0164",
+    "source_file": "zai-org--GLM-5.2.md",
+    "sha256": "7ba22185651d8f69fbf6227ee718eb680fd834ec8e79ba78df6fa54896614b3d",
+    "column_index": 1,
+    "column_header": "GLM-5.2",
+    "source_row": [
+      "Terminal Bench 2.1 (Terminus-2)",
+      "81.0",
+      "63.5",
+      "75",
+      "65",
+      "64",
+      "85",
+      "84",
+      "74"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-85f0b7dd7e198d564e026d7ded5e743b",
+    "source_file": "zai-org--GLM-5.2.md",
+    "sha256": "7ba22185651d8f69fbf6227ee718eb680fd834ec8e79ba78df6fa54896614b3d",
+    "column_index": 1,
+    "column_header": "GLM-5.2",
+    "source_row": [
+      "Terminal Bench 2.1 (Best Reported Harness)",
+      "82.7",
+      "69",
+      "-",
+      "-",
+      "-",
+      "78.9",
+      "83.4",
+      "70.7"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-b085fa227d8cc24d3bab5ea7c22557f1",
+    "source_file": "zai-org--GLM-5.3.md",
+    "sha256": "ed1c0a4563c437a32f8953d637a1db9bd831de1b24bd3062a5ace9e04340b1cf",
+    "column_index": 1,
+    "column_header": "GLM-5.3",
+    "source_row": [
+      "Terminal Bench 2.1",
+      "88.2",
+      "81.0",
+      "88.3",
+      "87.9",
+      "86.6",
+      "85.0",
+      "88.0",
+      "88.8"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-ec92807b2ef27583a5210aa86c0bade9",
+    "source_file": "zai-org--GLM-5.3.md",
+    "sha256": "ed1c0a4563c437a32f8953d637a1db9bd831de1b24bd3062a5ace9e04340b1cf",
+    "column_index": 1,
+    "column_header": "GLM-5.3",
+    "source_row": [
+      "Terminal Bench 3.0",
+      "28.3",
+      "4.6",
+      "17.4",
+      "–",
+      "–",
+      "21.1",
+      "33.7",
+      "34.6"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-acc0dad6f39617924d6d1c3febbb44ff",
+    "source_file": "zai-org--GLM-5.3.md",
+    "sha256": "ed1c0a4563c437a32f8953d637a1db9bd831de1b24bd3062a5ace9e04340b1cf",
+    "column_index": 1,
+    "column_header": "GLM-5.3",
+    "source_row": [
+      "DeepSWE (v1.1)",
+      "66.9",
+      "46.2",
+      "67.5",
+      "62.7",
+      "56.6",
+      "58.0",
+      "69.7",
+      "72.7"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-2ec3f54ac30e2b5e02aeb8c69accdfd4",
+    "source_file": "zai-org--GLM-5.3.md",
+    "sha256": "ed1c0a4563c437a32f8953d637a1db9bd831de1b24bd3062a5ace9e04340b1cf",
+    "column_index": 1,
+    "column_header": "GLM-5.3",
+    "source_row": [
+      "AutomationBench (v1.0.6)",
+      "48.2",
+      "26.2",
+      "46.7",
+      "43.2",
+      "39.8",
+      "41.0",
+      "46.2",
+      "45.8"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-60f2aa0259a7352a206c1a2fcbd54ba6",
+    "source_file": "moonshotai--Kimi-K3.md",
+    "sha256": "57de265b5842dfa465c6e73b368b0e15a89b8793b5450528dad577da202cc6fe",
+    "column_index": 1,
+    "column_header": "Kimi K3 (max)",
+    "source_row": [
+      "GPQA Diamond",
+      "93.5",
+      "92.6",
+      "94.1",
+      "91.0",
+      "93.5",
+      "91.2"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-bf80dd5aa9c406182a685804b40ae925",
+    "source_file": "moonshotai--Kimi-K3.md",
+    "sha256": "57de265b5842dfa465c6e73b368b0e15a89b8793b5450528dad577da202cc6fe",
+    "column_index": 1,
+    "column_header": "Kimi K3 (max)",
+    "source_row": [
+      "DeepSWE",
+      "67.5",
+      "70.0",
+      "73.0",
+      "59.0",
+      "67.0",
+      "46.2"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-06ed6f59f91d20e3b0003dc16f151c26",
+    "source_file": "moonshotai--Kimi-K3.md",
+    "sha256": "57de265b5842dfa465c6e73b368b0e15a89b8793b5450528dad577da202cc6fe",
+    "column_index": 1,
+    "column_header": "Kimi K3 (max)",
+    "source_row": [
+      "Terminal-Bench 2.1",
+      "88.3",
+      "88.0",
+      "88.8",
+      "84.6",
+      "83.4",
+      "82.7"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-f8ab5748e969073a508666597d63fd19",
+    "source_file": "moonshotai--Kimi-K3.md",
+    "sha256": "57de265b5842dfa465c6e73b368b0e15a89b8793b5450528dad577da202cc6fe",
+    "column_index": 1,
+    "column_header": "Kimi K3 (max)",
+    "source_row": [
+      "AutomationBench",
+      "30.8",
+      "29.1",
+      "29.7",
+      "27.2",
+      "22.7",
+      "12.9"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-5d6c5c7c4abe2cd712cff07d587a121a",
+    "source_file": "moonshotai--Kimi-K3.md",
+    "sha256": "57de265b5842dfa465c6e73b368b0e15a89b8793b5450528dad577da202cc6fe",
+    "column_index": 1,
+    "column_header": "Kimi K3 (max)",
+    "source_row": [
+      "MMMU-Pro",
+      "81.6 / 83.4",
+      "81.2 / 86.5",
+      "83.0 / 84.6",
+      "78.9 / 82.7",
+      "81.2 / 83.2",
+      "—"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-e47e884fcebca404a1d920a340f78004",
+    "source_file": "moonshotai--Kimi-K3.md",
+    "sha256": "57de265b5842dfa465c6e73b368b0e15a89b8793b5450528dad577da202cc6fe",
+    "column_index": 1,
+    "column_header": "Kimi K3 (max)",
+    "source_row": [
+      "MMMU-Pro",
+      "81.6 / 83.4",
+      "81.2 / 86.5",
+      "83.0 / 84.6",
+      "78.9 / 82.7",
+      "81.2 / 83.2",
+      "—"
+    ],
+    "paired_value_index": 1
+  },
+  {
+    "source_key": "latest-official-a14e8b0896c847e5868c20d4266803b8",
+    "source_file": "moonshotai--Kimi-K3.1-Pro.md",
+    "sha256": "5daa13793292c65cf198b2f4997c69a21378a1688c40c8b3dbdf48a27dd15085",
+    "column_index": 1,
+    "column_header": "Kimi K3.1 Pro (max)",
+    "source_row": [
+      "Terminal-Bench 4.0",
+      "65.7",
+      "57.9",
+      "58.2",
+      "66.4",
+      "42.3",
+      "41.8"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-06fb1f2d6634dbf7357e0e28df52337b",
+    "source_file": "moonshotai--Kimi-K3.1-Pro.md",
+    "sha256": "5daa13793292c65cf198b2f4997c69a21378a1688c40c8b3dbdf48a27dd15085",
+    "column_index": 1,
+    "column_header": "Kimi K3.1 Pro (max)",
+    "source_row": [
+      "DeepSWE v1.1",
+      "75.5",
+      "67.4",
+      "74.1",
+      "74.2",
+      "77.0",
+      "66.9"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-cc60101f801b6b6cf7284245fa432de8",
+    "source_file": "moonshotai--Kimi-K3.1-Pro.md",
+    "sha256": "5daa13793292c65cf198b2f4997c69a21378a1688c40c8b3dbdf48a27dd15085",
+    "column_index": 1,
+    "column_header": "Kimi K3.1 Pro (max)",
+    "source_row": [
+      "MMMU-Pro w/ python",
+      "90.0",
+      "88.4",
+      "87.8",
+      "89.8",
+      "82.5",
+      "—"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-b087b7a39e7220426ba344511f2afc7d",
+    "source_file": "moonshotai--Kimi-K3.1-Pro.md",
+    "sha256": "5daa13793292c65cf198b2f4997c69a21378a1688c40c8b3dbdf48a27dd15085",
+    "column_index": 1,
+    "column_header": "Kimi K3.1 Pro (max)",
+    "source_row": [
+      "Automation Bench-AA",
+      "73.3",
+      "59.4",
+      "68.5",
+      "69.5",
+      "66.6",
+      "62.2"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-411e5ed3f2344388b75d42ce9e37cdb7",
+    "source_file": "moonshotai--Kimi-K3.1-Pro.md",
+    "sha256": "5daa13793292c65cf198b2f4997c69a21378a1688c40c8b3dbdf48a27dd15085",
+    "column_index": 1,
+    "column_header": "Kimi K3.1 Pro (max)",
+    "source_row": [
+      "GPQA-Diamond",
+      "94.2",
+      "93.7",
+      "96.1",
+      "93.9",
+      "92.2",
+      "91.7"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-307166f83cb5fffdc7236a0fd005a709",
+    "source_file": "moonshotai--Kimi-K3.1-Pro.md",
+    "sha256": "5daa13793292c65cf198b2f4997c69a21378a1688c40c8b3dbdf48a27dd15085",
+    "column_index": 1,
+    "column_header": "Kimi K3.1 Pro (max)",
+    "source_row": [
+      "MMMU-Pro",
+      "84.1",
+      "86.3",
+      "86.9",
+      "87.7",
+      "80.6",
+      "—"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-6e9945359949f845d722ae3f92887069",
+    "source_file": "MiniMaxAI--MiniMax-M3.1-Flash.md",
+    "sha256": "c49a7cca92321066bc20e25ce720260242dcb112baf1d09c7c213899e39d2151",
+    "column_index": 1,
+    "column_header": "MiniMax M3.1 Flash",
+    "source_row": [
+      "Automation-Bench v1.0.6",
+      "62.8",
+      "60.5",
+      "54.8",
+      "46.7",
+      "48.8",
+      "45.8",
+      "50.3"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-da2cd3b0bd06f9529d1c8e948a2f538c",
+    "source_file": "MiniMaxAI--MiniMax-M3.1-Flash.md",
+    "sha256": "c49a7cca92321066bc20e25ce720260242dcb112baf1d09c7c213899e39d2151",
+    "column_index": 1,
+    "column_header": "MiniMax M3.1 Flash",
+    "source_row": [
+      "Terminal Bench 4.0",
+      "38.1",
+      "42.3",
+      "31.2",
+      "12.6",
+      "37.9",
+      "39.9",
+      "51.8"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-85aa7f12f9f6083f02238beb88939795",
+    "source_file": "MiniMaxAI--MiniMax-M3.1-Flash.md",
+    "sha256": "c49a7cca92321066bc20e25ce720260242dcb112baf1d09c7c213899e39d2151",
+    "column_index": 1,
+    "column_header": "MiniMax M3.1 Flash",
+    "source_row": [
+      "DeepSWE v1.1",
+      "73.7",
+      "77.0",
+      "74.2",
+      "67.5",
+      "66.9",
+      "73.0",
+      "74.0"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-2d57266c7c89598816090031cb873221",
+    "source_file": "deepseek-ai--DeepSeek-V4.1-Flash.md",
+    "sha256": "347c9db4e5506acb531cbc3b724407ab88e9af8781679152f0823d7bac16d251",
+    "column_index": 7,
+    "column_header": "DS-V4.1-Flash",
+    "source_row": [
+      "GPQA Diamond (Pass@1)",
+      "93.4",
+      "94.1",
+      "92.9",
+      "88.1",
+      "92.4",
+      "89.9",
+      "90.9"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-a27cf28141338033e240effeba7c1f9a",
+    "source_file": "deepseek-ai--DeepSeek-V4.1-Flash.md",
+    "sha256": "347c9db4e5506acb531cbc3b724407ab88e9af8781679152f0823d7bac16d251",
+    "column_index": 7,
+    "column_header": "DS-V4.1-Flash",
+    "source_row": [
+      "Terminal-Bench 2.1 (Pass@1)",
+      "89.1",
+      "88.8",
+      "88.3",
+      "88.2",
+      "87.9",
+      "82.7",
+      "90.6"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-60fb27d906a0f40c17cc64b69c1c370d",
+    "source_file": "deepseek-ai--DeepSeek-V4.1-Flash.md",
+    "sha256": "347c9db4e5506acb531cbc3b724407ab88e9af8781679152f0823d7bac16d251",
+    "column_index": 7,
+    "column_header": "DS-V4.1-Flash",
+    "source_row": [
+      "Terminal-Bench 3.0 (Pass@1)",
+      "43.3",
+      "34.4",
+      "17.7",
+      "28.3",
+      "11.8",
+      "7.6",
+      "30.0"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-e9957010ef2cc45814ff6b9cc6411420",
+    "source_file": "deepseek-ai--DeepSeek-V4.1-Flash.md",
+    "sha256": "347c9db4e5506acb531cbc3b724407ab88e9af8781679152f0823d7bac16d251",
+    "column_index": 7,
+    "column_header": "DS-V4.1-Flash",
+    "source_row": [
+      "Terminal-Bench 4.0 (Pass@1)",
+      "51.8",
+      "39.9",
+      "12.6",
+      "37.9",
+      "12.4",
+      "7.0",
+      "31.2"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-b52f1e1f4cd3cc758a2cbb1253b135a0",
+    "source_file": "deepseek-ai--DeepSeek-V4.1-Flash.md",
+    "sha256": "347c9db4e5506acb531cbc3b724407ab88e9af8781679152f0823d7bac16d251",
+    "column_index": 7,
+    "column_header": "DS-V4.1-Flash",
+    "source_row": [
+      "DeepSWE v1.1 (Resolved)",
+      "74.0",
+      "73.0",
+      "67.5",
+      "66.9",
+      "62.7",
+      "54.4",
+      "74.2"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-51deb6549d5b384f7473b5836ad550f6",
+    "source_file": "deepseek-ai--DeepSeek-V4.1-Flash.md",
+    "sha256": "347c9db4e5506acb531cbc3b724407ab88e9af8781679152f0823d7bac16d251",
+    "column_index": 7,
+    "column_header": "DS-V4.1-Flash",
+    "source_row": [
+      "AutomationBench (Pass@1)",
+      "50.3",
+      "45.8",
+      "46.7",
+      "48.8",
+      "43.2",
+      "37.7",
+      "54.8"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-6e28dce5b6c1b8e6496b26859c63a5e4",
+    "source_file": "deepseek-ai--DeepSeek-V4.1-Flash-1017.md",
+    "sha256": "b72b796e4f4c739eca5d0ad360a7679b39118ca7eb64891f7151a527b292c42a",
+    "column_index": 1,
+    "column_header": "DS-V4.1-Flash-1017",
+    "source_row": [
+      "Terminal-Bench 4.0",
+      "42.3",
+      "31.2",
+      "12.6",
+      "37.9",
+      "39.9",
+      "51.8"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-02b2f16de7e164581d7efb04201c6508",
+    "source_file": "deepseek-ai--DeepSeek-V4.1-Flash-1017.md",
+    "sha256": "b72b796e4f4c739eca5d0ad360a7679b39118ca7eb64891f7151a527b292c42a",
+    "column_index": 1,
+    "column_header": "DS-V4.1-Flash-1017",
+    "source_row": [
+      "DeepSWE v1.1",
+      "77.0",
+      "74.2",
+      "67.5",
+      "66.9",
+      "73.0",
+      "74.0"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-442385c593dedc35b3116406f8fdebfc",
+    "source_file": "deepseek-ai--DeepSeek-V4.1-Flash-1017.md",
+    "sha256": "b72b796e4f4c739eca5d0ad360a7679b39118ca7eb64891f7151a527b292c42a",
+    "column_index": 1,
+    "column_header": "DS-V4.1-Flash-1017",
+    "source_row": [
+      "Automation-Bench v1.0.6",
+      "60.5",
+      "54.8",
+      "46.7",
+      "48.8",
+      "45.8",
+      "50.3"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-c14053054b1d132ba9880b9286f2f658",
+    "source_file": "Qwen--Qwen3.8-2.4T-A95B.md",
+    "sha256": "7690c680c2d6eb284179ef5dd4db63260d248531cae9087b09b2c2200230f331",
+    "column_index": 5,
+    "column_header": "Qwen3.8-Max",
+    "source_row": [
+      "Terminal Bench 2.1",
+      "84.6",
+      "84.6",
+      "88.8",
+      "74.5",
+      "86.6"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-6433e5d29c18d881f81b51ed4cfe94c0",
+    "source_file": "Qwen--Qwen3.8-2.4T-A95B.md",
+    "sha256": "7690c680c2d6eb284179ef5dd4db63260d248531cae9087b09b2c2200230f331",
+    "column_index": 5,
+    "column_header": "Qwen3.8-Max",
+    "source_row": [
+      "DeepSWE 1.1",
+      "59.0",
+      "70.0",
+      "73.0",
+      "21.6",
+      "56.6"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-0331b783ed247349fa2f19bf01e13ded",
+    "source_file": "Qwen--Qwen3.8-2.4T-A95B.md",
+    "sha256": "7690c680c2d6eb284179ef5dd4db63260d248531cae9087b09b2c2200230f331",
+    "column_index": 5,
+    "column_header": "Qwen3.8-Max",
+    "source_row": [
+      "Automation-Bench (Pass@1)",
+      "27.2",
+      "29.1",
+      "29.7",
+      "14.2",
+      "27.3"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-17f4dd881c26fe69cad59decad4eeaa8",
+    "source_file": "Qwen--Qwen3.8-2.4T-A95B.md",
+    "sha256": "7690c680c2d6eb284179ef5dd4db63260d248531cae9087b09b2c2200230f331",
+    "column_index": 5,
+    "column_header": "Qwen3.8-Max",
+    "source_row": [
+      "GPQA Diamond",
+      "92.0",
+      "92.6",
+      "94.1",
+      "92.4",
+      "92.6"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-b1754d065096aa995945ede1f5e1edcf",
+    "source_file": "Qwen--Qwen3.8-27B.md",
+    "sha256": "7c24f46af1e0024e6ce9b799df6f4865f9200acf3b6f92b6530c37248cc9e821",
+    "column_index": 1,
+    "column_header": "Qwen3.8-27B",
+    "source_row": [
+      "Agentic terminal coding Terminal Bench 2.1 (Terminus)",
+      "73.0",
+      "63.4",
+      "64.0",
+      "51.7",
+      "78.2"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-fd49096e2e02d1a85224fef57315c6fb",
+    "source_file": "Qwen--Qwen3.8-27B.md",
+    "sha256": "7c24f46af1e0024e6ce9b799df6f4865f9200acf3b6f92b6530c37248cc9e821",
+    "column_index": 1,
+    "column_header": "Qwen3.8-27B",
+    "source_row": [
+      "Agentic coding DeepSWE 1.1",
+      "42.2",
+      "13.3",
+      "14.2",
+      "--",
+      "--"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-4a5870c0ff2d61a2c6a9ed598d8493f5",
+    "source_file": "Qwen--Qwen3.8-27B.md",
+    "sha256": "7c24f46af1e0024e6ce9b799df6f4865f9200acf3b6f92b6530c37248cc9e821",
+    "column_index": 1,
+    "column_header": "Qwen3.8-27B",
+    "source_row": [
+      "Scientific reasoning GPQA Diamond",
+      "89.2",
+      "87.8",
+      "90.3",
+      "83.5",
+      "91.3"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-55a8dd75e56eba0234a235e4d978b20d",
+    "source_file": "Qwen--Qwen3.8-Flash-Next.md",
+    "sha256": "5c151489c5de6ba51318e5e03d9ffb80622f118b37e7af550a6c174c5a9fe104",
+    "column_index": 1,
+    "column_header": "Qwen3.8-Flash-Next",
+    "source_row": [
+      "Agentic coding DeepSWE 1.1",
+      "58.7",
+      "42.2",
+      "16.5",
+      "54.4",
+      "--"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-913bdc65f1c7127f7505068b56ceea7d",
+    "source_file": "Qwen--Qwen3.8-Flash-Next.md",
+    "sha256": "5c151489c5de6ba51318e5e03d9ffb80622f118b37e7af550a6c174c5a9fe104",
+    "column_index": 1,
+    "column_header": "Qwen3.8-Flash-Next",
+    "source_row": [
+      "Scientific reasoning GPQA Diamond",
+      "91.7",
+      "89.2",
+      "90.3",
+      "90.8",
+      "91.3"
+    ],
+    "paired_value_index": 0
+  },
+  {
+    "source_key": "latest-official-654694c728900fc6bedc1e393a1aa823",
+    "source_file": "GLM-5.3-Flash-benchmark.png",
+    "sha256": "ea9de7784afc1e3ce4d72fac927e683043823307042aa2f4ae616357074b372a",
+    "source_region": "Terminal-Bench 2.1: blue GLM-5.3-Flash labelled bar",
+    "transcribed_value": 84.3
+  },
+  {
+    "source_key": "latest-official-ca89700dd7a349b06b10bc37b372d3bd",
+    "source_file": "GLM-5.3-Flash-benchmark.png",
+    "sha256": "ea9de7784afc1e3ce4d72fac927e683043823307042aa2f4ae616357074b372a",
+    "source_region": "DeepSWE: blue GLM-5.3-Flash labelled bar",
+    "transcribed_value": 63.4
+  },
+  {
+    "source_key": "latest-official-6e4cec37c4c15ebc9451ad716e5cfc76",
+    "source_file": "GLM-5.3-Flash-benchmark.png",
+    "sha256": "ea9de7784afc1e3ce4d72fac927e683043823307042aa2f4ae616357074b372a",
+    "source_region": "AutomationBench: blue GLM-5.3-Flash labelled bar",
+    "transcribed_value": 48.8
+  }
+]

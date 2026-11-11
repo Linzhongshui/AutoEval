@@ -15,7 +15,7 @@
 - FastAPI应用工厂、lifespan资源回收、请求ID、统一异常和OpenAPI。
 - `/health/live`存活检查、`/health/ready`真实检查PostgreSQL/Temporal/S3 bucket；依赖不可用返回503。
 - `/api/autoeval/v1/system/capabilities`分别报告GPQA探索、分析配置与尚未启用的正式Release/极光。
-- 版本化模型、端点、配置、数据清单、Profile、运行快照、case证据、报告及审计，迁移当前至0021。
+- 版本化模型、端点、配置、数据清单、Profile、运行快照、case证据、报告及审计，迁移当前至0022（含榜单评审数据表）。
 - Temporal工作流、专用I/O/GPQA/分析Worker及Outbox；未知调用不盲目重发，未实现活动明确失败。
 - 真实报告、条件匹配的批准JSON基准、内部榜单、独立分析及引用证据校验；分析需显式配置独立目标/资源。
 - 对账器恢复诊断和已归档GPQA attempt；状态未确认保留占用，清理按所有权幂等执行并记录审计。
@@ -231,3 +231,7 @@ GET `/api/autoeval/v1/runs/{id}`返回cleanup状态、次数和分类错误；PO
 官方视觉协议核对来源：[DeepSeek Vision](https://api-docs.deepseek.com/guides/vision/)（2026-11-10读取）。AE_MMMU_NATIVE_TEST=1运行固定工具与HTTP替身测试，覆盖原生请求差分、图像篡改/未绑定/非法格式、截断/空输出及请求失败。替身不产生真实测评成绩，也不证明账号的图像推理已联调。
 
 当前不开放MMMU-Pro平台任务入口：正式数据版本导入、对象存储图像证据、工作流/取消恢复、报告及真实模型联调尚需继续。GPQA入口仍只接受GPQA；不得将工具层测试通过扩展为MMMU-Pro端到端验收或正式Release通过。SSH升级该桥接应新建独立工具目录和绑定，旧目录按原固定版本保留。
+
+## 开发数据工作台与官方数据脚本
+
+`/api/autoeval/v1/data-workbench` 提供榜单来源记录、版本校验、评审、撤回及发布查询，限 development/test。界面 JSON 导入创建待评审记录；`scripts/` 中部分定向导入脚本会进一步调用批准接口，属于写操作，运行前检查脚本与来源快照。当前没有通用官网连接器或定时调度。详见 [工作台说明](../docs/data-workbench.md)。

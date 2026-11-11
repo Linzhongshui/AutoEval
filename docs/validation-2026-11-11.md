@@ -68,3 +68,29 @@
 - 成功读取原始真实历史报告的分支本轮无法重新验证；报告页面本轮验证的是缺失保护与隔离。模拟模型的真实SQL/S3/Temporal/SSH流水线通过，不替代新真实测评或正式Release/生产验收。
 
 运行、迁移、备份和镜像来源见[开发恢复指南](./development-recovery.md)。历史对象没有备份且不可重建，不将功能回归通过等同历史恢复成功。
+
+## 标准仓输入对接复核
+
+本轮修复当前未提交的标准仓输入改动，不替代上方既有全量联调记录，也未开启测评执行。
+
+### 修复与回归证据
+
+- 浏览器专项与后端专项原同名 `test_standard_inputs.py`，在非 package 测试目录中发生模块导入冲突。连续3次最小收集均为1个收集错误；浏览器文件改名为 `test_browser_standard_inputs.py` 后，联合收集25项成功，最终默认全量测试通过。
+- 六组固定来源均缺 `benchmark_config.json`。原编译器只设置 `startup_missing`，未阻断空平台模板，导致仅有用户调整时也返回 `input_ready=true`。新增六组回归在修复前连续3次均为6项失败；修复后要求缺启动配置时提供含非空 `params` 的版本化平台模板，否则返回 `startup_template_required`，用户调整不能替代。
+- 反向临时移除编译阻断后，新增回归再次为6项失败；恢复后两项相关参数化测试合计12项通过。六组完整输入与适配器 prepare 均显式使用平台模板。
+- 浏览器专项增加非空模板提示、模板请求内容和锁定字段检查；为启动模板文本框补充明确的可访问标签。浏览器 API 仍为模拟响应，不声称完成真实 API/GitHub 页面联调。
+
+### 实际执行结果
+
+| 检查 | 结果与边界 |
+| --- | --- |
+| `uv run pytest -q tests/test_standard_inputs.py`，同时设置 `AE_INFRA_TEST=1` 和固定 `AE_ADAPTOR_SOURCE` | **30 passed，0 skipped**；包含六组契约、合并/绕过、真实 PostgreSQL 和固定适配器 prepare |
+| 真实 PostgreSQL 并发、冲突及不可变专项 | 单独执行为 **1 passed**；覆盖并发重复导入、内容冲突、编译版本冲突和历史表禁止 UPDATE；保留不可变 TEST 来源记录 |
+| 固定适配器 prepare 专项 | 单独执行为 **1 passed**；本地 HEAD 固定为 `1fb877ace4a087cb805e9a3d5878dcce6349bc35`，六组均生成配置内容和命令，未写正式配置、未启动子进程 |
+| 默认 `uv run pytest -q` | **195 passed，78 skipped**；同名收集冲突已消除，保留1项既有 Starlette/httpx 弃用警告；跳过项不冒充联调通过 |
+| `uv run ruff check .` | 通过 |
+| TypeScript `tsc --noEmit` | 通过；使用本机缓存 Node，因为 npm 未加入 PATH |
+| Vite 生产构建 | 通过，1709个模块；构建前再次执行 TypeScript 检查 |
+| `test_browser_standard_inputs.py` | **1 passed**；本机 Vite 与 Chrome，覆盖预览、差异、登记、模型/服务映射、非空模板、抽屉、锁定字段、脱敏及禁止运行入口；路由守卫确认无真实写请求 |
+
+适配器源码仅克隆到临时目录并检出固定提交，未修改上游仓库。本轮没有调用模型、没有创建测评 Docker、没有启动真实测评，也没有接入输出解析、结果收集、报告、批准基线或门禁。数据库迁移为 `0023_standard_inputs`；其他环境仍需先执行迁移并重启 API。

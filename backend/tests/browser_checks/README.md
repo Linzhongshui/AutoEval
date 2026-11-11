@@ -1,6 +1,6 @@
 # Browser regression checks
 
-These four pytest checks replace the temporary `verify_*.py` scripts. They use the existing
+These pytest checks replace the temporary `verify_*.py` scripts. They use the existing
 Playwright development dependency, automatic browser lifecycle management, locator waits,
 and fresh isolated contexts. They do not launch on import or use fixed debugging ports,
 machine-specific Chrome paths, or historical report IDs.
@@ -27,6 +27,7 @@ uv run pytest -q tests/browser_checks
 | Report charts | Mock JavaScript fixture | Matched baseline, genuine zero, missing baseline, partial coverage, unavailable evidence |
 | Detail navigation | Read-only local API | Discover a report, task overview/dataset/cases/snapshot, report drilldown and return |
 | Workbench | Read-only local API | Dev menu, input form, unavailable evidence blocks nomination, import template, diagnostics and board |
+| Standard inputs | Intercepted API fixtures | Preview, differences, import, model/target mapping, compilation drawer, stale-result invalidation; no real writes |
 
 Both flags default to off; report navigation skips if no report exists. It never creates
 an evaluation to populate data. The live workbench check requires a development frontend.

@@ -27,6 +27,7 @@ from autoeval.reports import router as reports_router
 from autoeval.resources import router as resources_router
 from autoeval.runs import router as runs_router
 from autoeval.ssh_resources import router as ssh_resources_router
+from autoeval.standard_inputs import router as standard_inputs_router
 from autoeval.targets import router as targets_router
 
 
@@ -42,6 +43,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="AutoEval Backend", version="0.1.0", lifespan=lifespan)
     app.include_router(data_workbench_router)
+    app.include_router(standard_inputs_router)
     app.include_router(configuration_router)
     app.include_router(case_history_router)
     app.include_router(datasets_router)

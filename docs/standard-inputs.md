@@ -1,0 +1,82 @@
+# 标准仓输入接入
+
+本模块只登记标准输入、建立模型映射并生成适配器启动配置，不执行测评。输出格式、结果收集、报告、基线审批及门禁均未接入。本机已增加迁移 `0023_standard_inputs`；其他环境先执行 `uv run alembic upgrade head`，再重启 API。
+
+## 版本与职责
+
+- 标准仓：`SJTUyh/AutoEval-Standard`。远程分支先解析完整提交，再按同一提交获取目录及文件。
+- 测试来源固定为 `2f8f167a68f86ee022afcc7f2ae2b62bc2e6d2a2`，包含两个模型、三个基准的六组配置。测试附件是上游原文字节，不代表平台批准或官方成绩核验。
+- 适配器输入契约固定为 `SJTUyh/AutoEval-Benchmark-Adaptor@1fb877ace4a087cb805e9a3d5878dcce6349bc35`。升级需重新检查参数契约及配置生成。
+- GPQA_Diamond 映射为 GPQA/diamond，MMMU-Pro 为 MMMU-Pro/options10，DeepSWE 为独立的 DeepSWE/v1.1。后两者同样只校验输入，不因此开放任务执行。
+- `standard_config.json` 保存为锁定约束，`benchmark_config.json` 为可选启动配置；缺失时登记为“待补全启动配置”。`baseline.json` 原样保存为来源附件，不转换为门禁基线或榜单数据。
+
+## 页面与离线导入
+
+开发环境进入“数据工作台 → 标准仓输入”，填写分支或提交并同步预览；核对提交、文件哈希、标准字段差异和原文后确认登记。测评配置页的“标准仓输入与版本”抽屉提供同一入口；已有测评配置与探索流程保持独立。
+
+离线目录不通过 HTTP 传入后台路径，先在后台命令行生成 JSON 包，再由页面选择文件并预览：
+
+```powershell
+cd backend
+uv run python -m autoeval.import_standard_inputs --directory '<离线标准仓目录>' --revision '<40位提交号>' --output '<输入包.json>'
+```
+
+离线包的提交号由操作者提供，哈希保证存储内容可追溯，不代表平台验证了离线文件与 GitHub 提交一致；确认前需自行核对来源。远程同步只允许上述标准仓，最多 300 个文件、原文字节总计 2 MB；重复键、非有限数值和明文凭据拒绝。目录结构须为 `模型/基准/文件.json`。
+
+## 补全与编译
+
+在输入详情中查看来源、锁定字段及基线附件，再打开“补全启动参数与模型映射”抽屉：
+
+1. 选择已登记模型及属于该模型的服务，后台保存 ID 映射；凭据只通过服务引用，在本阶段不会读取密钥。
+2. 填写版本化启动模板及可调整参数，结构为 `{"params": {...}}`，也可附带 `tool`、`subcommand`。完整模板修改必须使用新的版本名；版本名约束在同一标准输入下生效。仓库缺少 `benchmark_config.json` 时，平台启动模板必须包含非空 `params`；只允许调整参数不能替代，否则会返回 `startup_template_required` 且 `input_ready=false`。
+3. 显式选择 Docker 或执行服务器本机环境，填写执行环境中的绝对 POSIX 路径。AISBench 源码目录必填；LLM 输入另需数据目录。DeepSWE 任务路径与标准锁定路径冲突时阻断，不擅自改写锁定值。
+4. 点击“校验并保存输入快照”，查看缺失项、参数来源、覆盖差异和脱敏配置。修改表单即清除旧校验结果。
+
+编译顺序为仓库启动配置 → 平台模板及用户调整 → 标准递归覆盖 → 平台环境参数。对象逐键合并，数组和标量整体替换。最终锁定字段再次检查；`model_overrides` 和非空 `extra_cli_args` 禁用，避免绕过锁定。端点、执行方式、容器标识及作业目录不允许在用户调整中注入。容器名和目录由输入内容确定，**仅是配置准备标识，尚不具备运行提交键及资源所有权语义**。
+
+示例模板：
+
+```json
+{
+  "tool": "ais_bench",
+  "subcommand": "llm_accuracy",
+  "params": {
+    "batch_size": 1,
+    "max_num_workers": 1,
+    "dump_eval_details": true
+  }
+}
+```
+
+输入齐备仅表示已知参数类型、必填字段和锁定规则通过静态检查。数据是否存在、端点协议兼容、视觉输入、工具依赖、模型能力及 Agent 环境均需后续真实联调。生成配置的使用标志为 `--no-template`，避免适配器再引入默认模板；此处不提供执行按钮。配置不含 `api_key`，将来执行桥接必须在临时受保护配置中注入凭据。
+
+## API
+
+统一前缀 `/api/autoeval/v1/standard-inputs`，仅 development/test，沿用受控本地操作员身份。所有响应均包裹 `data`、`request_id`。
+
+| 方法与路径 | 请求及行为 |
+| --- | --- |
+| POST `/sync-preview` | `{ "ref": "main" }`，固定提交并返回 bundle、sha256、entries及差异，不写业务数据 |
+| POST `/preview` | `{repository, revision, files}`；files 为相对路径到 UTF-8 原文的映射 |
+| POST `/import` | `{bundle, expected_sha256}`；与预览包哈希一致才登记；整个包同一事务 |
+| GET `?offset=0&limit=20` | 分页输入版本，支持 model_id 查询已编译映射；返回 next_offset |
+| GET `/{id}` | 来源原文、锁定参数及最近20条编译历史 |
+| POST `/{id}/compile` | model_id、target_id、template_version、template、adjustments、execution、tool_root、datasets_dir、task_path；返回 config、sha256、input_ready、blocking_reasons、field_sources、overrides |
+
+编译响应始终 `execution_enabled=false`、`approval_status=not_approved`。缺少输入可保存为有阻断项的快照；未知参数、锁定绕过等非法请求返回422，版本或哈希冲突409，输入不存在404，非开发环境403。GitHub访问失败返回422，可改用离线包。不会因网络错误写入部分版本。
+
+`standard_input_version` 按仓库、完整提交、来源模型、基准唯一，哈希涵盖完整原文；重复登记返回原 ID，冲突拒绝。`standard_input_compilation` 保存模型映射和脱敏编译快照，按内容哈希去重。两表均用数据库触发器阻止更新和删除；变更追加新版本。编译快照 SHA-256 使用去掉 sha256 字段后的规范 JSON（排序键、UTF-8、紧凑分隔符）计算。
+
+## 验证命令与边界
+
+```powershell
+cd backend
+$env:AE_INFRA_TEST='1'
+$env:AE_ADAPTOR_SOURCE='<固定提交的适配器仓本地目录>'
+uv run pytest tests/test_standard_inputs.py -q
+$env:AE_BROWSER_TEST='1'
+$env:AE_CHROME_PATH='<Chrome可执行文件路径>'
+uv run pytest tests/browser_checks/test_browser_standard_inputs.py -q
+```
+
+适配器专项读取并验证本地 HEAD，与固定提交一致才执行 prepare；使用临时的模型/数据集配置定位夹具，不导入真实测评工具、不运行预检、不调用 Docker 或模型。浏览器专项全部模拟输入管理 API，不能代替真实资源及测评正确性验收。数据库专项使用真实 PostgreSQL，保留不可变的 TEST 来源测试记录。

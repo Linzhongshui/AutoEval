@@ -190,6 +190,10 @@ async def list_configs(
                     "version_label": v.version_label,
                     "kind": v.kind,
                     "content_hash": v.content_hash,
+                    "source_url": v.source_url,
+                    "source_revision": v.source_revision,
+                    "source_sha256": v.source_sha256,
+                    "approved_by": v.approved_by,
                     "items": {
                         i.dataset_key: i.parameter_values
                         for i in items

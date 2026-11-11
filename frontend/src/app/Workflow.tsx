@@ -19,6 +19,7 @@ type Param = {
   scope: string;
 };
 type Profile = {
+  provenance?: Record<string, { url?: string | null; revision?: string | null; sha256?: string | null }>;
   persistedVersion?: number;
   id: string;
   name: string;
@@ -128,6 +129,7 @@ export function useProfiles() {
           if (existing) {
             existing.versions.push(item.version_label);
             existing.data![item.version_label] = item.items;
+            existing.provenance![item.version_label] = { url: item.source_url, revision: item.source_revision, sha256: item.source_sha256 };
           } else grouped.set(item.config_key, {
             id: item.config_key,
             name: item.display_name,
@@ -137,6 +139,7 @@ export function useProfiles() {
             versions: [item.version_label],
             items: Object.keys(item.items),
             data: { [item.version_label]: item.items },
+            provenance: { [item.version_label]: { url: item.source_url, revision: item.source_revision, sha256: item.source_sha256 } },
           });
         }
         setProfiles([...grouped.values()]);
@@ -336,6 +339,7 @@ export function Configurations({ profiles, setProfiles, go, notify }: {
               {editing.model && <span>模型：{editing.model} · {editing.modelId}</span>}
               <span>当前版本：{editing.official ? currentOfficialVersion : versions[editing.id] || editing.versions[0] || "未保存"}</span>
             </div>
+            {editing.official && <details className="notice"><summary>标准来源与只读参数</summary>{(() => { const source = editing.provenance?.[currentOfficialVersion]; return source?.url ? <><a href={source.url} target="_blank" rel="noreferrer">查看批准配置来源</a><p>来源版本：{source.revision}</p><small>SHA-256：{source.sha256}</small></> : <p>此历史配置未提供可展示的来源元数据。</p>; })()}<p>本页标准参数只读。新同步的标准仓输入需在“标准仓输入与版本”中独立评审，不会替代当前配置。</p><pre className="snapshot">{JSON.stringify(params, null, 2)}</pre></details>}
             <div className="workflow-grid">
               <aside className="workflow-datasets">
                 <DatasetTree

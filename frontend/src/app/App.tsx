@@ -3,6 +3,7 @@ import { DataWorkbench, PublishedLeaderboard } from "../components/DataWorkbench
 import { DatasetManifests } from "../components/DatasetManifests";
 import { ExecutionBindings } from "../components/ExecutionBindings";
 import { ManagementDrawer } from "../components/ManagementDrawer";
+import { StandardInputs } from "../components/StandardInputs";
 import { EvaluationRuns } from "../components/EvaluationRuns";
 import { RealReports } from "../components/RealReports";
 import { RealLeaderboard } from "../components/RealLeaderboard";
@@ -168,6 +169,7 @@ export function App() {
         {page === "config" && <div className="management-toolbar">
           <ManagementDrawer title="管理样本清单"><DatasetManifests /></ManagementDrawer>
           <ManagementDrawer title="执行规则与绑定"><ExecutionBindings /></ManagementDrawer>
+          {import.meta.env.DEV && <ManagementDrawer title="标准仓输入与版本"><StandardInputs /></ManagementDrawer>}
         </div>}
         {(page === "config" || page.startsWith("config/")) && (
           <Configurations profiles={profiles} setProfiles={setProfiles} go={go} notify={setToast} />

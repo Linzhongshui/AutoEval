@@ -2,6 +2,8 @@
 
 单团队、单工作空间，无项目/租户层。已验证本机Docker的GPQA Lite探索闭环，尚未完成全部工具、客户生产资源及生产验收。极光仍是独立资源提供方；页面直接展示真实业务数据，未启用能力明确保留边界。
 
+标准仓输入模块新增迁移 `0023_standard_inputs` 与 `/api/autoeval/v1/standard-inputs` 接口，支持输入登记、差异预览与脱敏配置编译；不启动测评、不写入批准基线。运行 `uv run alembic upgrade head` 并重启 API，使用方式和验证边界见[标准输入接入说明](../docs/standard-inputs.md)。
+
 ## 当前收口基线（2026-11-11）
 
 - 全量228项通过、无跳过；Ruff、TypeScript及前端构建通过。默认pytest跳过联调专项，不能替代该结果。
@@ -15,7 +17,7 @@
 - FastAPI应用工厂、lifespan资源回收、请求ID、统一异常和OpenAPI。
 - `/health/live`存活检查、`/health/ready`真实检查PostgreSQL/Temporal/S3 bucket；依赖不可用返回503。
 - `/api/autoeval/v1/system/capabilities`分别报告GPQA探索、分析配置与尚未启用的正式Release/极光。
-- 版本化模型、端点、配置、数据清单、Profile、运行快照、case证据、报告及审计，迁移当前至0022（含榜单评审数据表）。
+- 版本化模型、端点、配置、数据清单、Profile、运行快照、case证据、报告及审计，迁移当前至0023（含标准仓输入与榜单评审数据表）。
 - Temporal工作流、专用I/O/GPQA/分析Worker及Outbox；未知调用不盲目重发，未实现活动明确失败。
 - 真实报告、条件匹配的批准JSON基准、内部榜单、独立分析及引用证据校验；分析需显式配置独立目标/资源。
 - 对账器恢复诊断和已归档GPQA attempt；状态未确认保留占用，清理按所有权幂等执行并记录审计。

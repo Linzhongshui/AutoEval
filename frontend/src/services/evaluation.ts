@@ -4,6 +4,7 @@ import { apiGet, apiPost } from "./api";
 import { REGISTRY_PAGE_SIZE } from "../components/OffsetPagination";
 
 export type Config = {
+  source_url?: string | null; source_revision?: string | null; source_sha256?: string | null; approved_by?: string | null;
   id: string;
   config_key: string;
   display_name: string;

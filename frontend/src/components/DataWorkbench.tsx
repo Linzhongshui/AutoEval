@@ -1,5 +1,6 @@
 import { datasetIdentity } from "../services/datasetIdentities";
 import { WorkbenchDatasets } from "./WorkbenchDatasets";
+import { StandardInputs } from "./StandardInputs";
 import { ModelIdentifierSelect } from "./ModelIdentifierSelect";
 import { VendorLogo } from "./VendorLogo";
 import { WorkbenchModels } from "./WorkbenchModels";
@@ -87,10 +88,11 @@ export function DataWorkbench() {
   });
   return <div className="stack data-workbench">
     <div className="notice">开发环境数据维护入口。平台报告与外部来源独立留痕；评审批准仅控制内部榜单展示，不代表正式 Release 通过。</div>
-    <div className="workbench-toolbar"><div className="tabs">{["榜单数据维护", "模型列表", "数据集列表", "报告评审入榜", "官方数据导入", "环境诊断"].map((name) => <button key={name} className={tab === name ? "active" : ""} onClick={() => setTab(name)}>{name}</button>)}</div><button className="workbench-refresh" disabled={busy || loading} onClick={() => setRevision((v) => v + 1)}>刷新数据</button></div>
+    <div className="workbench-toolbar"><div className="tabs">{["榜单数据维护", "模型列表", "数据集列表", "报告评审入榜", "官方数据导入", "标准仓输入", "环境诊断"].map((name) => <button key={name} className={tab === name ? "active" : ""} onClick={() => setTab(name)}>{name}</button>)}</div><button className="workbench-refresh" disabled={busy || loading} onClick={() => setRevision((v) => v + 1)}>刷新数据</button></div>
     {(loading || message) && <p role="status">{loading ? "数据加载中…" : message}</p>}
     {tab === "模型列表" && <WorkbenchModels revision={revision} />}
     {tab === "数据集列表" && <WorkbenchDatasets revision={revision} />}
+    {tab === "标准仓输入" && <StandardInputs />}
     {tab === "环境诊断" && <DiagnosticTasks />}
     {tab === "报告评审入榜" && <section className="card"><h2>报告候选成绩</h2><p className="muted">仅完整、真实且原始证据可用的报告可提名；提名与批准时后台再次校验，不能修改原报告成绩。</p><div className="table-wrap"><table><thead><tr><th>模型 / 报告</th><th>分数</th><th>证据</th><th>操作</th></tr></thead><tbody>{reports.map((row) => <tr key={row.id}><td>{row.remote_model}<small>{row.id}</small></td><td>{row.evidence_status === "verified" ? row.summary.accuracy ?? "—" : "—"}</td><td>{row.evidence_status === "verified" ? "已校验" : "不可用"}</td><td><a className="link" href={`#report/${row.id}`}>查看报告</a> <button disabled={busy || row.validity !== "complete" || row.evidence_status !== "verified" || row.summary.accuracy === null || row.execution_origin !== "real"} onClick={() => void nominate(row)}>提名评审</button></td></tr>)}</tbody></table></div>{!loading && !reports.length && <p className="empty">暂无报告候选</p>}<OffsetPagination label="报告候选" offset={reportOffset} nextOffset={reportNext} onChange={setReportOffset} disabled={busy} /></section>}
     {tab === "榜单数据维护" && <>

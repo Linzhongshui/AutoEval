@@ -1,13 +1,21 @@
 # AutoEval 后端开发与联调
 
-单团队、单工作空间，无项目/租户层。已验证本机Docker的GPQA Lite探索闭环，尚未完成全部工具、SSH资源及生产验收。极光仍是独立资源提供方；原型示例与真实业务数据明确区分。
+单团队、单工作空间，无项目/租户层。已验证本机Docker的GPQA Lite探索闭环，尚未完成全部工具、客户生产资源及生产验收。极光仍是独立资源提供方；页面直接展示真实业务数据，未启用能力明确保留边界。
+
+## 当前收口基线（2026-11-11）
+
+- 全量228项通过、无跳过；Ruff、TypeScript及前端构建通过。默认pytest跳过联调专项，不能替代该结果。
+- 主机S3端点已切换到http://127.0.0.1:9002，固定摘要的GHCR社区MinIO镜像配独立持久卷；84个现存对象逐个校验并通过容器重启读回。原9000端点仅作协议模拟/迁移回退。
+- 两份历史真实报告原文无备份，保留索引并标记证据缺失；隐藏有效成绩、基准不计算差值、榜单排除，不重算或补造成绩。
+- SSH模拟器已改为前台sshd，实际重启后验证通过；API之外必须运行Workflow/I/O/GPQA Worker、Outbox派发及对账。
+- 运行、备份、精确恢复和验证边界见[恢复指南](../docs/development-recovery.md)与[验证记录](../docs/validation-2026-11-11.md)。
 
 ## 已实现
 
 - FastAPI应用工厂、lifespan资源回收、请求ID、统一异常和OpenAPI。
 - `/health/live`存活检查、`/health/ready`真实检查PostgreSQL/Temporal/S3 bucket；依赖不可用返回503。
-- `/api/autoeval/v1/system/capabilities`分别报告GPQA探索、分析配置与尚未启用的正式测评/SSH/极光。
-- 版本化模型、端点、配置、数据清单、Profile、运行快照、case证据、报告及审计，迁移当前至0017。
+- `/api/autoeval/v1/system/capabilities`分别报告GPQA探索、分析配置与尚未启用的正式Release/极光。
+- 版本化模型、端点、配置、数据清单、Profile、运行快照、case证据、报告及审计，迁移当前至0021。
 - Temporal工作流、专用I/O/GPQA/分析Worker及Outbox；未知调用不盲目重发，未实现活动明确失败。
 - 真实报告、条件匹配的批准JSON基准、内部榜单、独立分析及引用证据校验；分析需显式配置独立目标/资源。
 - 对账器恢复诊断和已归档GPQA attempt；状态未确认保留占用，清理按所有权幂等执行并记录审计。
@@ -26,7 +34,9 @@ uv run uvicorn autoeval.api:app --host 127.0.0.1 --port 8000 --reload
 
 访问 http://127.0.0.1:8000/docs 。API启动不强依赖外部服务，未启动依赖时ready=503是预期结果。前端在仓库的`frontend/`目录运行`npm run dev`，Vite将`/api/autoeval`转发到8000。
 
-## Compose开发环境
+## 原Compose协议测试拓扑
+
+以下保留原协议模拟拓扑说明，其中storage为非持久化Moto。当前业务联调使用独立持久化MinIO、主机API和Worker，按[恢复指南](../docs/development-recovery.md)启动，不应直接以此拓扑存储历史证据。
 
 ```powershell
 Copy-Item deploy/.env.example deploy/.env
@@ -56,10 +66,10 @@ uv export --frozen --no-dev --no-emit-project --format requirements-txt --output
 
 ## 下一批实现边界
 
-1. 补齐SSH原生临时结果的持久化清理状态、未知结果处置和客户真实环境验收。
-2. MMMU-Pro真实多模态推理与AutomationBench明确工具/数据契约及执行接入。
-3. 统一前端主流程与已接入区域，补齐正式Release的批准配置/范围/门禁规则。
-4. 生产身份、镜像封装、持久存储、监控及部署验收。
+1. 完成MMMU-Pro正式数据、图像对象证据、平台任务、工作流/报告及真实模型联调。
+2. 接入AutomationBench并明确工具、数据契约与真实执行验收。
+3. 实现正式Release的批准配置、范围与门禁规则。
+4. 完成生产身份、镜像封装、监控、部署及生产存储耐久性验收。
 
 Outbox按payload路由运行、恢复与分析工作流，使用稳定Workflow ID去重。CANCEL_RUN仍为schema占位，取消由运行行意图轮询消费。派发采用单行有界事务持锁；多副本生产前仍需验证锁竞争与派发容量。
 
@@ -67,11 +77,11 @@ Outbox按payload路由运行、恢复与分析工作流，使用稳定Workflow I
 
 ## Docker诊断联调
 
-完成迁移与资源登记后，同时启动API、`uv run python -m autoeval.worker workflow`、`uv run python -m autoeval.worker io`和`uv run python -m autoeval.dispatcher`，然后打开前端任务管理页的“本机Docker诊断任务”。该区域使用真实数据库和执行容器，支持15秒诊断、取消及刷新后找回历史。
+完成迁移与资源登记后，同时启动API、`uv run python -m autoeval.worker workflow`、`uv run python -m autoeval.worker io`和`uv run python -m autoeval.dispatcher`，然后打开前端任务管理页的“本机 Docker 诊断”。该区域使用真实数据库和执行容器，支持15秒诊断、取消及刷新后找回历史。
 
 诊断API前缀为`/api/autoeval/v1/diagnostics/runs`，提交必须提供Idempotency-Key。相同键/正文返回同一运行，正文冲突返回409。取消意图持久化在运行行，由活动轮询消费，不依赖尚未启用的CANCEL_RUN Outbox。执行状态不明保留占用并记录execution_unresolved。
 
-另行启动`uv run python -m autoeval.reconciler`，每60秒检查创建超过5分钟的非终态运行。仅对已关闭Workflow的诊断任务恢复投影；使用原作业键查证，不调用submit。作业已终止才收集结果、补齐事件并在同一事务释放占用；运行中取消继续按进程身份查验，找不到作业或外部不可达时保留占用。正式测评恢复及长期运行心跳策略仍待实现。
+另行启动`uv run python -m autoeval.reconciler`，每60秒检查创建超过5分钟的非终态运行，以及已终态但仍持有执行租约的诊断任务。活跃Workflow不竞争写入；仅对已关闭Workflow的诊断任务恢复投影，使用原作业键查证，不调用submit。作业已终止才收集结果、补齐事件并在确认清理后释放占用；运行中取消继续按进程身份查验，找不到作业或外部不可达时保留占用。对账器同时恢复已归档GPQA attempt和到期清理，长期运行心跳策略仍需生产验证。
 
 该链路仅验证框架，不调用模型、不计分、不判定Release通过。浏览器测试`tests/test_browser_diagnostics.py`需要运行中的Vite/API、两个Worker、投递器及Docker基础服务；以AE_BROWSER_URL和AE_CHROME_PATH启用。
 
@@ -146,7 +156,7 @@ AE_GPQA_PIPELINE_TEST=1启用真实SQL/S3/Temporal、模拟模型边界专项；
 
 ## 报告目录与产物来源
 
-报告管理页已读取真实后端，GET `/api/autoeval/v1/reports?offset=0&limit=20`返回目录及next_offset，GET `/reports/{id}`读取详情，GET `/reports/{id}/evidence`校验S3正文。`#report/<UUID>`可刷新直达。原型示例报告明确折叠标记。
+报告管理页已读取真实后端，GET `/api/autoeval/v1/reports?offset=0&limit=20`返回目录及next_offset，GET `/reports/{id}`读取详情，GET `/reports/{id}/evidence`校验S3正文。`#report/<UUID>`可刷新直达。原页面直接展示真实报告；未采集或不支持的指标保持空态，不使用静态示例补齐。
 
 execution_origin由服务端运行环境冻结，默认real；模拟测试应用显式设为simulation。历史来源不明的报告默认unverified。普通报告目录只展示real，不把模拟成绩当真实结果。历史来源核验只补充元数据/审计，不重写原始成绩或快照。自动分析需要独立配置，未启用时不展示虚构结论。
 
@@ -198,9 +208,9 @@ GET `/api/autoeval/v1/runs/{id}`返回cleanup状态、次数和分类错误；PO
 
 服务查询`GET /target-bindings`支持可选target_id，返回模型ID/业务键、模型版本和当前默认配置版本；不返回凭据引用。配置查询`GET /test-configs`支持可选config_id，均保留offset/limit/next_offset语义；精确ID不存在返回空列表，非法UUID返回422。
 
-`#run/<UUID>`是可刷新和分享的真实运行详情；与原型`#task/<示例ID>`分别路由。任务页的配置、服务、资源和运行均按20条分页，翻页保留已选项；无符合条件的选项时可以继续翻页，不以第一页为空推断全库无可用项。运行列表返回模型、资源类型；详情返回白名单冻结参数和摘要，排除凭据、私有扩展及原始样本正文。
+`#run/<UUID>`是可刷新和分享的真实运行详情，原任务列表与详情均读取该运行接口。任务页的配置、服务、资源和运行均按20条分页，翻页保留已选项；无符合条件的选项时可以继续翻页，不以第一页为空推断全库无可用项。运行列表返回模型、资源类型；详情返回白名单冻结参数和摘要，排除凭据、私有扩展及原始样本正文。
 
-运行详情自动带入case历史查询，报告可返回来源运行，运行可进入报告。默认配置更新不改变历史运行快照。列表每5秒、详情每2秒刷新；隐藏标签页暂停轮询，切换运行/分页会中止旧请求并清除旧详情，避免过期响应覆盖当前任务。控制台和任务页的原型示例明确标记，不冒充实际执行。
+运行详情自动带入case历史查询，报告可返回来源运行，运行可进入报告。默认配置更新不改变历史运行快照。列表每5秒、详情每2秒刷新；隐藏标签页暂停轮询，切换运行/分页会中止旧请求并清除旧详情，避免过期响应覆盖当前任务。控制台与任务页直接读取后端，未启用能力显示原因，不展示静态示例。
 
 探索提交的未确认意图在当前标签页sessionStorage保留相同请求摘要和幂等键；仅含配置/服务/资源UUID、模式与请求上限，绝不存凭据。刷新后重新选择同一请求仍使用原键；成功确认后删除，修改请求则生成新键。存储受限时降级为组件内意图。浏览器故障测试在到达后台前拦截两次提交，验证刷新后同键；后台真实幂等性另由SQL/流水线测试验证，不调用付费模型。
 
@@ -209,3 +219,15 @@ GET `/api/autoeval/v1/runs/{id}`返回cleanup状态、次数和分类错误；PO
 迁移0021为资源固定native_bridge_sha256、native_lock_sha256、native_tool_revision。填写工具目录的新登记绑定固定当时后台批准的文件与版本；预检及快照使用该绑定的固定值，不读取后台升级后的当前摘要。工具目录、摘要及版本由数据库触发器保护，升级需独立目录和新绑定，保留旧运行所依赖的目录；凭据不进入快照。
 
 历史资源只从同一资源ID和工具目录的唯一历史快照版本回填。缺少或存在冲突证据时保持未固定状态，禁止隐式批准当前代码；按批准部署重新登记。预检仍逐字节核验实际工具，不因存在历史记录就声明测评可用。页面展示固定版本和摘要。迁移不会修改任何既有运行快照。
+
+## MMMU-Pro多模态桥接（工具层）
+
+固定AISBench路径新增request_mmmu_pro_options10_cot（只构造请求，不连接模型）和infer_mmmu_pro_smoke（显式推理）操作。原生Loader、MMPromptTemplate、APITemplateParser、VLLMCustomAPIChat及MMMUProCotEvaluator保持批准revision；只将原生Prompt中的冻结图像引用转换为内联data URL，文本和图像位置不自行重排，不读取任意file://或远程图片链接，也不写共享运行时图片目录。
+
+输入图像逐一校验base64、字节摘要、实际格式和尺寸，并要求与样本原生标签中的引用集合一致。返回不含图像正文的input_images身份清单及可复现的逻辑Prompt；请求预览另返回原生请求体和摘要，不能将含图像正文的预览直接写入普通日志。API Key只进入原生模型的鉴权头，不进入请求体、Prompt或图像清单。
+
+当前桥接工程保护上限为8张图、单图4MiB、总图像8MiB、单边8192像素及64输出tokens，只支持批准的官方DeepSeek Flash目标；这些是开发桥接边界，不能作为基准合格阈值或正式测评参数。实际图像格式由Pillow验证，支持JPEG/PNG/GIF/WebP；空输出和length终止保持原生执行/评分语义，诊断不擅自判无效。模型HTTP调用至多一次，禁止自动重发。
+
+官方视觉协议核对来源：[DeepSeek Vision](https://api-docs.deepseek.com/guides/vision/)（2026-11-10读取）。AE_MMMU_NATIVE_TEST=1运行固定工具与HTTP替身测试，覆盖原生请求差分、图像篡改/未绑定/非法格式、截断/空输出及请求失败。替身不产生真实测评成绩，也不证明账号的图像推理已联调。
+
+当前不开放MMMU-Pro平台任务入口：正式数据版本导入、对象存储图像证据、工作流/取消恢复、报告及真实模型联调尚需继续。GPQA入口仍只接受GPQA；不得将工具层测试通过扩展为MMMU-Pro端到端验收或正式Release通过。SSH升级该桥接应新建独立工具目录和绑定，旧目录按原固定版本保留。

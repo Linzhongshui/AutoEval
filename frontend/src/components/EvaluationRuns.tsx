@@ -1,3 +1,4 @@
+import { ListPagination } from "./ListPagination";
 import { useEffect, useState } from "react";
 import { CheckCircle2, CircleAlert, Layers, Play } from "lucide-react";
 import { apiGet, apiGetPage, apiPost } from "../services/api";
@@ -6,7 +7,7 @@ import {
   useDefaultConfig, useExplorationSubmission, useOptions, withSelected,
 } from "../services/evaluation";
 import { CaseHistory } from "./CaseHistory";
-import { OffsetPagination, REGISTRY_PAGE_SIZE } from "./OffsetPagination";
+import { OffsetPagination } from "./OffsetPagination";
 
 type Run = { id: string; state: string; remote_model?: string; resource_kind?: string; created_at: string };
 type Snapshot = { sha256: string; config_version_id: string; config_sha256: string; target_id: string; remote_model: string; resource_kind: string; sample_count: number; parameters: Record<string, unknown>; manifest_id: string; manifest_sha256: string; execution_origin: string };
@@ -28,6 +29,7 @@ export function EvaluationRuns({ runId = "", initialTarget = "", allowSubmit = t
   const { busy, setBusy, message, setMessage, submit } = useExplorationSubmission();
   const [runs, setRuns] = useState<Run[]>([]);
   const [offset, setOffset] = useState(0);
+  const [pageSize,setPageSize] = useState(15);
   const [next, setNext] = useState<number | null>(null);
   const [listError, setListError] = useState("");
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -57,14 +59,14 @@ export function EvaluationRuns({ runId = "", initialTarget = "", allowSubmit = t
       if (refreshing || document.hidden) return;
       refreshing = true;
       try {
-        const page = await apiGetPage<Run[]>(`/runs?offset=${offset}&limit=${REGISTRY_PAGE_SIZE}`, controller.signal);
+        const page = await apiGetPage<Run[]>(`/runs?offset=${offset}&limit=${pageSize}`, controller.signal);
         if (!controller.signal.aborted) { setRuns(page.data); setNext(page.next_offset); setListError(""); }
       } catch { if (!controller.signal.aborted) setListError("任务列表查询失败，恢复连接后自动重试。"); }
       finally { refreshing = false; }
     };
     void refresh(); const timer = setInterval(() => void refresh(), 5000);
     return () => { controller.abort(); clearInterval(timer); };
-  }, [offset, runId]);
+  }, [offset, runId, pageSize]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -139,7 +141,7 @@ export function EvaluationRuns({ runId = "", initialTarget = "", allowSubmit = t
             </div>
             <label>已保存探索任务 <select aria-label="已保存探索任务" value={runId} onChange={(event) => { location.hash = event.target.value ? runLink(event.target.value) : "#tasks"; }}><option value="">请选择任务</option>{runs.map((row) => <option key={row.id} value={row.id}>{row.id} · {row.state}</option>)}</select></label>
             <div className="table-wrap"><table><thead><tr><th>任务</th><th>模型</th><th>运行方式</th><th>资源</th><th>状态</th><th>创建时间</th><th>操作</th></tr></thead><tbody>{filteredRuns.map((row) => <tr key={row.id}><td><a className="link strong" href={runLink(row.id)}>{row.id}</a></td><td>{row.remote_model || "—"}</td><td>GPQA Lite · exploration</td><td>{resourceLabel(row.resource_kind)}</td><td><span className={`case-status ${row.state === "completed" ? "passed" : ["failed", "cancelled"].includes(row.state) ? "error" : "running"}`}>{row.state}</span></td><td>{time(row.created_at)}</td><td><a className="link" href={runLink(row.id)}>查看</a></td></tr>)}</tbody></table>{!filteredRuns.length && <div className="empty">当前页没有符合条件的任务</div>}</div>
-            <OffsetPagination label="探索任务" offset={offset} nextOffset={next} onChange={setOffset} disabled={busy} />
+            <ListPagination label="任务" offset={offset} nextOffset={next} pageSize={pageSize} onOffsetChange={setOffset} onPageSizeChange={setPageSize} disabled={busy} />
           </section>
         </>
       )}

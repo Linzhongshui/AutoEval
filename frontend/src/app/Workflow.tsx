@@ -1,3 +1,4 @@
+import { PageNumbers } from "../components/PageNumbers";
 import { useEffect, useState } from "react";
 import { ModelRegistry } from "../components/ModelRegistry";
 import { ServiceBindings } from "../components/ServiceBindings";
@@ -219,7 +220,7 @@ export function Configurations({ profiles, setProfiles, go, notify }: {
   const [kind, setKind] = useState("标准配置");
   const [officialVersion, setOfficialVersion] = useState("");
   const [page, setPage] = useState(1);
-  const pageSize = 5;
+  const [pageSize, setPageSize] = useState(15);
   const [query, setQuery] = useState("");
   const [versions, setVersions] = useState<Record<string, string>>({});
   const [editing, setEditing] = useState<Profile | null>(null);
@@ -315,10 +316,9 @@ export function Configurations({ profiles, setProfiles, go, notify }: {
         </div>
         <div className="pagination" aria-label="配置列表分页">
           <span>共 {filtered.length} 条 · 每页 {pageSize} 条</span>
+          <label className="pagination-page-size"><span>每页</span><select aria-label="每页条数" value={pageSize} onChange={e=>{setPageSize(Number(e.target.value));setPage(1);}}>{[5,15,30,50].map(size=><option key={size} value={size}>{size} 条</option>)}</select></label>
           <button disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>上一页</button>
-          {Array.from({ length: pageCount }, (_, i) => (
-            <button key={i} className={currentPage === i + 1 ? "primary" : ""} aria-current={currentPage === i + 1 ? "page" : undefined} onClick={() => setPage(i + 1)}>{i + 1}</button>
-          ))}
+          <PageNumbers current={currentPage} total={pageCount} onChange={setPage} />
           <button disabled={currentPage === pageCount} onClick={() => setPage(currentPage + 1)}>下一页</button>
         </div>
       </section>

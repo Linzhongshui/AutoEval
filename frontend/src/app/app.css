@@ -3314,3 +3314,12 @@ td small .badge,
 .diagnostic-tasks label { display: block; margin: 12px 0; }
 .diagnostic-tasks select { max-width: 100%; margin-left: 8px; padding: 6px; }
 .diagnostic-tasks pre { overflow: auto; max-height: 240px; }
+
+.page-number-group { display:flex; align-items:center; gap:8px; flex-wrap:nowrap; }
+.page-number-group button { min-width:34px; padding:7px 10px; font-variant-numeric:tabular-nums; }
+.pagination .pagination-ellipsis { display:inline-flex; align-items:center; justify-content:center; width:24px; margin:0; color:var(--muted); }
+@media(max-width:600px) { .page-number-group { gap:3px; } .page-number-group button { min-width:28px; padding:7px 6px; } .pagination .pagination-ellipsis { width:15px; } }
+
+.pagination-page-size { display:inline-flex; align-items:center; gap:8px; flex-shrink:0; white-space:nowrap; font-size:13px; color:var(--muted); }
+.pagination-page-size select { width:90px; height:36px; padding:6px 10px; }
+.pagination .pagination-page-size > span { margin:0; }

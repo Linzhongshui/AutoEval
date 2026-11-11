@@ -1,3 +1,4 @@
+import { ListPagination } from "./ListPagination";
 import { useEffect, useState } from "react";
 import { ReportView, type Report } from "../app/ReportView";
 import { apiGetPage } from "../services/api";
@@ -12,6 +13,7 @@ const validityLabels: Record<string, string> = {
 export function RealReports({ reportId, open }: { reportId?: string; open: (id: string) => void }) {
   const [rows, setRows] = useState<Report[]>([]);
   const [offset, setOffset] = useState(0);
+  const [pageSize,setPageSize] = useState(15);
   const [next, setNext] = useState<number | null>(null);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -24,7 +26,7 @@ export function RealReports({ reportId, open }: { reportId?: string; open: (id: 
     setNext(null);
     setMessage("");
     setLoading(true);
-    apiGetPage<Report[]>(`/reports?limit=20&offset=${offset}`, controller.signal)
+    apiGetPage<Report[]>(`/reports?limit=${pageSize}&offset=${offset}`, controller.signal)
       .then((page) => {
         setRows(page.data);
         setNext(page.next_offset);
@@ -36,7 +38,7 @@ export function RealReports({ reportId, open }: { reportId?: string; open: (id: 
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [offset, refresh, reportId]);
+  }, [offset, refresh, reportId, pageSize]);
 
   if (reportId) {
     return (
@@ -125,15 +127,7 @@ export function RealReports({ reportId, open }: { reportId?: string; open: (id: 
         </div>
       </section>
 
-      <div className="pagination" aria-label="报告列表分页">
-        <span>当前页 {rows.length} 条 · offset {offset}</span>
-        <button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 20))}>
-          报告上一页
-        </button>
-        <button disabled={next === null} onClick={() => { if (next !== null) setOffset(next); }}>
-          报告下一页
-        </button>
-      </div>
+      <ListPagination label="报告" offset={offset} nextOffset={next} pageSize={pageSize} onOffsetChange={setOffset} onPageSizeChange={setPageSize} disabled={loading} />
     </div>
   );
 }

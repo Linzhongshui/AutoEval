@@ -13,18 +13,36 @@ from autoeval.benchmarks import BenchmarkBaseline, compare_baseline
 from autoeval.datasets import read_manifest
 from autoeval.evaluations import EvaluationReport
 from autoeval.models import EvaluationRun, RunSnapshot
+from autoeval.report_integrity import report_evidence_status
 
 router = APIRouter(prefix="/api/autoeval/v1/reports", tags=["reports"])
 
 
 def report_data(
-    row, run, snapshot, baselines=(), *, analysis_status="not_enabled", analysis_id=None
+    row,
+    run,
+    snapshot,
+    baselines=(),
+    *,
+    analysis_status="not_enabled",
+    analysis_id=None,
+    evidence_status="not_checked",
 ):
+    comparison = compare_baseline(row.summary, snapshot.canonical_body, baselines)
+    if evidence_status != "verified":
+        comparison = {
+            **comparison,
+            "status": "incomparable",
+            "measured_value": None,
+            "difference": None,
+            "reason": "report_evidence_unverified",
+        }
     return {
         "id": str(row.id),
         "run_id": str(row.run_id),
         "created_at": row.created_at.isoformat(),
         "validity": row.validity,
+        "evidence_status": evidence_status,
         "summary": row.summary,
         "sha256": row.sha256,
         "snapshot_sha256": row.snapshot_sha256,
@@ -36,9 +54,7 @@ def report_data(
         "gate_status": "not_applicable",
         "analysis_status": analysis_status,
         "analysis_id": str(analysis_id) if analysis_id else None,
-        "baseline_comparison": compare_baseline(
-            row.summary, snapshot.canonical_body, baselines
-        ),
+        "baseline_comparison": comparison,
     }
 
 
@@ -65,13 +81,20 @@ async def catalog(request: Request, offset: int = 0, limit: int = 20):
             baselines = (await session.scalars(select(BenchmarkBaseline))).all()
             selected = rows[:limit]
             analyses = (
-                await session.scalars(
-                    select(ReportAnalysis).where(
-                        ReportAnalysis.report_id.in_([row[0].id for row in selected])
+                (
+                    await session.scalars(
+                        select(ReportAnalysis).where(
+                            ReportAnalysis.report_id.in_([row[0].id for row in selected])
+                        )
                     )
-                )
-            ).all() if selected else []
+                ).all()
+                if selected
+                else []
+            )
             jobs = {job.report_id: job for job in analyses}
+            statuses = await asyncio.gather(
+                *(report_evidence_status(request.app.state.settings, *row) for row in selected)
+            )
             data = [
                 report_data(
                     *row,
@@ -80,8 +103,9 @@ async def catalog(request: Request, offset: int = 0, limit: int = 20):
                         jobs.get(row[0].id), request.app.state.settings
                     ),
                     analysis_id=jobs.get(row[0].id).id if jobs.get(row[0].id) else None,
+                    evidence_status=status,
                 )
-                for row in selected
+                for row, status in zip(selected, statuses, strict=True)
             ]
     except SQLAlchemyError as exc:
         raise HTTPException(503, "Report catalog unavailable") from exc
@@ -119,6 +143,7 @@ async def detail(report_id: uuid.UUID, request: Request):
                 baselines,
                 analysis_status=analysis_status_for(job, request.app.state.settings),
                 analysis_id=job.id if job else None,
+                evidence_status=await report_evidence_status(request.app.state.settings, *row),
             )
     except SQLAlchemyError as exc:
         raise HTTPException(503, "Report database unavailable") from exc

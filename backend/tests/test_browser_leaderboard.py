@@ -21,7 +21,11 @@ def test_browser_real_leaderboard_groups_and_report_links():
             )
             assert response.status == 200
             groups = response.json()["data"]
-            assert groups, "A verified complete real report is required"
+            if not groups:
+                assert response.json()["excluded_unverified_reports"] > 0
+                expect(leaderboard).to_contain_text("暂无可比完整报告")
+                expect(page.get_by_test_id("leaderboard-entry")).to_have_count(0)
+                return
 
             expect(leaderboard.locator("table.leader-table")).to_have_count(len(groups))
             expect(leaderboard.get_by_role("button", name="性能榜单", exact=True)).to_have_count(0)

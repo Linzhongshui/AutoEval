@@ -1,0 +1,70 @@
+# 收口验证记录（2026-11-11）
+
+初轮结论：未通过；修复后结果见末节，首期其他未实现范围不因此关闭。基线 HEAD=4b228fd，并包含当前未提交的MMMU桥接及其测试；本轮未提交或覆盖这些既有改动。
+
+| 检查 | 结果 |
+| --- | --- |
+| Ruff | 通过 |
+| TypeScript | 通过 |
+| Vite生产构建 | 通过，1694模块 |
+| 数据库迁移 | 0021，head |
+| 启用全部既有联调开关的回归 | 183通过、26失败、0跳过，311.63秒 |
+
+## 环境与限制
+
+- 初始Docker、数据库和前后端未启动。已启动既有五个容器、API及Vite，未重建数据卷。
+- 初始默认测试为132通过、70跳过、7个数据库连接错误，不能作为全量通过证据。
+- S3协议模拟器重启后缺少证据桶，已显式初始化开发桶；初始化期间首轮部分测试遇到NoSuchBucket。
+- 数据库有2份真实报告，对应2个报告对象均缺失；初始化空桶不能恢复历史证据。
+- SSH容器虽显示运行，但握手出现EOF/banner错误；尚未证明是业务适配缺陷。
+- 浏览器诊断任务停在accepted，后续提交出现409/占用冲突；需确认Worker、Outbox与既有运行状态后恢复，不能直接删除占用。
+- 本轮未发送真实模型生成请求。历史测试成绩不替代本次结果。
+
+## 收口顺序
+
+1. 核验对象存储备份或精确原始证据来源；不能补造历史成绩。需要持久化存储方案与重启恢复验证。
+2. 检查SSH容器内sshd运行/监听及批准指纹，不用容器Up替代SSH可用。
+3. 按运行与工作流事实恢复Worker/派发和占用，避免盲目重提或重跑模型。
+4. 环境稳定后先定向复测下列失败，再执行最终全量并更新开发计划状态。
+
+## 本轮失败用例
+
+- `tests.test_backup_live::test_backup_verifies_tampering_then_restores_only_scratch`
+- `tests.test_browser_case_history::test_browser_failed_attempt_is_still_available_after_success`
+- `tests.test_browser_diagnostics::test_browser_diagnostic_execute_reload_and_cancel`
+- `tests.test_browser_reports::test_browser_real_report_evidence_and_direct_reload`
+- `tests.test_browser_run_navigation::test_report_to_direct_run_snapshot_case_history_and_reload`
+- `tests.test_browser_ssh_resources::test_browser_register_private_key_and_preflight_local_ssh`
+- `tests.test_diagnostic_pipeline_live::test_diagnostic_submit_deduplicate_execute_and_cancel`
+- `tests.test_evaluation_pipeline_live::test_submit_deduplicate_partial_report_and_cancel`
+- `tests.test_gpqa_import_live::test_reimport_preserves_ids_and_bundle_matches_manifest`
+- `tests.test_native_smoke_integration::test_native_smoke_records_valid_transitions_without_secret_snapshot`
+- `tests.test_reconciliation_live::test_recover_closed_workflow_without_restarting_job`
+- `tests.test_reconciliation_live::test_browser_unknown_recovery_and_audit_are_consistent`
+- `tests.test_reports_live::test_report_catalog_excludes_unverified_and_simulated_artifacts`
+- `tests.test_ssh_evaluation_live::test_ssh_submission_snapshot_report_and_cancel`
+- `tests.test_ssh_evaluation_live::test_ssh_started_attempt_recovers_remote_evidence_without_model_request`
+- `tests.test_ssh_executor_live::test_ssh_submission_deduplicates_and_collects_result_via_sftp`
+- `tests.test_ssh_executor_live::test_ssh_cancel_and_cleanup_preserve_unowned_files`
+- `tests.test_ssh_executor_live::test_ssh_fingerprint_mismatch_rejects_before_authentication`
+- `tests.test_ssh_native_live::test_lost_ssh_ack_is_recovered_without_reexecuting_or_persisting_secret`
+- `tests.test_ssh_native_live::test_native_key_conflict_and_result_corruption_do_not_trigger_new_execution`
+- `tests.test_ssh_native_live::test_unapproved_bridge_never_executes_and_leaves_unknown_outcome[bridge_sha256]`
+- `tests.test_ssh_native_live::test_unapproved_bridge_never_executes_and_leaves_unknown_outcome[lock_sha256]`
+- `tests.test_ssh_native_live::test_killed_remote_process_is_unknown_and_never_automatically_restarted`
+- `tests.test_ssh_native_live::test_native_cleanup_is_idempotent_owned_and_prevents_reexecution`
+- `tests.test_ssh_native_live::test_native_cleanup_rejects_unverified_result_and_unknown_job`
+- `tests.test_ssh_native_live::test_native_cleanup_recovers_interrupted_deletion_from_terminal_receipt`
+
+## 修复后收口结果
+
+- 2026-11-11最终全量：228 passed、0 failed、0 skipped，342.75秒；保留1项既有Starlette/httpx弃用警告。原始结果为backend/validation-durable-final.xml。
+- 首轮183通过/26失败；恢复SSH/Worker及可复现数据后210通过/3失败；剩余3项关联不可恢复历史证据，现已补齐明确缺失状态、成绩隐藏、基准不计算及榜单排除的行为验证，没有补造模型输出。
+- 相对首轮209项新增19项测试：精确恢复4、存储复制4、报告完整性/榜单/跨数据集防误标11；既有浏览器与接口用例增加缺失分支断言，不重复计数。
+- Ruff、TypeScript与Vite构建通过。数据库迁移仍为0021；运行环境已切换为持久化MinIO，当前ready=200。
+- 84个现存对象复制后逐个校验并通过重启读回。旧Moto端点保留，当前主机应用使用9002；两份旧报告的证据状态仍为missing，榜单分组为0、排除2份，不改历史数据库成绩。
+- 实际SSH容器重启后11项专项通过，保留原批准指纹与回退容器。恢复派发和Worker之前确认没有非终态真实测评排队；修复与测试未主动发起真实生成请求。
+- 基线包含4a09869及修复工作区；原有MMMU桥接代码与测试仍为单独未提交改动，本次全量执行包含它们，但本批提交不包含它们。
+- 成功读取原始真实历史报告的分支本轮无法重新验证；报告页面本轮验证的是缺失保护与隔离。模拟模型的真实SQL/S3/Temporal/SSH流水线通过，不替代新真实测评或正式Release/生产验收。
+
+运行、迁移、备份和镜像来源见[开发恢复指南](./development-recovery.md)。历史对象没有备份且不可重建，不将功能回归通过等同历史恢复成功。

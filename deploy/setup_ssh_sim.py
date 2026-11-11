@@ -79,18 +79,31 @@ Path('/run/sshd').mkdir(exist_ok=True)
         "auth_kind": "private_key",
     }
     config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
-    docker(
-        "exec",
-        "-d",
-        container,
-        "/usr/sbin/sshd",
-        "-D",
-        "-e",
-        "-o",
-        "PasswordAuthentication=no",
-        "-o",
-        "PermitRootLogin=no",
+    listening = (
+        docker(
+            "exec",
+            container,
+            "python",
+            "-c",
+            "import socket; s=socket.socket(); s.settimeout(2); print(s.connect_ex(('127.0.0.1',22)) == 0); s.close()",
+        )
+        .decode()
+        .strip()
+        == "True"
     )
+    if not listening:
+        docker(
+            "exec",
+            "-d",
+            container,
+            "/usr/sbin/sshd",
+            "-D",
+            "-e",
+            "-o",
+            "PasswordAuthentication=no",
+            "-o",
+            "PermitRootLogin=no",
+        )
     print(
         json.dumps(
             {

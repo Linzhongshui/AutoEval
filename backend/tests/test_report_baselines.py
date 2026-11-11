@@ -13,7 +13,13 @@ def snapshot():
             "manifest_id": str(uuid4()),
             "manifest_sha256": "a" * 64,
             "tool": {"revision": "tool-a"},
-            "parameters": {"output": 32, "concurrency": 1, "temperature": 0, "top_p": 1, "scope": "Lite"},
+            "parameters": {
+                "output": 32,
+                "concurrency": 1,
+                "temperature": 0,
+                "top_p": 1,
+                "scope": "Lite",
+            },
         }
     )
 
@@ -54,10 +60,17 @@ def baseline(snapshot_body):
 def test_report_data_includes_only_condition_exact_baseline_difference():
     frozen = snapshot()
     run = SimpleNamespace(run_mode="exploration")
-    matched = report_data(report(), run, frozen, [baseline(frozen.canonical_body)])
+    matched = report_data(
+        report(), run, frozen, [baseline(frozen.canonical_body)], evidence_status="verified"
+    )
     assert matched["baseline_comparison"]["status"] == "matched"
     assert matched["baseline_comparison"]["difference"] == 10
 
-    missing = report_data(report(), run, frozen, [])
+    missing = report_data(report(), run, frozen, [], evidence_status="verified")
     assert missing["baseline_comparison"]["status"] == "missing"
     assert missing["baseline_comparison"]["difference"] is None
+
+    unverified = report_data(report(), run, frozen, [baseline(frozen.canonical_body)])
+    assert unverified["baseline_comparison"]["status"] == "incomparable"
+    assert unverified["baseline_comparison"]["difference"] is None
+    assert unverified["baseline_comparison"]["measured_value"] is None

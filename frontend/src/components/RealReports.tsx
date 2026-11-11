@@ -94,6 +94,7 @@ export function RealReports({ reportId, open }: { reportId?: string; open: (id: 
                     </span>
                     <small>execution_origin：{row.execution_origin}</small>
                     <small>gate_status：{row.gate_status}</small>
+                    {row.evidence_status !== "verified" && <small>原始证据未验证：{row.evidence_status}；历史索引不作为有效成绩。</small>}
                   </td>
                   <td>
                     {row.summary.successful_samples}/{row.summary.expected_samples}
@@ -108,7 +109,7 @@ export function RealReports({ reportId, open }: { reportId?: string; open: (id: 
                     </small>
                   </td>
                   <td>
-                    {row.summary.accuracy === null ? "—" : `${row.summary.accuracy}%`}
+                    {row.evidence_status !== "verified" || row.summary.accuracy === null ? "—" : `${row.summary.accuracy}%`}
                     {row.validity === "partial" && <small>仅成功样本</small>}
                   </td>
                   <td>{row.created_at}</td>

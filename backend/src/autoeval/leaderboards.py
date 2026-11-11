@@ -1,5 +1,6 @@
 """Internal leaderboard over complete, comparable real reports."""
 
+import asyncio
 import math
 from typing import Literal
 
@@ -10,6 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from autoeval.datasets import canonical_manifest
 from autoeval.evaluations import EvaluationReport
 from autoeval.models import EvaluationRun, RunSnapshot
+from autoeval.report_integrity import report_evidence_status
 
 router = APIRouter(prefix="/api/autoeval/v1/leaderboard", tags=["internal leaderboard"])
 
@@ -77,6 +79,14 @@ async def leaderboard(
     dataset_key: Literal["GPQA", "MMMU-Pro", "AutomationBench"],
     metric_name: Literal["accuracy"],
 ):
+    # The implemented report schema is GPQA-only. Never relabel GPQA rows as a
+    # different benchmark merely because the query contains another dataset.
+    if dataset_key != "GPQA":
+        return {
+            "data": [],
+            "excluded_unverified_reports": 0,
+            "request_id": request.state.request_id,
+        }
     try:
         async with request.app.state.sessions() as session:
             rows = (
@@ -88,10 +98,21 @@ async def leaderboard(
                         EvaluationRun.trigger_scope == "local-operator:evaluation",
                         EvaluationReport.execution_origin == "real",
                         EvaluationReport.validity == "complete",
+                        RunSnapshot.schema_version == "gpqa-run.v1",
                     )
                     .order_by(EvaluationReport.created_at.desc(), EvaluationReport.id.desc())
                 )
             ).all()
+            semaphore = asyncio.Semaphore(8)
+
+            async def check(row):
+                async with semaphore:
+                    return await report_evidence_status(request.app.state.settings, *row)
+
+            statuses = await asyncio.gather(*(check(row) for row in rows))
+            verified = [
+                row for row, status in zip(rows, statuses, strict=True) if status == "verified"
+            ]
             data = rank_leaderboard(
                 [
                     {
@@ -103,7 +124,7 @@ async def leaderboard(
                         "summary": report.summary,
                         "snapshot": snapshot.canonical_body,
                     }
-                    for report, run, snapshot in rows
+                    for report, run, snapshot in verified
                 ],
                 dataset_key=dataset_key,
                 metric_name=metric_name,
@@ -112,4 +133,8 @@ async def leaderboard(
         raise HTTPException(503, "Leaderboard database unavailable") from exc
     except (KeyError, TypeError, ValueError) as exc:
         raise HTTPException(503, "Leaderboard source data is invalid") from exc
-    return {"data": data, "request_id": request.state.request_id}
+    return {
+        "data": data,
+        "excluded_unverified_reports": len(rows) - len(verified),
+        "request_id": request.state.request_id,
+    }

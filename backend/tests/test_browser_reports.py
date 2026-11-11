@@ -28,9 +28,7 @@ def test_browser_real_report_evidence_and_direct_reload():
             expect(catalog).to_contain_text(report["run_id"])
             expect(catalog).to_contain_text(report["created_at"])
             expect(catalog).to_contain_text(report["execution_origin"])
-            page.get_by_role(
-                "button", name=f"查看报告 {report['id'][:8]}", exact=True
-            ).click()
+            page.get_by_role("button", name=f"查看报告 {report['id'][:8]}", exact=True).click()
 
             detail = page.get_by_test_id("real-report-detail")
             expect(detail).to_be_visible()
@@ -57,8 +55,18 @@ def test_browser_real_report_evidence_and_direct_reload():
             )
             expect(stats.locator(":scope > div")).to_have_count(len(keys))
             for index, key in enumerate(keys):
-                value = summary[key]
-                expected = "—" if key == "accuracy" and value is None else f"{value:g}" if isinstance(value, float) else str(value)
+                value = (
+                    None
+                    if key == "accuracy" and report["evidence_status"] != "verified"
+                    else summary[key]
+                )
+                expected = (
+                    "—"
+                    if key == "accuracy" and value is None
+                    else f"{value:g}"
+                    if isinstance(value, float)
+                    else str(value)
+                )
                 expect(stats.locator(":scope > div").nth(index)).to_contain_text(key)
                 expect(stats.locator(":scope > div").nth(index)).to_contain_text(expected)
             if report["validity"] == "partial":
@@ -82,18 +90,25 @@ def test_browser_real_report_evidence_and_direct_reload():
             evidence_requests = []
             page.on(
                 "request",
-                lambda request: evidence_requests.append(request.url)
-                if request.url.endswith(f"/reports/{report['id']}/evidence")
-                else None,
+                lambda request: (
+                    evidence_requests.append(request.url)
+                    if request.url.endswith(f"/reports/{report['id']}/evidence")
+                    else None
+                ),
             )
             assert evidence_requests == []
             detail.get_by_role("button", name="报告证据", exact=True).click()
             detail.get_by_role("button", name="读取并校验报告证据", exact=True).click()
             drawer = page.get_by_role("dialog", name="报告证据详情", exact=True)
             expect(drawer).to_be_visible()
-            expect(page.get_by_test_id("real-report-evidence")).to_contain_text(
-                "gpqa-report.v1"
-            )
+            if report["evidence_status"] == "verified":
+                expect(page.get_by_test_id("real-report-evidence")).to_contain_text(
+                    "gpqa-report.v1"
+                )
+            else:
+                expect(page.get_by_test_id("report-evidence-health")).to_be_visible()
+                expect(page.get_by_test_id("real-report-evidence")).to_have_count(0)
+                expect(drawer.get_by_role("status")).to_contain_text("不能据此确认报告有效")
             assert len(evidence_requests) == 1
             drawer.get_by_role("button", name="关闭", exact=True).click()
 

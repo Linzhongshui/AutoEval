@@ -12,6 +12,8 @@ AutoEval 智能测评平台的演示 Demo，本期以精度测评为主线，展
 
 ## 当前工程状态
 
+本机业务联调使用[持久化存储与恢复指南](./docs/development-recovery.md)。原基础 Compose 中的 Moto 仅为协议模拟器，不能承担需要跨重启保留的历史证据；已完成的数据迁移不代表丢失的历史成绩原文能够恢复。
+
 仓库采用 `frontend/`、`backend/`、`deploy/`、`docs/` 分层。已验证本机Docker中的GPQA Lite探索闭环；这不代表全量基准、全部工具或生产部署验收完成。
 
 | 部分 | 已具备 | 尚未完成 |

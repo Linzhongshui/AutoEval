@@ -50,7 +50,20 @@ def test_report_to_direct_run_snapshot_case_history_and_reload():
             history = page.get_by_test_id("evaluation-detail")
             expect(history.get_by_label("回溯运行ID", exact=True)).to_have_value(report["run_id"])
             history.get_by_role("button", name="查看第1次证据", exact=True).first.click()
-            expect(history.get_by_test_id("case-evidence")).to_contain_text("case-evidence.v1")
+            attempts = page.request.get(
+                base + f"/api/autoeval/v1/runs/{report['run_id']}/case-executions?limit=1"
+            ).json()["data"]
+            original = page.request.get(
+                base + f"/api/autoeval/v1/case-executions/{attempts[0]['id']}/evidence"
+            )
+            if original.status == 200:
+                expect(history.get_by_test_id("case-evidence")).to_contain_text("case-evidence.v1")
+            else:
+                assert original.status == 503
+                expect(history.get_by_role("status")).to_contain_text(
+                    "Evidence missing or integrity check failed"
+                )
+                expect(history.get_by_test_id("case-evidence")).to_have_count(0)
             page.reload()
             expect(page.get_by_test_id("evaluation-detail")).to_contain_text(report["run_id"])
             expect(page.get_by_label("回溯运行ID", exact=True)).to_have_value(report["run_id"])

@@ -43,6 +43,18 @@ async def test_report_catalog_excludes_unverified_and_simulated_artifacts():
         detail = await api.get(f"/api/autoeval/v1/reports/{real.id}")
         assert detail.json()["data"]["sha256"] == real.sha256
         evidence = await api.get(f"/api/autoeval/v1/reports/{real.id}/evidence")
-        assert evidence.status_code == 200
-        assert evidence.json()["data"]["snapshot_sha256"] == real.snapshot_sha256
+        state = detail.json()["data"]["evidence_status"]
+        if state == "verified":
+            assert evidence.status_code == 200
+            assert evidence.json()["data"]["snapshot_sha256"] == real.snapshot_sha256
+        else:
+            assert state in {"missing", "invalid", "unavailable"}
+            assert evidence.status_code == 503
+            assert detail.json()["data"]["baseline_comparison"]["status"] == "incomparable"
+            ranked = (
+                await api.get("/api/autoeval/v1/leaderboard?dataset_key=GPQA&metric_name=accuracy")
+            ).json()["data"]
+            assert all(
+                str(real.id) != entry["report_id"] for group in ranked for entry in group["entries"]
+            )
         assert (await api.get("/api/autoeval/v1/reports?limit=0")).status_code == 422

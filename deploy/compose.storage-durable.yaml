@@ -1,0 +1,18 @@
+name: autoeval-durable
+services:
+  storage:
+    image: ghcr.io/l33tlamer/minio-backup@sha256:a1ea29fa28355559ef137d71fc570e508a214ec84ff8083e39bc5428980b015e
+    container_name: autoeval-evidence-durable
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER: ${AE_S3_ACCESS_KEY:?Set AE_S3_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${AE_S3_SECRET_KEY:?Set AE_S3_SECRET_KEY}
+    ports: ["127.0.0.1:9002:9000"]
+    volumes: ["evidence:/data"]
+    restart: unless-stopped
+    labels:
+      autoeval.role: durable-development-storage
+volumes:
+  evidence:
+    name: autoeval-evidence-persistent
+    external: true

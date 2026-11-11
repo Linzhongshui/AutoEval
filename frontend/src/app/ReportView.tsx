@@ -32,6 +32,7 @@ export type Report = {
   run_id: string;
   remote_model: string;
   validity: string;
+  evidence_status: string;
   created_at: string;
   summary: Summary;
   sha256: string;
@@ -132,7 +133,8 @@ export function ReportView({ id, go }: { id: string; go: (path: string) => void 
     );
   }
 
-  const { summary, baseline_comparison: baseline } = report;
+  const summary = { ...report.summary, accuracy: report.evidence_status === "verified" ? report.summary.accuracy : null };
+  const baseline = report.baseline_comparison;
   const coverage =
     report.validity === "complete"
       ? "complete"
@@ -155,6 +157,7 @@ export function ReportView({ id, go }: { id: string; go: (path: string) => void 
 
   return (
     <div className="stack report-workspace" data-testid="real-report-detail">
+      {report.evidence_status !== "verified" && <p role="alert" className="notice" data-testid="report-evidence-health">原始报告证据缺失、不可用或未通过校验，当前仅保留历史索引；不展示有效成绩、不参与榜单。历史 validity 不代表当前证据完整。状态：{report.evidence_status}</p>}
       <div className="report-navigation-bar">
         <nav aria-label="报告返回导航" className="report-return-links">
           <button className="link" onClick={() => go("reports")}>

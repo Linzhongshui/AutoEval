@@ -4,5 +4,5 @@ RUN apt-get update && apt-get install -y --no-install-recommends openssh-server 
     && mkdir -p /run/sshd
 LABEL autoeval.role=ssh-simulator
 EXPOSE 22
-# setup_ssh_sim.py enrolls a development public key and starts sshd after key generation.
-CMD ["sh", "-c", "ssh-keygen -A && python -c 'import time; time.sleep(31536000)'"]
+# Keep sshd as the supervised foreground process so container restart restores SSH.
+CMD ["sh", "-c", "ssh-keygen -A && mkdir -p /run/sshd && exec /usr/sbin/sshd -D -e -o PasswordAuthentication=no -o PermitRootLogin=no"]

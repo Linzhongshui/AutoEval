@@ -119,7 +119,7 @@ export function StandardInputs() {
     return () => controller.abort();
   }, [offset, revision]);
   const perform = async (fn: () => Promise<void>) => { if (busy) return; setBusy(true); setMessage(""); try { await fn(); } catch (error) { setMessage(error instanceof Error ? error.message : "请求失败"); } finally { setBusy(false); } };
-  return <section className="card stack"><div className="spread"><h2>标准仓输入</h2><button disabled={busy} onClick={() => setRevision((v) => v + 1)}>刷新输入版本</button></div><p className="muted">同步标准与来源附件，保留不可变版本；导入不等于配置审批，也不开放测评执行。</p>
+  return <section className="configuration-management stack"><div className="spread"><h3>标准仓输入</h3><button disabled={busy} onClick={() => setRevision((v) => v + 1)}>刷新输入版本</button></div><p className="muted">同步标准与来源附件，保留不可变版本；导入不等于配置审批，也不开放测评执行。</p>
     <div className="inline"><label>分支、Tag 或提交<input aria-label="标准仓分支或提交" value={ref} onChange={(e) => { setRef(e.target.value); setPreview(null); }} /></label><button disabled={busy} onClick={() => void perform(async () => { setPreview(null); setPreview(await apiPost<Preview>("/standard-inputs/sync-preview", { ref })); })}>同步预览</button><label>离线输入包<input type="file" accept=".json,application/json" disabled={busy} onChange={(e) => { const file = e.target.files?.[0]; if (!file) return; setPreview(null); void perform(async () => { if (file.size > 3_000_000) throw Error("输入包不能超过 3 MB"); setPreview(await apiPost<Preview>("/standard-inputs/preview", JSON.parse(await file.text()))); }); e.target.value = ""; }} /></label></div>
     <small>离线目录先使用后台 import_standard_inputs 工具生成输入包。远程分支会先固定为完整提交号。</small>
     {message && <p role="status">{message}</p>}

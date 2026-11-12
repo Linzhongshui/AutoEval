@@ -35,15 +35,15 @@ export function DatasetManifests() {
     } catch (error) { setMessage(error instanceof SyntaxError ? "请输入合法JSON。" : error instanceof Error ? error.message : "清单登记失败。"); }
     finally { setBusy(false); }
   };
-  return <details className="diagnostic-tasks">
-    <summary>数据集样本清单</summary>
+  return <section className="configuration-management stack">
+    <h3>登记样本清单</h3>
     <p>登记Full或Lite的确定性样本范围。这里只保存样本ID及SHA-256，不上传题目或答案；登记不代表工具已验证或配置已批准。</p>
-    <p>JSON字段：dataset_key、name、version、manifest_key、scope（full/lite）、samples（sample_id、sha256）。Lite另需parent_id引用同版本Full清单。</p>
+    <details className="notice"><summary>填写格式与规则</summary><p>JSON字段：dataset_key、name、version、manifest_key、scope（full/lite）、samples（sample_id、sha256）。Lite另需parent_id引用同版本Full清单。</p></details>
     <label>样本清单JSON<textarea aria-label="样本清单JSON" rows={8} value={content} onChange={(event) => setContent(event.target.value)} style={{ display: "block", width: "100%" }} /></label>
     <button type="button" disabled={busy || !content.trim()} onClick={() => void save()}>登记样本清单</button>
     <p role="status">{message}</p>
-    <p>最近加载的清单（最多200条；完整分页查询可使用API）</p>
-    <ul>{rows.map((row) => <li key={row.id}>{row.manifest_key} · {row.scope} · {row.sample_count}个样本<br />ID：{row.id}<br />SHA-256：{row.sha256}<button onClick={() => setSelected(row.id)}>查看清单来源 {row.id.slice(0, 8)}</button></li>)}</ul>
+    <h3>已登记清单</h3><p className="muted">展示最近加载的最多 200 条清单。</p>
+    <ul className="management-records">{rows.map((row) => <li key={row.id}>{row.manifest_key} · {row.scope} · {row.sample_count}个样本<details><summary>标识与校验值</summary><p>ID：{row.id}</p><p>SHA-256：{row.sha256}</p></details><button onClick={() => setSelected(row.id)}>查看来源</button></li>)}</ul>
     {detail !== null && <pre data-testid="manifest-provenance" style={{ overflow: "auto", maxHeight: 400 }}>{JSON.stringify(detail, null, 2)}</pre>}
-  </details>;
+  </section>;
 }

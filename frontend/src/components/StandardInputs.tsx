@@ -3,6 +3,23 @@ import { apiGet, apiGetOptions, apiGetPage, apiPost } from "../services/api";
 import { ManagementDrawer } from "./ManagementDrawer";
 import { OffsetPagination } from "./OffsetPagination";
 
+type TagCatalog = { status: string; tags: { name: string; revision: string }[] };
+function useRepositoryTags() {
+  const [catalog, setCatalog] = useState<TagCatalog>({ status: "loading", tags: [] });
+  useEffect(() => {
+    const controller = new AbortController();
+    apiGet<TagCatalog>("/standard-inputs/tags", controller.signal).then((value) => {
+      if (!controller.signal.aborted) setCatalog(value && Array.isArray(value.tags) ? value : { status: "unavailable", tags: [] });
+    }).catch(() => { if (!controller.signal.aborted) setCatalog({ status: "unavailable", tags: [] }); });
+    return () => controller.abort();
+  }, []);
+  return catalog;
+}
+function tagLabel(catalog: TagCatalog, revision: string) {
+  const matched = catalog.tags.filter((tag) => tag.revision === revision).map((tag) => tag.name);
+  return matched.length ? matched.join("、") : catalog.status === "available" ? "无对应 Tag" : catalog.status === "loading" ? "Tag 查询中…" : "Tag 信息暂不可用";
+}
+
 type Bundle = { repository: string; revision: string; files: Record<string, string> };
 type InputVersion = {
   id: string; source_model: string; benchmark: string; revision: string; sha256: string;
@@ -69,6 +86,7 @@ function CompileForm({ entry }: { entry: InputVersion }) {
 }
 
 function InputDetail({ entry }: { entry: InputVersion }) {
+  const tags = useRepositoryTags();
   const [detail, setDetail] = useState(entry);
   const [message, setMessage] = useState("");
   useEffect(() => {
@@ -76,7 +94,7 @@ function InputDetail({ entry }: { entry: InputVersion }) {
     apiGet<InputVersion>(`/standard-inputs/${entry.id}`, controller.signal).then((row) => { if (!controller.signal.aborted) setDetail(row); }).catch(() => { if (!controller.signal.aborted) setMessage("历史编译记录加载失败"); });
     return () => controller.abort();
   }, [entry.id]);
-  return <div className="stack"><p>{detail.source_model} / {detail.benchmark}</p><p>版本：{detail.revision}</p><p>映射：{detail.mapping.dataset} / {detail.mapping.variant}</p><p>未批准 · 未开放执行</p><small>内容 SHA-256：{detail.sha256}</small>
+  return <div className="stack"><p>{detail.source_model} / {detail.benchmark}</p><p>版本 Tag：{tagLabel(tags, detail.revision)}</p><p>提交：{detail.revision}</p><p>映射：{detail.mapping.dataset} / {detail.mapping.variant}</p><p>未批准 · 未开放执行</p><small>内容 SHA-256：{detail.sha256}</small>
     <details open><summary>标准锁定参数</summary><pre className="snapshot">{JSON.stringify(detail.locked_fields, null, 2)}</pre></details>
     {Object.entries(detail.files).map(([name, file]) => <details key={name}><summary>{name}{name === "baseline.json" ? "（来源附件，未批准为基线）" : ""}</summary><a href={`https://github.com/SJTUyh/AutoEval-Standard/blob/${detail.revision}/${file.path}`} target="_blank" rel="noreferrer">查看来源文件</a><small>SHA-256：{file.sha256}</small><pre className="snapshot">{file.raw}</pre></details>)}
     <ManagementDrawer title="补全启动参数与模型映射"><CompileForm entry={detail} /></ManagementDrawer>
@@ -86,6 +104,7 @@ function InputDetail({ entry }: { entry: InputVersion }) {
 }
 
 export function StandardInputs() {
+  const tags = useRepositoryTags();
   const [rows, setRows] = useState<InputVersion[]>([]);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [ref, setRef] = useState("main");
@@ -101,10 +120,10 @@ export function StandardInputs() {
   }, [offset, revision]);
   const perform = async (fn: () => Promise<void>) => { if (busy) return; setBusy(true); setMessage(""); try { await fn(); } catch (error) { setMessage(error instanceof Error ? error.message : "请求失败"); } finally { setBusy(false); } };
   return <section className="card stack"><div className="spread"><h2>标准仓输入</h2><button disabled={busy} onClick={() => setRevision((v) => v + 1)}>刷新输入版本</button></div><p className="muted">同步标准与来源附件，保留不可变版本；导入不等于配置审批，也不开放测评执行。</p>
-    <div className="inline"><label>分支或提交<input aria-label="标准仓分支或提交" value={ref} onChange={(e) => { setRef(e.target.value); setPreview(null); }} /></label><button disabled={busy} onClick={() => void perform(async () => { setPreview(null); setPreview(await apiPost<Preview>("/standard-inputs/sync-preview", { ref })); })}>同步预览</button><label>离线输入包<input type="file" accept=".json,application/json" disabled={busy} onChange={(e) => { const file = e.target.files?.[0]; if (!file) return; setPreview(null); void perform(async () => { if (file.size > 3_000_000) throw Error("输入包不能超过 3 MB"); setPreview(await apiPost<Preview>("/standard-inputs/preview", JSON.parse(await file.text()))); }); e.target.value = ""; }} /></label></div>
+    <div className="inline"><label>分支、Tag 或提交<input aria-label="标准仓分支或提交" value={ref} onChange={(e) => { setRef(e.target.value); setPreview(null); }} /></label><button disabled={busy} onClick={() => void perform(async () => { setPreview(null); setPreview(await apiPost<Preview>("/standard-inputs/sync-preview", { ref })); })}>同步预览</button><label>离线输入包<input type="file" accept=".json,application/json" disabled={busy} onChange={(e) => { const file = e.target.files?.[0]; if (!file) return; setPreview(null); void perform(async () => { if (file.size > 3_000_000) throw Error("输入包不能超过 3 MB"); setPreview(await apiPost<Preview>("/standard-inputs/preview", JSON.parse(await file.text()))); }); e.target.value = ""; }} /></label></div>
     <small>离线目录先使用后台 import_standard_inputs 工具生成输入包。远程分支会先固定为完整提交号。</small>
     {message && <p role="status">{message}</p>}
-    {preview && <section className="notice stack"><h3>导入预览</h3><p>提交：{preview.bundle.revision}</p><ul>{preview.entries.map((entry) => <li key={`${entry.source_model}/${entry.benchmark}`}>{entry.source_model} / {entry.benchmark} · {entry.startup_missing ? "待补全启动配置" : "包含启动配置"}<small>变更：{entry.changed_files?.join("、") || "无"}；移除：{entry.removed_files?.join("、") || "无"}</small><details><summary>查看标准参数差异与原文</summary><pre className="snapshot">{JSON.stringify({ field_changes: entry.field_changes, locked_fields: entry.locked_fields, files: entry.files }, null, 2)}</pre></details></li>)}</ul><button disabled={busy} className="primary" onClick={() => void perform(async () => { await apiPost("/standard-inputs/import", { bundle: preview.bundle, expected_sha256: preview.sha256 }); setPreview(null); setRevision((v) => v + 1); setMessage("标准输入已登记，配置未批准，执行未开放。"); })}>确认登记输入版本</button></section>}
-    <div className="table-wrap"><table><thead><tr><th>来源模型</th><th>基准 / 变体</th><th>提交</th><th>状态</th><th>操作</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td>{row.source_model}</td><td>{row.mapping.dataset} / {row.mapping.variant}</td><td title={row.revision}>{row.revision.slice(0, 12)}</td><td>{row.startup_missing ? "待补全启动配置" : "已登记，待校验"}<small>未批准 · 执行未开放</small></td><td><ManagementDrawer title="查看输入详情"><InputDetail entry={row} /></ManagementDrawer></td></tr>)}</tbody></table></div>{!rows.length && <p className="empty">暂无标准仓输入版本</p>}<OffsetPagination label="标准输入" offset={offset} nextOffset={next} onChange={setOffset} disabled={busy} />
+    {preview && <section className="notice stack"><h3>导入预览</h3><p>版本 Tag：{tagLabel(tags, preview.bundle.revision)}</p><p>提交：{preview.bundle.revision}</p><ul>{preview.entries.map((entry) => <li key={`${entry.source_model}/${entry.benchmark}`}>{entry.source_model} / {entry.benchmark} · {entry.startup_missing ? "待补全启动配置" : "包含启动配置"}<small>变更：{entry.changed_files?.join("、") || "无"}；移除：{entry.removed_files?.join("、") || "无"}</small><details><summary>查看标准参数差异与原文</summary><pre className="snapshot">{JSON.stringify({ field_changes: entry.field_changes, locked_fields: entry.locked_fields, files: entry.files }, null, 2)}</pre></details></li>)}</ul><button disabled={busy} className="primary" onClick={() => void perform(async () => { await apiPost("/standard-inputs/import", { bundle: preview.bundle, expected_sha256: preview.sha256 }); setPreview(null); setRevision((v) => v + 1); setMessage("标准输入已登记，配置未批准，执行未开放。"); })}>确认登记输入版本</button></section>}
+    <div className="table-wrap"><table><thead><tr><th>来源模型</th><th>基准 / 变体</th><th>版本 / 提交</th><th>状态</th><th>操作</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td>{row.source_model}</td><td>{row.mapping.dataset} / {row.mapping.variant}</td><td title={row.revision}>{tagLabel(tags, row.revision)}<small>{row.revision.slice(0, 12)}</small></td><td>{row.startup_missing ? "待补全启动配置" : "已登记，待校验"}<small>未批准 · 执行未开放</small></td><td><ManagementDrawer title="查看输入详情"><InputDetail entry={row} /></ManagementDrawer></td></tr>)}</tbody></table></div>{!rows.length && <p className="empty">暂无标准仓输入版本</p>}<OffsetPagination label="标准输入" offset={offset} nextOffset={next} onChange={setOffset} disabled={busy} />
   </section>;
 }

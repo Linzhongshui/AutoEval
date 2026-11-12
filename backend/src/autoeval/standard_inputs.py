@@ -1,8 +1,10 @@
 """Versioned standard inputs and non-executing adaptor configuration compilation."""
 
+import asyncio
 import copy
 import hashlib
 import json
+import subprocess
 import uuid
 from pathlib import PurePosixPath
 
@@ -597,6 +599,57 @@ def envelope(data, request):
     return {"data": data, "request_id": request.state.request_id}
 
 
+@router.get("/tags")
+async def repository_tags(request: Request):
+    """Current repository labels only; immutable input identities remain commit-based."""
+    tags = []
+    try:
+        async with httpx.AsyncClient(timeout=8, follow_redirects=False) as client:
+            for page in range(1, 11):
+                response = await client.get(
+                    f"https://api.github.com/repos/{STANDARD_REPO}/tags",
+                    params={"per_page": 100, "page": page},
+                )
+                response.raise_for_status()
+                items = response.json()
+                for item in items:
+                    tags.append({"name": item["name"], "revision": item["commit"]["sha"]})
+                if len(items) < 100:
+                    return envelope({"status": "available", "tags": tags}, request)
+        return envelope({"status": "incomplete", "tags": tags}, request)
+    except (httpx.HTTPError, ValueError, KeyError, TypeError):
+        try:
+            completed = await asyncio.to_thread(
+                subprocess.run,
+                ["git", "ls-remote", "--tags", f"https://github.com/{STANDARD_REPO}.git"],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=True,
+            )
+            resolved = {}
+            peeled = {}
+            for line in completed.stdout.splitlines():
+                sha, ref = line.split("\t", 1)
+                name = ref.removeprefix("refs/tags/")
+                if name.endswith("^{}"):
+                    peeled[name[:-3]] = sha
+                else:
+                    resolved[name] = sha
+            resolved.update(peeled)
+            return envelope(
+                {
+                    "status": "available",
+                    "tags": [
+                        {"name": name, "revision": sha} for name, sha in sorted(resolved.items())
+                    ],
+                },
+                request,
+            )
+        except (OSError, subprocess.SubprocessError, ValueError):
+            return envelope({"status": "unavailable", "tags": []}, request)
+
+
 @router.post("/sync-preview")
 async def sync_preview(body: Sync, request: Request):
     try:
@@ -743,12 +796,18 @@ def row_data(row):
 
 @router.get("")
 async def versions(
-    request: Request, offset: int = 0, limit: int = 20, model_id: uuid.UUID | None = None
+    request: Request,
+    offset: int = 0,
+    limit: int = 20,
+    model_id: uuid.UUID | None = None,
+    include_test: bool = False,
 ):
     if offset < 0 or not 1 <= limit <= 100:
         raise HTTPException(422, "Invalid pagination")
     async with request.app.state.sessions() as session:
         query = select(StandardInputVersion)
+        if not include_test:
+            query = query.where(~StandardInputVersion.source_model.startswith("TEST-"))
         if model_id:
             query = query.where(
                 StandardInputVersion.id.in_(

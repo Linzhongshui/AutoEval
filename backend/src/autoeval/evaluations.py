@@ -138,6 +138,10 @@ async def submit(
                 raise HTTPException(422, "Pilot supports a GPQA-only configuration")
             item = items[0]
             params = item.parameter_values
+            if params.get("adapter_input") is not None:
+                raise HTTPException(
+                    422, "Full adaptor configurations are not enabled for pilot execution"
+                )
             if (
                 params["scope"] != "Lite"
                 or params["concurrency"] != 1
@@ -335,8 +339,12 @@ async def detail(run_id: uuid.UUID, request: Request):
                 "id": str(row.id),
                 "state": row.state,
                 "created_at": row.created_at.isoformat(),
-                "updated_at": events[-1].created_at.isoformat() if events else row.created_at.isoformat(),
-                "cancel_requested_at": row.cancel_requested_at.isoformat() if row.cancel_requested_at else None,
+                "updated_at": events[-1].created_at.isoformat()
+                if events
+                else row.created_at.isoformat(),
+                "cancel_requested_at": row.cancel_requested_at.isoformat()
+                if row.cancel_requested_at
+                else None,
                 "run_mode": row.run_mode,
                 "snapshot": {
                     "sha256": snapshot.sha256,

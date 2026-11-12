@@ -4,6 +4,7 @@ import asyncio
 import copy
 import hashlib
 import json
+import ssl
 import subprocess
 import uuid
 from pathlib import PurePosixPath
@@ -599,12 +600,39 @@ def envelope(data, request):
     return {"data": data, "request_id": request.state.request_id}
 
 
+@router.get("/dataset-registrations")
+async def dataset_registrations(request: Request):
+    async with request.app.state.sessions() as session:
+        rows = (
+            await session.execute(
+                select(Asset, AssetVersion)
+                .join(AssetVersion, AssetVersion.asset_id == Asset.id)
+                .where(Asset.kind == "dataset")
+                .order_by(Asset.asset_key, AssetVersion.created_at.desc())
+            )
+        ).all()
+        return envelope(
+            [
+                {
+                    "name": asset.name,
+                    "key": asset.asset_key,
+                    "version": version.version,
+                    "metadata": version.metadata_json,
+                }
+                for asset, version in rows
+            ],
+            request,
+        )
+
+
 @router.get("/tags")
 async def repository_tags(request: Request):
     """Current repository labels only; immutable input identities remain commit-based."""
     tags = []
     try:
-        async with httpx.AsyncClient(timeout=8, follow_redirects=False) as client:
+        async with httpx.AsyncClient(
+            timeout=8, follow_redirects=False, verify=ssl.create_default_context()
+        ) as client:
             for page in range(1, 11):
                 response = await client.get(
                     f"https://api.github.com/repos/{STANDARD_REPO}/tags",
@@ -653,7 +681,9 @@ async def repository_tags(request: Request):
 @router.post("/sync-preview")
 async def sync_preview(body: Sync, request: Request):
     try:
-        async with httpx.AsyncClient(timeout=20, follow_redirects=False) as client:
+        async with httpx.AsyncClient(
+            timeout=20, follow_redirects=False, verify=ssl.create_default_context()
+        ) as client:
             response = await client.get(
                 f"https://api.github.com/repos/{STANDARD_REPO}/commits/{body.ref}"
             )
@@ -682,10 +712,15 @@ async def sync_preview(body: Sync, request: Request):
                 files[node["path"]] = response.content.decode("utf-8")
             bundle = Bundle(revision=revision, files=files)
         return envelope(await preview_data(bundle, request), request)
-    except (httpx.HTTPError, ValueError, KeyError) as exc:
-        raise HTTPException(
-            422, "Standard sync failed; check ref, repository limits and JSON"
-        ) from exc
+    except httpx.HTTPError as exc:
+        message = (
+            "标准仓 HTTPS 证书校验失败，请检查系统可信 CA 配置"
+            if "CERTIFICATE_VERIFY_FAILED" in str(exc)
+            else "标准仓网络请求失败，请检查连接、访问限制及分支或 Tag"
+        )
+        raise HTTPException(502, message) from exc
+    except (ValueError, KeyError) as exc:
+        raise HTTPException(422, "标准仓内容校验失败，请检查目录、文件大小及 JSON 格式") from exc
 
 
 async def preview_data(bundle, request):

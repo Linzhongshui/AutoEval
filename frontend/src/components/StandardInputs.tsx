@@ -1,3 +1,4 @@
+import { AdapterFields } from "./AdapterFields";
 import { useEffect, useState } from "react";
 import { apiGet, apiGetOptions, apiGetPage, apiPost } from "../services/api";
 import { ManagementDrawer } from "./ManagementDrawer";
@@ -39,8 +40,8 @@ function CompileForm({ entry }: { entry: InputVersion }) {
   const [targets, setTargets] = useState<Target[]>([]);
   const [modelId, setModelId] = useState("");
   const [targetId, setTargetId] = useState("");
-  const [template, setTemplate] = useState('{"params":{}}');
-  const [adjustments, setAdjustments] = useState('{"params":{}}');
+  const [template, setTemplate] = useState(JSON.stringify({ tool: "ais_bench", subcommand: entry.benchmark === "DeepSWE" ? "harbor_agent" : "llm_accuracy", params: {} }, null, 2));
+  const [adjustments, setAdjustments] = useState(JSON.stringify({ tool: "ais_bench", subcommand: entry.benchmark === "DeepSWE" ? "harbor_agent" : "llm_accuracy", params: {} }, null, 2));
   const [version, setVersion] = useState("platform.v1");
   const [execution, setExecution] = useState("docker");
   const [datasetsDir, setDatasetsDir] = useState("");
@@ -94,8 +95,10 @@ function InputDetail({ entry }: { entry: InputVersion }) {
     apiGet<InputVersion>(`/standard-inputs/${entry.id}`, controller.signal).then((row) => { if (!controller.signal.aborted) setDetail(row); }).catch(() => { if (!controller.signal.aborted) setMessage("历史编译记录加载失败"); });
     return () => controller.abort();
   }, [entry.id]);
-  return <div className="stack"><p>{detail.source_model} / {detail.benchmark}</p><p>版本 Tag：{tagLabel(tags, detail.revision)}</p><p>提交：{detail.revision}</p><p>映射：{detail.mapping.dataset} / {detail.mapping.variant}</p><p>未批准 · 未开放执行</p><small>内容 SHA-256：{detail.sha256}</small>
-    <details open><summary>标准锁定参数</summary><pre className="snapshot">{JSON.stringify(detail.locked_fields, null, 2)}</pre></details>
+  const config = detail.files["standard_config.json"] ? JSON.parse(detail.files["standard_config.json"].raw) : {};
+  return <div className="stack standard-detail"><div className="standard-detail-meta"><strong>{detail.source_model}</strong><span>版本：{tagLabel(tags, detail.revision)}</span><span>未批准 · 未开放执行</span></div>
+    <div className="workflow-grid"><aside className="workflow-datasets"><h3>测评基准</h3><div className="notice">{detail.benchmark}</div><p className="muted">标准参数只读</p></aside><section className="card stack"><h3>{detail.benchmark}</h3><AdapterFields value={config} readonly /></section></div>
+    <details><summary>来源与校验信息</summary><p>提交：{detail.revision}</p><p>内容 SHA-256：{detail.sha256}</p><p>平台映射：{detail.mapping.dataset} / {detail.mapping.variant}</p></details>
     {Object.entries(detail.files).map(([name, file]) => <details key={name}><summary>{name}{name === "baseline.json" ? "（来源附件，未批准为基线）" : ""}</summary><a href={`https://github.com/SJTUyh/AutoEval-Standard/blob/${detail.revision}/${file.path}`} target="_blank" rel="noreferrer">查看来源文件</a><small>SHA-256：{file.sha256}</small><pre className="snapshot">{file.raw}</pre></details>)}
     <ManagementDrawer title="补全启动参数与模型映射"><CompileForm entry={detail} /></ManagementDrawer>
     {message && <p role="alert">{message}</p>}
@@ -124,6 +127,6 @@ export function StandardInputs() {
     <small>离线目录先使用后台 import_standard_inputs 工具生成输入包。远程分支会先固定为完整提交号。</small>
     {message && <p role="status">{message}</p>}
     {preview && <section className="notice stack"><h3>导入预览</h3><p>版本 Tag：{tagLabel(tags, preview.bundle.revision)}</p><p>提交：{preview.bundle.revision}</p><ul>{preview.entries.map((entry) => <li key={`${entry.source_model}/${entry.benchmark}`}>{entry.source_model} / {entry.benchmark} · {entry.startup_missing ? "待补全启动配置" : "包含启动配置"}<small>变更：{entry.changed_files?.join("、") || "无"}；移除：{entry.removed_files?.join("、") || "无"}</small><details><summary>查看标准参数差异与原文</summary><pre className="snapshot">{JSON.stringify({ field_changes: entry.field_changes, locked_fields: entry.locked_fields, files: entry.files }, null, 2)}</pre></details></li>)}</ul><button disabled={busy} className="primary" onClick={() => void perform(async () => { await apiPost("/standard-inputs/import", { bundle: preview.bundle, expected_sha256: preview.sha256 }); setPreview(null); setRevision((v) => v + 1); setMessage("标准输入已登记，配置未批准，执行未开放。"); })}>确认登记输入版本</button></section>}
-    <div className="table-wrap"><table><thead><tr><th>来源模型</th><th>基准 / 变体</th><th>版本 / 提交</th><th>状态</th><th>操作</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td>{row.source_model}</td><td>{row.mapping.dataset} / {row.mapping.variant}</td><td title={row.revision}>{tagLabel(tags, row.revision)}<small>{row.revision.slice(0, 12)}</small></td><td>{row.startup_missing ? "待补全启动配置" : "已登记，待校验"}<small>未批准 · 执行未开放</small></td><td><ManagementDrawer title="查看输入详情"><InputDetail entry={row} /></ManagementDrawer></td></tr>)}</tbody></table></div>{!rows.length && <p className="empty">暂无标准仓输入版本</p>}<OffsetPagination label="标准输入" offset={offset} nextOffset={next} onChange={setOffset} disabled={busy} />
+    <div className="table-wrap"><table><thead><tr><th>来源模型</th><th>基准 / 变体</th><th>版本 / 提交</th><th>状态</th><th>操作</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td>{row.source_model}</td><td>{row.benchmark}<small>平台内部映射：{row.mapping.dataset} / {row.mapping.variant}</small></td><td title={row.revision}>{tagLabel(tags, row.revision)}<small>{row.revision.slice(0, 12)}</small></td><td>{row.startup_missing ? "待补全启动配置" : "已登记，待校验"}<small>未批准 · 执行未开放</small></td><td><ManagementDrawer title="查看输入详情"><InputDetail entry={row} /></ManagementDrawer></td></tr>)}</tbody></table></div>{!rows.length && <p className="empty">暂无标准仓输入版本</p>}<OffsetPagination label="标准输入" offset={offset} nextOffset={next} onChange={setOffset} disabled={busy} />
   </section>;
 }

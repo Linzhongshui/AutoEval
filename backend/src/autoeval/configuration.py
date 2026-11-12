@@ -5,7 +5,7 @@ import json
 import uuid
 
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_serializer
 from sqlalchemy import CheckConstraint, ForeignKey, Integer, String, UniqueConstraint, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -66,6 +66,23 @@ class Parameters(BaseModel):
     temperature: float = Field(ge=0, le=2)
     top_p: float = Field(gt=0, le=1)
     scope: str = Field(pattern="^(全量|Lite)$")
+    adapter_input: dict | None = None
+
+    @field_validator("adapter_input")
+    @classmethod
+    def validate_adapter_input(cls, value):
+        if value is not None:
+            from autoeval.standard_inputs import validate_config
+
+            validate_config(value)
+        return value
+
+    @model_serializer(mode="wrap")
+    def serialize_parameters(self, handler):
+        result = handler(self)
+        if self.adapter_input is None:
+            result.pop("adapter_input", None)
+        return result
 
 
 class CreateConfig(BaseModel):
@@ -241,7 +258,7 @@ async def create_version(body: CreateConfig, request: Request):
     # The first configuration API writes custom revisions only. Standard source
     # import will be a separate privileged command; never trust client kind.
     values = {k: v.model_dump() for k, v in body.items.items()}
-    if any(k not in {"GPQA", "MMMU-Pro", "AutomationBench"} for k in values):
+    if any(k not in {"GPQA", "GPQA_Diamond", "MMMU-Pro", "DeepSWE", "AutomationBench"} for k in values):
         raise HTTPException(422, "Unknown dataset")
     if body.profile_bindings and body.profile_bindings.keys() != values.keys():
         raise HTTPException(422, "Profile bindings must cover every configured dataset")

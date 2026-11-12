@@ -1,3 +1,7 @@
+import { aisbenchCatalog } from "../services/standardCatalog";
+import { AdapterFields } from "../components/AdapterFields";
+import { CustomAdapterEditor } from "../components/CustomAdapterEditor";
+import { StandardInputs } from "../components/StandardInputs";
 import { SearchableSelect } from "../components/SearchableSelect";
 import { SubmissionReview } from "../components/SubmissionReview";
 import { ManagementDrawer } from "../components/ManagementDrawer";
@@ -12,6 +16,7 @@ import {
 } from "../services/evaluation";
 
 type Param = {
+  adapter_input?: Record<string, unknown>;
   output: number;
   concurrency: number;
   temperature: number;
@@ -33,9 +38,9 @@ type Profile = {
 };
 const names = ["GPQA", "MMMU-Pro", "AutomationBench"];
 const datasetTypes = [
-  { label: "科学问答", items: ["GPQA"] },
+  { label: "科学问答", items: ["GPQA", "GPQA_Diamond"] },
   { label: "多模态", items: ["MMMU-Pro"] },
-  { label: "Agent 工作流", items: ["AutomationBench"] },
+  { label: "Agent 工作流", items: ["DeepSWE", "AutomationBench"] },
 ];
 
 function DatasetTree({
@@ -173,31 +178,7 @@ function ParameterCards({
         return (
           <section className="card" key={d}>
             <h3>{d}{readonly ? " · 只读" : ""}</h3>
-            <div className="params">
-              {(["output", "concurrency", "temperature", "top_p"] as const).map((k, i) => (
-                <label key={k}>
-                  {["输出长度", "并发", "temperature", "top_p"][i]}
-                  <input
-                    type="number"
-                    min="0"
-                    disabled={readonly}
-                    value={value[k]}
-                    onChange={(e) => onChange({ ...params, [d]: { ...value, [k]: Number(e.target.value) } })}
-                  />
-                </label>
-              ))}
-            </div>
-            <label className="parameter-scope">
-              数据范围
-              <select
-                disabled={readonly}
-                value={value.scope}
-                onChange={(e) => onChange({ ...params, [d]: { ...value, scope: e.target.value } })}
-              >
-                <option>全量</option>
-                <option>Lite</option>
-              </select>
-            </label>
+            <AdapterFields value={value} readonly={readonly} onChange={(next) => onChange({ ...params, [d]: next as Param })} />
           </section>
         );
       })}
@@ -222,6 +203,13 @@ export function Configurations({ profiles, setProfiles, go, notify }: {
   go: (p: string) => void;
   notify: (s: string) => void;
 }) {
+  const [catalogNames, setCatalogNames] = useState<string[]>([]);
+  const [catalogError, setCatalogError] = useState("");
+  useEffect(() => {
+    const controller = new AbortController();
+    aisbenchCatalog(controller.signal).then((rows) => setCatalogNames([...new Set(rows.map((row) => row.benchmark))])).catch(() => { if (!controller.signal.aborted) setCatalogError("AISBench 数据集目录加载失败，请重新打开页面。"); });
+    return () => controller.abort();
+  }, []);
   const [kind, setKind] = useState("标准配置");
   const [officialVersion, setOfficialVersion] = useState("");
   const [page, setPage] = useState(1);
@@ -245,7 +233,7 @@ export function Configurations({ profiles, setProfiles, go, notify }: {
     ? officialVersion
     : standardVersions[0] || "";
   const officialRows = profiles.filter((p) => p.official && p.versions.includes(currentOfficialVersion));
-  const filtered = (kind === "标准配置" ? officialRows : profiles.filter((p) => !p.official))
+  const filtered = (kind === "历史标准配置" ? officialRows : profiles.filter((p) => !p.official))
     .filter((p) => [p.name, p.source, p.model, p.modelId].join(" ").toLowerCase().includes(query.toLowerCase()));
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount);
@@ -260,8 +248,20 @@ export function Configurations({ profiles, setProfiles, go, notify }: {
     setSaveTo("新建配置");
   };
 
+  const configurationTabs = <div className="tabs configuration-tabs" role="tablist" aria-label="配置类型">
+    {["标准配置", "自定义配置"].map((name) =>
+      <button type="button" role="tab" aria-selected={name === "标准配置" ? kind !== "自定义配置" : kind === name} className={(name === "标准配置" ? kind !== "自定义配置" : kind === name) ? "active" : ""} key={name} onClick={() => setKind(name)}>{name}</button>)}
+  </div>;
+  if (kind === "标准配置") return <section className="card stack configuration-panel">
+    {configurationTabs}
+    <div className="spread"><p className="muted">标准配置只读。在详情中查看标准参数与版本来源。</p><button className="link" onClick={() => setKind("历史标准配置")}>查看历史标准配置</button></div>
+    <StandardInputs />
+  </section>;
+
   return (
     <div className="stack">
+      <section className="card configuration-panel">{configurationTabs}</section>
+      {kind === "历史标准配置" && <div className="spread"><h3>历史标准配置</h3><button className="link" onClick={() => setKind("标准配置")}>返回当前标准配置</button></div>}
       <Note>
         标准配置只读；自定义配置保存为新版本，历史版本保持不变。
       </Note>
@@ -274,12 +274,7 @@ export function Configurations({ profiles, setProfiles, go, notify }: {
       </div>
       <section className="card stack">
         <div className="config-list-heading">
-          <div className="tabs" role="tablist" aria-label="配置类型">
-            {["标准配置", "自定义配置"].map((t) => (
-              <button role="tab" aria-selected={kind === t} className={kind === t ? "active" : ""} key={t} onClick={() => setKind(t)}>{t}</button>
-            ))}
-          </div>
-          {kind === "标准配置" && (
+          {kind === "历史标准配置" && (
             <label className="official-version">
               仓库版本
               <select aria-label="标准配置版本" value={currentOfficialVersion} onChange={(e) => setOfficialVersion(e.target.value)}>
@@ -289,7 +284,7 @@ export function Configurations({ profiles, setProfiles, go, notify }: {
           )}
         </div>
         <p className="muted">
-          {kind === "标准配置"
+          {kind === "历史标准配置"
             ? `当前版本 ${currentOfficialVersion || "无"} · 后端返回 ${officialRows.length} 个配置 · 仅供查看`
             : "自定义配置可保存多个版本，版本名称由维护者定义。"}
         </p>
@@ -329,7 +324,7 @@ export function Configurations({ profiles, setProfiles, go, notify }: {
       </section>
       {editing && (
         <ConfigurationDrawer>
-          <div className="stack">
+          <div className="stack standard-detail custom-config-detail">
             <div className="spread">
               <h2>{editing.official ? "查看标准配置（只读）" : "维护自定义配置"}</h2>
               <button onClick={() => setEditing(null)}>关闭</button>
@@ -354,7 +349,8 @@ export function Configurations({ profiles, setProfiles, go, notify }: {
                 />
                 {!editing.official && <button onClick={() => { setPicked([]); setAdd(true); }}>添加数据集</button>}
               </aside>
-              <ParameterCards items={editing.items} active={active} params={params} onChange={setParams} readonly={editing.official} />
+              <div className="card stack custom-parameter-panel"><h3>{active}</h3>{params[active]?.adapter_input ? <details><summary>旧版兼容参数</summary><ParameterCards items={editing.items} active={active} params={{ ...params, [active]: { ...params[active], adapter_input: undefined } }} onChange={(next) => setParams({ ...next, [active]: { ...next[active], adapter_input: params[active].adapter_input } })} readonly={editing.official} /></details> : <ParameterCards items={editing.items} active={active} params={params} onChange={setParams} readonly={editing.official} />}
+              {!editing.official && active && <CustomAdapterEditor dataset={active} value={params[active]?.adapter_input} onChange={(next) => { const updated = { ...(params[active] || base()) }; if (next) updated.adapter_input = next; else delete updated.adapter_input; setParams({ ...params, [active]: updated }); }} />}</div>
             </div>
             {!editing.official && (
               <div className="config-save-panel">
@@ -383,6 +379,8 @@ export function Configurations({ profiles, setProfiles, go, notify }: {
                     disabled={saving || !versionName.trim() || !editing.items.length}
                     onClick={async () => {
                       if (saving) return;
+                      const invalid = document.querySelector<HTMLInputElement>(".adapter-fields :invalid");
+                      if (invalid) { invalid.reportValidity(); return; }
                       const target = saveTo === "新建配置" ? null : profiles.find((p) => p.id === saveTo);
                       if (saveTo !== "新建配置" && !target) { notify("目标配置不存在，请刷新"); return; }
                       const key = target?.id || `custom-${crypto.randomUUID()}`;
@@ -432,9 +430,9 @@ export function Configurations({ profiles, setProfiles, go, notify }: {
           <section className="dataset-dialog">
             <h3>添加数据集</h3>
             <input placeholder="搜索数据集" value={catalog} onChange={(e) => setCatalog(e.target.value)} />
-            <select value={catalogMode} onChange={(e) => setCatalogMode(e.target.value)}><option>全量</option><option>Lite</option></select>
+            <p className="muted">{catalogError || "仅显示标准仓已登记的 AISBench 数据集，展示不代表已开放执行。"}</p><select value={catalogMode} onChange={(e) => setCatalogMode(e.target.value)}><option>全量</option><option>Lite</option></select>
             <DatasetTree
-              items={names.filter((d) => d.toLowerCase().includes(catalog.toLowerCase()))}
+              items={catalogError ? [] : catalogNames.filter((d) => d.toLowerCase().includes(catalog.toLowerCase()))}
               selected={picked}
               disabled={editing?.items || []}
               onSelect={setPicked}

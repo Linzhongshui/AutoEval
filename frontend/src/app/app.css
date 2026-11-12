@@ -3583,3 +3583,17 @@ td small .badge,
 .management-records > li > button { justify-self: start; }
 .configuration-management table { font-size: 12px; }
 .configuration-management td { overflow-wrap: anywhere; }
+
+.configuration-management input.standard-package-upload {
+  padding: 0; height: 40px; line-height: 38px; overflow: hidden;
+  color: var(--muted); background: #fafaff;
+}
+.standard-package-upload::file-selector-button {
+  height: 38px; margin: 0 12px 0 0; padding: 0 16px;
+  border: 0; border-right: 1px solid var(--border);
+  background: #f0edff; color: var(--primary); font: inherit;
+  font-weight: 500; cursor: pointer; transition: background .15s;
+}
+.standard-package-upload::file-selector-button:hover { background: #e6e0ff; }
+.standard-package-upload:disabled::file-selector-button { opacity: .5; cursor: not-allowed; }
+.standard-package-upload:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }

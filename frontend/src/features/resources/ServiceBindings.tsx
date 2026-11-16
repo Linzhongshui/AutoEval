@@ -2,7 +2,7 @@ import { isModelScopeId, isTestModel } from "../catalog/modelIdentities";
 import { SearchableSelect } from "../../shared/ui/SearchableSelect";
 import { useEffect, useState } from "react";
 import { apiGetOptions } from "../../shared/api";
-import { REGISTRY_PAGE_SIZE } from "../../shared/ui/OffsetPagination";
+import { REGISTRY_PAGE_SIZE } from "../../shared/constants";
 
 type Model = { id: string; model_id: string };
 type Version = { id: string; version: string };

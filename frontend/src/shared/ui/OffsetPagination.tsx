@@ -1,4 +1,4 @@
-export const REGISTRY_PAGE_SIZE = 20;
+import { REGISTRY_PAGE_SIZE } from "../constants";
 
 export function OffsetPagination({ label, offset, nextOffset, onChange, disabled = false }: {
   label: string;

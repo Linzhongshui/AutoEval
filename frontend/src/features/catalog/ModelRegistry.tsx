@@ -3,7 +3,7 @@ import { SearchableSelect } from "../../shared/ui/SearchableSelect";
 import { ModelIdentifierSelect } from "./ModelIdentifierSelect";
 import { useEffect, useState } from "react";
 import { apiGetOptions } from "../../shared/api";
-import { REGISTRY_PAGE_SIZE } from "../../shared/ui/OffsetPagination";
+import { REGISTRY_PAGE_SIZE } from "../../shared/constants";
 
 type Params = { output: number; concurrency: number; temperature: number; top_p: number; scope: string };
 type RegisteredModel = { id: string; model_id: string; name: string;

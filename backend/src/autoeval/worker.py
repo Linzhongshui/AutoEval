@@ -27,10 +27,16 @@ from autoeval.workflows import (
 )
 
 
-async def serve(role: str):
-    settings = get_settings()
-    client = await Client.connect(settings.temporal_address, namespace=settings.temporal_namespace)
-    options = {
+def role_options(settings):
+    """Single source of truth for Temporal roles.
+
+    Each role runs one task queue. Worker roles execute workflows only, activity
+    roles execute activities only, and mixed queues (``workflow``) exist for the
+    legacy exploration path. Every role needs a reachable Temporal frontend at
+    ``settings.temporal_address``; activity roles additionally need database,
+    object storage and any resource (Docker/SSH) they touch at runtime.
+    """
+    return {
         "langfuse": {
             "task_queue": "demo.langfuse.v1",
             "workflows": [LangfuseImportWorkflow],
@@ -83,26 +89,18 @@ async def serve(role: str):
             "activities": [execute_gpqa_exploration],
         },
     }
-    async with Worker(client, **options[role]):
+
+
+async def serve(role: str):
+    settings = get_settings()
+    client = await Client.connect(settings.temporal_address, namespace=settings.temporal_namespace)
+    async with Worker(client, **role_options(settings)[role]):
         await asyncio.Event().wait()
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "role",
-        choices=[
-            "langfuse",
-            "workflow",
-            "analysis-workflow",
-            "io",
-            "result",
-            "gpqa",
-            "fixture",
-            "monitored",
-            "planning-execution",
-        ],
-    )
+    parser.add_argument("role", choices=sorted(role_options(get_settings())))
     asyncio.run(serve(parser.parse_args().role))
 
 

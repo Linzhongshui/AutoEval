@@ -1,0 +1,135 @@
+/* layout.css: extracted from app.css; import order preserves the cascade. */
+.shell {
+  display: flex;
+  min-height: 100vh;
+}
+.sidebar {
+  width: 232px;
+  flex-shrink: 0;
+  background: #fdfdff;
+  border-right: 1px solid var(--border);
+  position: fixed;
+  inset: 0 auto 0 0;
+  display: flex;
+  flex-direction: column;
+  padding: 23px 13px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 0 13px 19px;
+}
+.brand > svg {
+  color: var(--primary);
+  stroke-width: 3;
+}
+.brand strong {
+  display: block;
+  font-size: 25px;
+  font-weight: 750;
+  letter-spacing: -0.6px;
+  line-height: 1.3;
+}
+.brand span {
+  font-size: 14px;
+}
+.workspace {
+  font-size: 12px;
+  color: #626a83;
+  padding: 13px 11px 19px;
+  border-top: 1px solid #eceef6;
+}
+.sidebar nav {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin-top: 7px;
+}
+.sidebar nav a {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 13px 18px;
+  font-size: 17px;
+  font-weight: 550;
+  border-radius: 8px;
+}
+.sidebar nav a svg {
+  color: #555977;
+}
+.sidebar nav a:hover {
+  background: #f1efff;
+}
+.sidebar nav a.selected {
+  background: #eae6ff;
+  color: var(--primary);
+  font-weight: 700;
+}
+.sidebar nav a.selected:before {
+  content: "";
+  position: absolute;
+  left: -4px;
+  top: 8px;
+  bottom: 8px;
+  width: 4px;
+  background: var(--primary);
+  border-radius: 3px;
+}
+.sidebar nav a.selected svg {
+  color: var(--primary);
+}
+.sidebar-foot {
+  margin-top: auto;
+  padding: 20px 15px 0;
+  color: #777d95;
+  font-size: 12px;
+}
+.sidebar-foot small {
+  display: block;
+  margin: 7px 0 0 14px;
+  font-size: 10px;
+}
+.dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #35bf78;
+  margin-right: 7px;
+}
+.main {
+  margin-left: 232px;
+  padding: 16px 24px 0;
+  width: calc(100% - 232px);
+  max-width: 2000px;
+}
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #697089;
+  font-size: 13px;
+  min-height: 26px;
+}
+.breadcrumb > .badge {
+  margin-left: auto;
+}
+.breadcrumb button {
+  padding: 0;
+  background: none;
+  border: none;
+  color: inherit;
+}
+.page-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 16px 0 20px;
+}
+.page-heading p {
+  margin: 3px 0 0;
+  color: #626a84;
+  font-size: 16px;
+}

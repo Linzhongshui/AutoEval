@@ -16,6 +16,7 @@ from sqlalchemy import select, text
 
 from autoeval.datasets import DatasetManifest, canonical_manifest, read_manifest, write_manifest
 from autoeval.evaluation.models import CapacityLease, DatasetExecution
+from autoeval.infrastructure.domain import RUN_TERMINAL
 from autoeval.models import EvaluationRun, Outbox, RunEvent, RunSnapshot
 from autoeval.planning_engine import PLANNER_REVISION, apply_concurrency, selected_samples
 from autoeval.standard_inputs import (
@@ -636,7 +637,7 @@ async def evaluation_retry_cleanup(sessions, settings, run_id):
         if row is None or row.trigger_scope != "local-operator:evaluation":
             raise HTTPException(404, "Evaluation run not found")
         if (
-            row.state not in {"completed", "failed", "cancelled"}
+            row.state not in RUN_TERMINAL
             or snapshot is None
             or snapshot.canonical_body.get("resource_kind") != "customer_ssh"
             or snapshot.canonical_body.get("execution_origin") != settings.evaluation_origin

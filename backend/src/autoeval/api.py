@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 from uuid import uuid4
 
@@ -36,6 +37,8 @@ from autoeval.resources.targets import router as targets_router
 from autoeval.runs import router as runs_router
 from autoeval.standard_inputs import router as standard_inputs_router
 from autoeval.task_monitor import router as task_monitor_router
+
+request_log = logging.getLogger("autoeval.request")
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -78,6 +81,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         request.state.request_id = str(uuid4())
         response = await call_next(request)
         response.headers["X-Request-ID"] = request.state.request_id
+        # One line per request; credentials, prompts and model payloads never appear here.
+        request_log.info(
+            "request_id=%s method=%s path=%s status=%s",
+            request.state.request_id,
+            request.method,
+            request.url.path,
+            response.status_code,
+        )
         return response
 
     @app.exception_handler(StarletteHTTPException)

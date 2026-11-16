@@ -19,6 +19,7 @@ from autoeval.datasets import canonical_manifest, read_manifest, write_manifest
 from autoeval.db import create_database
 from autoeval.evaluation.models import DatasetExecution
 from autoeval.evaluation.service import acquire, artifact, demand_for, release
+from autoeval.infrastructure.domain import DATASET_ACTIVE, DATASET_TERMINAL, RUN_TERMINAL
 from autoeval.models import EvaluationRun, RunEvent, RunSnapshot
 from autoeval.planning.models import PlanningArtifact
 from autoeval.planning_transport import transport
@@ -27,7 +28,7 @@ from autoeval.standard_inputs import digest
 from autoeval.targets import TargetBinding
 from autoeval.unified_outputs import archive_output
 
-TERMINAL = {"succeeded", "failed", "cancelled"}
+TERMINAL = set(DATASET_TERMINAL)
 
 
 async def update_child(sessions, child_id, **values):
@@ -49,7 +50,7 @@ async def advance_run(session, run, state, details=None):
 async def execute(sessions, settings, run_id, heartbeat=lambda: None):
     async with sessions() as session:
         existing_run = await session.get(EvaluationRun, run_id)
-        if existing_run and existing_run.state in {"completed", "failed", "cancelled"}:
+        if existing_run and existing_run.state in RUN_TERMINAL:
             return
         snapshot = await session.scalar(select(RunSnapshot).where(RunSnapshot.run_id == run_id))
         if not snapshot or snapshot.sha256 != digest(snapshot.canonical_body):
@@ -78,7 +79,7 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                 )
                 child.state = "cancelled"
                 child.finished_at = datetime.now(UTC)
-            if child.state not in {"submitting", "running", "unresolved"}:
+            if child.state not in DATASET_ACTIVE:
                 continue
             job = JobRef(external_job_id=str(child.id), submission_key=str(child.id))
             observation = (
@@ -239,7 +240,7 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
         if all(c.state in TERMINAL for c in children):
             await finish(sessions, settings, run_id, frozen, children, cancelled)
             return
-        active = sum(c.state in {"submitting", "running", "unresolved"} for c in children)
+        active = sum(c.state in DATASET_ACTIVE for c in children)
         for child in children:
             if cancelled or active >= inputs["dataset_concurrency"]:
                 break

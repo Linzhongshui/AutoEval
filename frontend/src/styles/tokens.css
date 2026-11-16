@@ -1,0 +1,13 @@
+/* tokens.css: extracted from app.css; import order preserves the cascade. */
+:root {
+  font-family: Inter, "Segoe UI", "Microsoft YaHei", sans-serif;
+  color: #15182c;
+  background: #f5f6fc;
+  font-synthesis: none;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.55;
+  --primary: #5138ff;
+  --border: #e0e3ef;
+  --muted: #737a94;
+}

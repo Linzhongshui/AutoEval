@@ -82,3 +82,13 @@
 - `backend/scripts/`：import_latest_official.py、import_mainstream_official.py、import_official_modelscope.py、import_deepswe.py、import_expanded_families.py、enrich_deepswe_metadata.py、start_probe_worker.py、export_openapi.py（本次新增）。
 - Dev/Test 门控路由：monitored_execution、fixture_pipeline、data_workbench（仅 development/test 环境）。
 - 后台进程入口（均有 `__main__`）：dispatcher.py、worker.py（9 角色）、reconciler.py、planning_worker.py、monitored_runtime.py、analysis_runtime.py。
+
+## 六、阶段四：样式与执行基础设施
+
+**样式**：`src/app/app.css`（4112 行）拆为 `src/styles/` 下五个文件，`index.css` 按原顺序 `@import`，选择器与顺序不变（构建产物体积一致：CSS 96.64 kB）。残留在业务组件内的全局类名未改为 CSS Modules，以保持当前视觉一致；分页组件保留两套协议（offset 与页码），外观类名维持现状。
+
+**状态词汇**：`infrastructure/domain.py` 集中 RunState 迁移表、`RUN_TERMINAL`、`DatasetState` 与 `DATASET_ACTIVE`/`DATASET_TERMINAL`、`ScoringStatus`、`EvidenceStatus`；对外字符串值不变，`evaluation/orchestration.py` 与 `evaluation/service.py` 已改用常量。前端对应 `shared/status.ts`。
+
+**执行角色**：`worker.py` 的 9 个 Temporal 角色集中到 `role_options(settings)` 单表，`--role` 选项由该表派生；文档说明每个角色的队列、工作流/活动边界与依赖（Temporal、数据库、对象存储、执行资源）。
+
+**日志**：API 中间件每条请求记录 `request_id`、方法、路径与状态码；既有进程日志保留 `run=` 等标识。凭据、提示词与模型原文不进入日志。

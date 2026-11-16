@@ -1,0 +1,6 @@
+/* Global entry: design tokens, base, layout, shared components, features. */
+@import "./tokens.css";
+@import "./base.css";
+@import "./layout.css";
+@import "./components.css";
+@import "./features.css";

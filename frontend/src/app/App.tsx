@@ -30,7 +30,7 @@ import {
   Zap,
 } from "lucide-react";
 import type { ReactNode } from "react";
-import "./app.css";
+import "../styles/index.css";
 
 const menus = [
   { id: "home", label: "首页", icon: Layers },

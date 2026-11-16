@@ -15,6 +15,7 @@ dependencies = [
   "boto3>=1.35,<2",
   "paramiko>=4,<5",
   "autoeval-task-planner",
+  "harborstack",
 ]
 
 [dependency-groups]
@@ -43,3 +44,5 @@ line-length = 100
 
 [tool.uv.sources]
 autoeval-task-planner = { git = "https://github.com/SJTUyh/AutoEval-Task-Planner", rev = "0ee9abf49a57c5accc62df8900693cdcea88ea9a" }
+
+harborstack = { git = "https://github.com/llauren48/harbor-otel-stack", rev = "6ca5ef9b8fedc78e8106d202a5c6a84e6f24f940" }

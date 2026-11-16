@@ -113,3 +113,16 @@ class MonitoredGpqaWorkflow:
             heartbeat_timeout=timedelta(seconds=90),
             retry_policy=RetryPolicy(maximum_attempts=1),
         )
+
+
+@workflow.defn
+class LangfuseImportWorkflow:
+    @workflow.run
+    async def run(self, identifier: str) -> None:
+        await workflow.execute_activity(
+            "import_harbor_trace",
+            identifier,
+            task_queue="demo.langfuse.v1",
+            start_to_close_timeout=timedelta(minutes=5),
+            retry_policy=RetryPolicy(maximum_attempts=1),
+        )

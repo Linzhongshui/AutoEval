@@ -275,6 +275,13 @@ async def archive_output(
                     tool_metadata={k: v for k, v in case.items() if k != "raw"},
                 )
             )
+            if json.loads(raw).get("subcommand") == "harbor_agent":
+                from autoeval.langfuse_integration import archive_trace
+
+                await session.flush()
+                await archive_trace(
+                    session, settings, run_id, identifier, case["raw"].get("harbor_artifact")
+                )
         session.add(
             UnifiedCollection(
                 run_id=run_id,

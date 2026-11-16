@@ -8,6 +8,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    langfuse_host: str | None = None
+    langfuse_browser_url: str | None = None
+    langfuse_project_id: str | None = None
+    langfuse_public_key: SecretStr = SecretStr("")
+    langfuse_secret_key: SecretStr = SecretStr("")
     planning_container_config: str | None = None
     model_config = SettingsConfigDict(env_prefix="AE_", env_file=".env", extra="ignore")
     environment: Literal["development", "test", "production"] = "development"

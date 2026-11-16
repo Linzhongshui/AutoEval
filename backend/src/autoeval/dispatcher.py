@@ -15,6 +15,7 @@ from autoeval.models import Outbox
 from autoeval.workflows import (
     DockerDiagnosticWorkflow,
     GpqaExplorationWorkflow,
+    LangfuseImportWorkflow,
     MonitoredGpqaWorkflow,
     PlannedEvaluationWorkflow,
     ReportAnalysisWorkflow,
@@ -47,13 +48,18 @@ async def deliver_once(sessions, client, *, run_id=None) -> bool:
             workflow_kind = row.payload.get("workflow_kind")
             workflow_entry = {
                 "monitored_gpqa_v1": MonitoredGpqaWorkflow.run,
+                "langfuse_import": LangfuseImportWorkflow.run,
                 "planned_evaluation": PlannedEvaluationWorkflow.run,
                 "docker_diagnostic": DockerDiagnosticWorkflow.run,
                 "gpqa_exploration": GpqaExplorationWorkflow.run,
                 "report_analysis": ReportAnalysisWorkflow.run,
                 "unified_fixture_v1": UnifiedFixtureWorkflow.run,
             }.get(workflow_kind, RunWorkflow.run)
-            if row.kind == "ANALYZE_REPORT":
+            if workflow_kind == "langfuse_import":
+                request = row.payload["import_id"]
+                workflow_id = f"demo/trace/{request}/{row.payload.get('retry_no', 0)}"
+                default_queue = "demo.langfuse.v1"
+            elif row.kind == "ANALYZE_REPORT":
                 analysis_id = row.payload["analysis_id"]
                 request = {
                     "analysis_id": analysis_id,

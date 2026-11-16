@@ -1,6 +1,6 @@
 import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
-import { apiGet, apiGetPage } from "../services/api";
+import { apiGet, apiGetPage, apiPost } from "../services/api";
 import { UnifiedOutputSummary } from "./UnifiedOutputSummary";
 
 type ToolMetadata = {
@@ -20,6 +20,8 @@ type Attempt = {
   attempt_no: number;
   state: string;
   error_code: string | null;
+  trace_status?: string;
+  trace_url?: string | null;
   evidence_available: boolean;
   evidence_sha256: string | null;
   created_at: string;
@@ -112,6 +114,14 @@ export function CaseHistory({ initialRun = "" }: { initialRun?: string }) {
   const body = (
     <>
       {initialRun && <UnifiedOutputSummary runId={initialRun} compact />}
+      {rows.some(row => row.trace_status === "failed") && <button type="button" onClick={async () => {
+        try {
+          await apiPost(`/runs/${query?.run}/traces/retry`, {});
+          setMessage("Trace 导入已重新排队，请刷新查看状态");
+          setQuery(current => current ? {...current} : current);
+        } catch { setMessage("Trace 重试失败"); }
+      }}>重试失败的 Trace 导入</button>}
+      {rows.some(row => row.trace_status === "pending") && <small>Trace 正在等待导入，刷新可查看最新状态</small>}
       <p className="muted">查询每次执行尝试及已校验的原始证据。重试成功仍保留此前失败；执行状态与评分正确性分开。</p>
       <div className="filters case-toolbar">
         {!initialRun && <label>运行ID <input aria-label="回溯运行ID" value={run} onChange={(event) => setRun(event.target.value)} /></label>}
@@ -142,6 +152,7 @@ export function CaseHistory({ initialRun = "" }: { initialRun?: string }) {
                   <td>{row.tool_metadata ? `${row.tool_metadata.input_tokens ?? "—"} / ${row.tool_metadata.output_tokens ?? "—"}` : "—"}</td>
                   <td>
                     <button className="link" type="button" disabled={!row.evidence_available} onClick={() => openEvidence(row)}>查看第{row.attempt_no}次证据</button>
+                    {row.trace_url ? <a href={row.trace_url} target="_blank" rel="noopener noreferrer">查看 Trace</a> : <small>{{pending: "Trace 等待导入", failed: "Trace 导入失败", missing: "缺少轨迹", disabled: "Langfuse 未配置", unsupported: "暂不支持 Trace"}[row.trace_status ?? "unsupported"]}</small>}
                     <small>{row.evidence_available ? short(row.evidence_sha256) : "尚未归档"}</small>
                   </td>
                 </tr>

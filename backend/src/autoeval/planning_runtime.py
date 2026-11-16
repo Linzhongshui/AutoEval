@@ -398,6 +398,43 @@ def execute(folder, spec):
         result = json.loads(raw)
         if key and key in json.dumps(result):
             raise ValueError("Credential present in result")
+        artifact_budget = max(0, 12 * 1024 * 1024 - len(raw))
+        if config.get("subcommand") == "harbor_agent":
+            for case in result.get("cases", []):
+                name = case.get("trial_dir", "")
+                trials = (
+                    [p for p in output.rglob(name) if p.is_dir()]
+                    if name and Path(name).name == name
+                    else []
+                )
+                files = {}
+                if len(trials) == 1:
+                    for relative in (
+                        "agent/trajectory.json",
+                        "result.json",
+                        "verifier/reward.txt",
+                        "verifier/reward.json",
+                        "verifier/reward-details.json",
+                    ):
+                        source = trials[0] / relative
+                        if source.is_file() and not source.is_symlink():
+                            try:
+                                if source.stat().st_size > 8 * 1024 * 1024:
+                                    continue
+                                text = source.read_text(encoding="utf-8")
+                            except (OSError, UnicodeError):
+                                continue
+                            if len(text.encode()) <= 8 * 1024 * 1024 and (
+                                not key or key not in text
+                            ):
+                                files[relative] = text
+                artifact = {"trial_name": name, "files": files}
+                artifact_size = len(json.dumps(artifact).encode())
+                if artifact_size > min(10 * 1024 * 1024, artifact_budget):
+                    artifact = {"trial_name": name, "files": {}}
+                else:
+                    artifact_budget -= artifact_size
+                case["harbor_artifact"] = artifact
         return {
             "unified_result": result,
             "tool_exit_code": completed.returncode,

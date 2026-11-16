@@ -194,9 +194,18 @@ async def history(
                     .limit(limit + 1)
                 )
             ).all()
+            from autoeval.langfuse_integration import TraceImport, trace_view
+
+            imports = (
+                await session.scalars(
+                    select(TraceImport).where(TraceImport.attempt_id.in_([r.id for r in rows]))
+                )
+            ).all()
+            trace_rows = {r.attempt_id: r for r in imports}
             return {
                 "data": [
                     {
+                        **trace_view(trace_rows.get(r.id), request.app.state.settings),
                         "id": str(r.id),
                         "dataset_key": r.dataset_key,
                         "sample_id": r.sample_id,

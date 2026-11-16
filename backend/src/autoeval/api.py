@@ -21,6 +21,7 @@ from autoeval.datasets import router as datasets_router
 from autoeval.db import create_database
 from autoeval.evaluations import router as evaluations_router
 from autoeval.fixture_pipeline import router as fixture_pipeline_router
+from autoeval.langfuse_integration import router as langfuse_router
 from autoeval.leaderboards import router as leaderboard_router
 from autoeval.monitored_execution import router as monitored_router
 from autoeval.planning import router as planning_router
@@ -56,6 +57,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(planning_router)
     app.include_router(configuration_router)
     app.include_router(case_history_router)
+    app.include_router(langfuse_router)
     app.include_router(datasets_router)
     app.include_router(profiles_router)
     app.include_router(registry_router)

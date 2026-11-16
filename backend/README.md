@@ -253,3 +253,7 @@ GET `/api/autoeval/v1/runs/{id}`返回cleanup状态、次数和分类错误；PO
 ## 开发数据工作台与官方数据脚本
 
 `/api/autoeval/v1/data-workbench` 提供榜单来源记录、版本校验、评审、撤回及发布查询，限 development/test。界面 JSON 导入创建待评审记录；`scripts/` 中部分定向导入脚本会进一步调用批准接口，属于写操作，运行前检查脚本与来源快照。当前没有通用官网连接器或定时调度。详见 [工作台说明](../docs/data-workbench.md)。
+
+## Harbor Langfuse
+
+新增可选的 Harbor 轨迹自动导入与样本 Trace 跳转，使用指定 harborstack fork。部署、迁移及专用 worker 见 [接入说明](../docs/langfuse-integration.md)。

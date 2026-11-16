@@ -9,6 +9,7 @@ from autoeval.analysis_activity import execute_report_analysis
 from autoeval.config import get_settings
 from autoeval.evaluation_activity import execute_gpqa_exploration
 from autoeval.fixture_pipeline import execute_unified_fixture
+from autoeval.langfuse_integration import import_harbor_trace
 from autoeval.monitored_execution import execute_monitored_gpqa
 from autoeval.orchestration import execute_planned_evaluation
 from autoeval.run_activities import execute_docker_diagnostic
@@ -17,6 +18,7 @@ from autoeval.workflows import (
     AnalysisWorkflow,
     DockerDiagnosticWorkflow,
     GpqaExplorationWorkflow,
+    LangfuseImportWorkflow,
     MonitoredGpqaWorkflow,
     PlannedEvaluationWorkflow,
     ReportAnalysisWorkflow,
@@ -29,6 +31,11 @@ async def serve(role: str):
     settings = get_settings()
     client = await Client.connect(settings.temporal_address, namespace=settings.temporal_namespace)
     options = {
+        "langfuse": {
+            "task_queue": "demo.langfuse.v1",
+            "workflows": [LangfuseImportWorkflow],
+            "activities": [import_harbor_trace],
+        },
         "monitored": {
             "task_queue": "demo.monitored.v1",
             "workflows": [MonitoredGpqaWorkflow],
@@ -85,6 +92,7 @@ def main():
     parser.add_argument(
         "role",
         choices=[
+            "langfuse",
             "workflow",
             "analysis-workflow",
             "io",

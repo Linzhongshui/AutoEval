@@ -102,7 +102,7 @@ export function RealReports({ reportId, open }: { reportId?: string; open: (id: 
                       执行 {row.summary.executed_attempts} 次 · 失败 {row.summary.failed_samples} · 缺测 {row.summary.missing_samples}
                     </small>
                     <small>
-                      GPQA · {row.summary.subset_scope === "lite" ? "Lite" : row.summary.subset_scope}
+                      {row.dataset_key || "GPQA"} · {row.summary.subset_scope === "lite" ? "Lite" : row.summary.subset_scope}
                     </small>
                   </td>
                   <td>

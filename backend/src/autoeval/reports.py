@@ -10,6 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from autoeval.analysis import ReportAnalysis, analysis_status_for
 from autoeval.benchmarks import BenchmarkBaseline, compare_baseline
+from autoeval.dataset_identity import report_dataset
 from autoeval.datasets import read_manifest
 from autoeval.evaluations import EvaluationReport
 from autoeval.models import EvaluationRun, RunSnapshot
@@ -47,6 +48,7 @@ def report_data(
         "validity": row.validity,
         "evidence_status": evidence_status,
         "summary": row.summary,
+        "dataset_key": report_dataset(snapshot.canonical_body),
         "sha256": row.sha256,
         "snapshot_sha256": row.snapshot_sha256,
         "run_mode": run.run_mode,

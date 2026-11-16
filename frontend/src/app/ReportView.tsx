@@ -32,6 +32,7 @@ type BaselineComparison = {
 };
 
 export type Report = {
+  dataset_key?: string;
   execution_kind?: string;
   dataset_results?: DatasetChartResult[];
   id: string;
@@ -260,7 +261,7 @@ export function ReportView({ id, go }: { id: string; go: (path: string) => void 
         {report.execution_origin === "simulation" && <p className="notice">人工测试产物流程验证报告；不代表真实模型成绩，不参与榜单或正式发布门禁。</p>}
         </>}
         {view === "数据集结果" && <section className="report-datasets-tab"><div className="report-tab-heading"><p className="muted">按数据集查看覆盖范围、核心指标和基准差异，点击查看结果进入样本明细。</p></div>
-        <div className="table-wrap"><table><thead><tr><th>数据集</th><th>类型</th><th>覆盖</th><th>核心指标</th><th>指标值</th><th>基准差异</th><th>操作</th></tr></thead><tbody><tr><td>GPQA</td><td>科学问答</td><td>{summary.successful_samples}/{summary.expected_samples} · {validityLabels[report.validity]}</td><td>准确率</td><td>{accuracyText(summary.accuracy)}</td><td>{report.evidence_status !== "verified" ? "证据不可用" : baseline.status === "missing" ? "暂无基准" : baseline.status === "incomparable" ? "不可直接比较" : difference}</td><td><button className="link" onClick={() => setDatasetOpen(true)}>查看结果</button></td></tr></tbody></table></div>
+        <div className="table-wrap"><table><thead><tr><th>数据集</th><th>类型</th><th>覆盖</th><th>核心指标</th><th>指标值</th><th>基准差异</th><th>操作</th></tr></thead><tbody><tr><td>{report.dataset_key || "GPQA"}</td><td>科学问答</td><td>{summary.successful_samples}/{summary.expected_samples} · {validityLabels[report.validity]}</td><td>准确率</td><td>{accuracyText(summary.accuracy)}</td><td>{report.evidence_status !== "verified" ? "证据不可用" : baseline.status === "missing" ? "暂无基准" : baseline.status === "incomparable" ? "不可直接比较" : difference}</td><td><button className="link" onClick={() => setDatasetOpen(true)}>查看结果</button></td></tr></tbody></table></div>
         </section>}
         {view === "智能分析" && <section className="report-analysis-view">
           <p className="muted">{report.evidence_status !== "verified" ? "原始证据不可用，当前无法确认有效成绩或生成可信比较结论。" : "本次为所选 Lite 清单的探索结果，不代表全量成绩，不适用正式发布门禁。"}</p>
@@ -271,7 +272,7 @@ export function ReportView({ id, go }: { id: string; go: (path: string) => void 
       {datasetOpen && <section className="card stack report-dataset-result restored-detail">
         <div className="spread">
           <div>
-            <h2>GPQA</h2>
+            <h2>{report.dataset_key || "GPQA"}</h2>
             <p className="muted">
               科学问答 · Lite · 有效样本 {summary.successful_samples} / {summary.expected_samples}
             </p>

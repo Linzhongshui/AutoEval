@@ -12,6 +12,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from autoeval.audit import AuditEvent
+from autoeval.dataset_identity import report_dataset
 from autoeval.evaluations import EvaluationReport
 from autoeval.models import Base, Record, RunSnapshot
 from autoeval.report_integrity import report_evidence_status
@@ -145,7 +146,7 @@ async def validate_report(request, session, entry):
         entry.source_key != "report-" + str(report.id)
         or entry.source_name != "AutoEval"
         or entry.model_name != frozen["remote_model"]
-        or entry.dataset != "GPQA"
+        or entry.dataset not in {"GPQA", report_dataset(frozen)}
         or entry.metric != "accuracy"
         or entry.unit != "%"
         or entry.scope != "lite"
@@ -313,6 +314,7 @@ async def published(request: Request, selection: Literal["best", "all"] = "best"
             # Report IDs are provenance, not comparison groups.
             if entry.source_type == "report":
                 identity.pop("source_version")
+                identity["dataset"] = report_dataset(frozen)
                 identity["config_version_id"] = frozen.get("config_version_id") if frozen else None
             if any(
                 str(value).strip().lower() in {"unknown", "未知", "未提供", "待确认"}

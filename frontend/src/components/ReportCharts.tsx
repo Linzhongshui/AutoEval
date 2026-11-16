@@ -14,7 +14,7 @@ export type DatasetChartResult = {
 };
 
 export function ReportCharts({ report }: { report: Report }) {
-  const datasets = report.dataset_results ?? [{ dataset_key: "GPQA", summary: report.summary, validity: report.validity, evidence_status: report.evidence_status, baseline_comparison: report.baseline_comparison }];
+  const datasets = report.dataset_results ?? [{ dataset_key: report.dataset_key || "GPQA", summary: report.summary, validity: report.validity, evidence_status: report.evidence_status, baseline_comparison: report.baseline_comparison }];
   return <section className="report-charts" aria-label="报告全部数据集图表">
     <section className="report-chart-panel">
       <header className="spread"><h3><BarChart3 size={18} />精度测评</h3><span className="badge">{datasets.length} 个数据集</span></header>

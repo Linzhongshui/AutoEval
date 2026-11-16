@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
+from autoeval.dataset_identity import report_dataset
 from autoeval.datasets import canonical_manifest
 from autoeval.evaluations import EvaluationReport
 from autoeval.models import EvaluationRun, RunSnapshot
@@ -30,7 +31,7 @@ def rank_leaderboard(rows, *, dataset_key: str, metric_name: str):
             raise ValueError("Invalid leaderboard metric")
         snapshot = row["snapshot"]
         comparison = {
-            "dataset_key": dataset_key,
+            "dataset_key": report_dataset(snapshot),
             "manifest_id": snapshot["manifest_id"],
             "manifest_sha256": snapshot["manifest_sha256"],
             "tool_revision": snapshot["tool"]["revision"],
@@ -76,12 +77,12 @@ def rank_leaderboard(rows, *, dataset_key: str, metric_name: str):
 @router.get("")
 async def leaderboard(
     request: Request,
-    dataset_key: Literal["GPQA", "MMMU-Pro", "AutomationBench"],
+    dataset_key: Literal["GPQA", "GPQA-Diamond", "MMMU-Pro", "AutomationBench"],
     metric_name: Literal["accuracy"],
 ):
     # The implemented report schema is GPQA-only. Never relabel GPQA rows as a
     # different benchmark merely because the query contains another dataset.
-    if dataset_key != "GPQA":
+    if dataset_key not in {"GPQA", "GPQA-Diamond"}:
         return {
             "data": [],
             "excluded_unverified_reports": 0,
@@ -125,6 +126,7 @@ async def leaderboard(
                         "snapshot": snapshot.canonical_body,
                     }
                     for report, run, snapshot in verified
+                    if dataset_key == "GPQA" or report_dataset(snapshot.canonical_body) == dataset_key
                 ],
                 dataset_key=dataset_key,
                 metric_name=metric_name,

@@ -74,13 +74,13 @@ class TaskInput(Strict):
     task_id: str = Field(pattern=r"^[a-zA-Z0-9_-]{1,64}$")
     compilation_id: uuid.UUID
     manifest_id: uuid.UUID
-    dataset: Literal["GPQA", "MMMU-Pro", "DeepSWE"]
+    dataset: Literal["GPQA", "MMMU-Pro", "DeepSWE", "AutomationBench"]
 
 
 class PlanInput(ResourceRef):
     target_id: uuid.UUID
     throughput_profile_id: uuid.UUID | None = None
-    tasks: list[TaskInput] = Field(min_length=1, max_length=3)
+    tasks: list[TaskInput] = Field(min_length=1, max_length=4)
     dataset_concurrency: int = Field(default=1, ge=1, le=3)
     recommend: bool = True
     runs: int = Field(default=100, ge=1, le=100)
@@ -182,12 +182,12 @@ async def resolve_inputs(session, settings, body):
             params["dump_eval_details"] = True
         if config["subcommand"] == "llm_accuracy" and len(params.get("datasets", [])) != 1:
             raise HTTPException(422, "Each compilation must select exactly one dataset")
-        if (spec.dataset == "DeepSWE") != (config["subcommand"] == "harbor_agent"):
+        if (spec.dataset in {"DeepSWE", "AutomationBench"}) != (config["subcommand"] == "harbor_agent"):
             raise HTTPException(422, "Dataset tool family mismatch")
         full = await session.get(DatasetManifest, profile.full_manifest_id)
         source = await asyncio.to_thread(read_manifest, settings, full)
         samples = [
-            dict(sample, tool_case_id=str(i) if spec.dataset != "DeepSWE" else sample["sample_id"])
+            dict(sample, tool_case_id=str(i) if spec.dataset not in {"DeepSWE", "AutomationBench"} else sample["sample_id"])
             for i, sample in enumerate(source["samples"])
         ]
         if manifest.scope == "lite":
@@ -220,7 +220,7 @@ async def resolve_inputs(session, settings, body):
                 f"[{chosen[0]['tool_case_id']}:{int(chosen[-1]['tool_case_id']) + 1}]"
             )
         field = "batch_size" if config["subcommand"] == "llm_accuracy" else "n_concurrent_trials"
-        attempts = int(params.get("n_attempts", 1)) if spec.dataset == "DeepSWE" else 1
+        attempts = int(params.get("n_attempts", 1)) if spec.dataset in {"DeepSWE", "AutomationBench"} else 1
         concurrency = int(params.get(field, 1))
         if not 1 <= concurrency <= 256 or not 1 <= attempts <= 100:
             raise HTTPException(422, "Invalid concurrency or attempts")

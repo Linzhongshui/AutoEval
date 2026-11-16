@@ -18,7 +18,7 @@ from autoeval_planner.throughput import ThroughputProfile
 from autoeval.standard_inputs import digest, leaves, validate_config
 
 PLANNER_REVISION = "0ee9abf49a57c5accc62df8900693cdcea88ea9a"
-DATASETS = {"GPQA", "MMMU-Pro", "DeepSWE"}
+DATASETS = {"GPQA", "MMMU-Pro", "DeepSWE", "AutomationBench"}
 
 
 def selected_samples(config, samples):
@@ -77,7 +77,7 @@ def import_history(library, observations):
         if meta.get("input_tokens") is None or meta.get("output_tokens") is None:
             continue
         dataset = observation["dataset"]
-        task_type = "ais_bench/" + ("harbor_agent" if dataset == "DeepSWE" else "llm_accuracy")
+        task_type = "ais_bench/" + ("harbor_agent" if dataset in {"DeepSWE", "AutomationBench"} else "llm_accuracy")
         run_id = observation["run_id"]
         library.upsert_run(
             run_id=run_id,
@@ -271,10 +271,10 @@ def calculate(inputs, curve, snapshot, history, directory, *, recommend=True):
             provider=provider,
         )
         if any(
-            o["dataset"] == "DeepSWE" and o["metadata"].get("overhead_sec") is None for o in history
+            o["dataset"] in {"DeepSWE", "AutomationBench"} and o["metadata"].get("overhead_sec") is None for o in history
         ):
             report["warnings"].append(
-                "DeepSWE historical non-LLM overhead is unknown; duration may be underestimated"
+                "Harbor historical non-LLM overhead is unknown; duration may be underestimated"
             )
             report["confidence"] = "low"
         report["planner_revision"] = PLANNER_REVISION

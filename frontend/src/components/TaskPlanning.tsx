@@ -22,7 +22,7 @@ type Options = {
 };
 type DatasetCheck = { task_id: string; dataset: string; data_path: string | null; tool_revision: string | null; expected_tool_revision: string; blocking_reasons: string[] };
 type Job = { id: string; state: string; created_at?: string; updated_at?: string; result?: { progress?: { stage: string; current_concurrency?: number | null; completed_levels: number; total_levels: number; observed_at?: string } | null; report?: Report; throughput_profile_id?: string; reason?: string; execution_ready?: boolean; supported_datasets?: string[]; blocking_reasons?: string[]; dataset_checks?: DatasetCheck[]; tool_versions?: Record<string, { expected: string; actual: string | null }> } };
-const datasets = ["GPQA", "MMMU-Pro", "DeepSWE"];
+const datasets = ["GPQA", "MMMU-Pro", "DeepSWE", "AutomationBench"];
 const duration = (seconds: number | null | undefined) => seconds == null ? "未知" : `${Math.floor(seconds / 3600)}小时 ${Math.floor(seconds % 3600 / 60)}分 ${Math.round(seconds % 60)}秒`;
 
 export function PlanEstimate({ report }: { report: Report }) {
@@ -145,7 +145,7 @@ export function TaskPlanning() {
   const sampleCount = payload.tasks.reduce((sum, t) => sum + (options.manifests.find(m => m.id === t.manifest_id)?.sample_count || 0), 0);
   return <div className="planning-layout"><section className="card stack planning-card" aria-label="完整测评规划">
     <h2>1. 模型与执行资源</h2>
-    <p className="planning-intro">支持 GPQA、MMMU-Pro、DeepSWE 的全量或已绑定 Lite 清单。AutomationBench 待来源与评分核验。</p>
+    <p className="planning-intro">支持 GPQA、MMMU-Pro、DeepSWE、AutomationBench 的全量或已绑定 Lite 清单。Agent 工作流通过 AISBench Harbor 执行，需绑定配置与清单并通过环境检查。</p>
     <div className="planning-fields">
       <div className="planning-service-field"><div className="planning-service-heading"><label htmlFor="planning-service">模型服务</label><ManagementDrawer title="管理服务" onDismiss={targets.retry}><ModelServices /></ManagementDrawer></div><select id="planning-service" aria-label="规划模型服务" value={target} onChange={e => { setTarget(e.target.value); setSelection({}); }}><option value="">请选择</option>{targets.rows.map(t => <option key={t.id} value={t.id}>{t.service_name || t.remote_model} · {t.remote_model} · {t.id.slice(0, 8)}</option>)}</select></div>
       <label><span>执行环境</span><select value={resourceKind} onChange={e => { setResourceKind(e.target.value); setResource(""); }}><option value="docker_local">Docker</option><option value="customer_ssh">客户 SSH</option></select></label>

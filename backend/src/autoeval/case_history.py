@@ -25,6 +25,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from autoeval.datasets import canonical_manifest, read_manifest, write_manifest
 from autoeval.models import Base, EvaluationRun, Record
+from autoeval.responses import Envelope, TotalPageEnvelope
 
 
 class CaseExecutionRecord(Record, Base):
@@ -154,10 +155,28 @@ async def finish_attempt(sessions, settings, identifier: uuid.UUID, evidence: At
         row.object_key, row.sha256 = key, digest
 
 
+class CaseExecutionItem(BaseModel):
+    trace_status: str
+    trace_id: str | None
+    trace_url: str | None
+    trace_error: str | None = None
+    id: str
+    dataset_key: str
+    sample_id: str
+    attempt_no: int
+    state: str
+    error_code: str | None
+    evidence_sha256: str | None
+    evidence_available: bool
+    created_at: str
+    finished_at: str | None
+    tool_metadata: dict | None
+
+
 router = APIRouter(prefix="/api/autoeval/v1", tags=["case execution history"])
 
 
-@router.get("/runs/{run_id}/case-executions")
+@router.get("/runs/{run_id}/case-executions", response_model=TotalPageEnvelope[CaseExecutionItem])
 async def history(
     run_id: uuid.UUID,
     request: Request,
@@ -228,7 +247,7 @@ async def history(
         raise HTTPException(503, "Case history database unavailable") from exc
 
 
-@router.get("/case-executions/{attempt_id}/evidence")
+@router.get("/case-executions/{attempt_id}/evidence", response_model=Envelope[dict])
 async def evidence(attempt_id: uuid.UUID, request: Request):
     try:
         async with request.app.state.sessions() as session:

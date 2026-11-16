@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Mapped, mapped_column
 
 from autoeval.models import Base, Record
+from autoeval.responses import Envelope, PageEnvelope
 
 
 class TestConfigVersion(Record, Base):
@@ -95,10 +96,63 @@ class CreateConfig(BaseModel):
     profile_bindings: dict[str, uuid.UUID] = Field(default_factory=dict, max_length=100)
 
 
+class ConfigSpecItem(BaseModel):
+    dataset_name: str
+    parameters: dict
+    profile_id: str
+    profile_sha256: str
+    tool: dict
+    manifest_id: str
+    manifest_sha256: str
+    sample_count: int
+    scope: str
+
+
+class FrozenConfigSpec(BaseModel):
+    schema_version: str
+    config_version_id: str
+    config_sha256: str
+    items: list[ConfigSpecItem]
+
+
+class ExecutionSpecData(BaseModel):
+    spec: FrozenConfigSpec
+    sha256: str
+    bindings_complete: bool
+    missing_profiles: list[str]
+    execution_enabled: bool
+    blocking_reasons: list[str]
+    gate_status: str
+
+
+class ConfigListItem(BaseModel):
+    id: str
+    config_key: str
+    display_name: str
+    version: int
+    version_label: str
+    kind: str
+    content_hash: str
+    source_url: str | None
+    source_revision: str | None
+    source_sha256: str | None
+    approved_by: str | None
+    approval_status: str
+    items: dict[str, dict]
+    profile_bindings: dict[str, str]
+
+
+class CreatedConfig(BaseModel):
+    id: str
+    config_key: str
+    version: int
+    content_hash: str
+
+
 router = APIRouter(prefix="/api/autoeval/v1/test-configs", tags=["configuration"])
 
 
-@router.get("/{config_id}/execution-spec")
+@router.get("/{config_id}/execution-spec", response_model=Envelope[ExecutionSpecData])
 async def execution_spec(config_id: uuid.UUID, request: Request):
     from autoeval.datasets import DatasetManifest
     from autoeval.profiles import ConfigDatasetBinding, EvaluationProfile
@@ -168,7 +222,7 @@ async def execution_spec(config_id: uuid.UUID, request: Request):
         raise HTTPException(503, "Configuration database unavailable") from exc
 
 
-@router.get("")
+@router.get("", response_model=PageEnvelope[ConfigListItem])
 async def list_configs(
     request: Request,
     offset: int = 0,
@@ -262,7 +316,7 @@ async def list_configs(
     }
 
 
-@router.post("", status_code=201)
+@router.post("", status_code=201, response_model=Envelope[CreatedConfig])
 async def create_version(body: CreateConfig, request: Request):
     from autoeval.datasets import DatasetManifest
     from autoeval.profiles import ConfigDatasetBinding, EvaluationProfile

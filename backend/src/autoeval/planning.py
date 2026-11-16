@@ -4,7 +4,7 @@ import asyncio
 import copy
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
@@ -15,6 +15,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from autoeval.datasets import DatasetManifest, canonical_manifest, read_manifest, write_manifest
 from autoeval.models import Base, Record
 from autoeval.planning_engine import DATASETS, PLANNER_REVISION, apply_concurrency, selected_samples
+from autoeval.responses import Accepted, Envelope, PageEnvelope, SubmittedRun
 from autoeval.standard_inputs import (
     StandardInputCompilation,
     StandardInputVersion,
@@ -111,6 +112,90 @@ class CurveInput(ResourceRef):
 
 class ApplyInput(Strict):
     input_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class IdOnly(BaseModel):
+    id: str
+
+
+class JobAccepted(BaseModel):
+    id: str
+    state: str
+    result: dict | None = None
+
+
+class JobStatus(BaseModel):
+    id: str
+    kind: str
+    state: str
+    result: dict | None
+    cancel_requested: bool
+    created_at: str
+    updated_at: str
+
+
+class ProbeReconciled(BaseModel):
+    id: str
+    state: str
+    created_at: str
+    updated_at: str
+    result: dict | None
+
+
+class CompilationOption(BaseModel):
+    id: str
+    dataset: str | None
+    label: str
+    sha256: str
+    adaptor_revision: str | None
+    runtime_config: dict
+    target_id: str | None
+    config: dict
+    input_ready: bool | None
+
+
+class ManifestOption(BaseModel):
+    id: str
+    scope: str
+    sample_count: int
+    sha256: str
+    dataset: str
+
+
+class CurveOption(BaseModel):
+    id: str
+    target_id: Any = None
+    resource_id: Any = None
+    resource_kind: Any = None
+    measured_at: Any = None
+
+
+class PlanningOptions(BaseModel):
+    compilations: list[CompilationOption]
+    manifests: list[ManifestOption]
+    curves: list[CurveOption]
+
+
+class PlannedRunItem(BaseModel):
+    id: str
+    state: str
+    created_at: str
+
+
+class PlannedRunDetail(BaseModel):
+    report_id: str | None
+    id: str
+    state: str
+    estimate: Any = None
+    datasets: list[dict]
+    report: dict | None
+    execution_origin: Any = None
+
+
+class AppliedPlan(BaseModel):
+    execution_plan_id: str
+    sha256: str
+    report: dict
 
 
 router = APIRouter(prefix="/api/autoeval/v1/planning", tags=["task planning"])
@@ -274,7 +359,7 @@ async def resolve_inputs(session, settings, body):
     }
 
 
-@router.get("/options")
+@router.get("/options", response_model=PageEnvelope[PlanningOptions])
 async def options(request: Request, offset: int = 0, limit: int = 100, include_test: bool = False):
     from autoeval.profiles import EvaluationProfile
 
@@ -397,7 +482,7 @@ async def options(request: Request, offset: int = 0, limit: int = 100, include_t
         }
 
 
-@router.post("/throughput-profiles", status_code=201)
+@router.post("/throughput-profiles", status_code=201, response_model=Envelope[IdOnly])
 async def import_curve(body: CurveInput, request: Request):
     from autoeval_planner.errors import PlannerError
     from autoeval_planner.throughput import ThroughputProfile
@@ -442,7 +527,7 @@ async def import_curve(body: CurveInput, request: Request):
         return envelope({"id": str(row.id)}, request)
 
 
-@router.post("/resources/preflight", status_code=202)
+@router.post("/resources/preflight", status_code=202, response_model=Envelope[JobAccepted])
 async def preflight(body: PlanInput, request: Request):
     async with request.app.state.sessions() as session:
         inputs = await resolve_inputs(session, request.app.state.settings, body)
@@ -501,7 +586,7 @@ async def enqueue(kind, payload, request):
         return envelope({"id": str(job.id), "state": "pending"}, request)
 
 
-@router.post("/probes", status_code=202)
+@router.post("/probes", status_code=202, response_model=Envelope[JobAccepted])
 async def probe(body: ProbeInput, request: Request):
     from autoeval.probe_dispatch import consumer_ready
 
@@ -521,7 +606,7 @@ async def probe(body: ProbeInput, request: Request):
     )
 
 
-@router.get("/active-probe")
+@router.get("/active-probe", response_model=Envelope[JobStatus | None])
 async def active_probe(
     target_id: uuid.UUID,
     resource_id: uuid.UUID,
@@ -544,7 +629,7 @@ async def active_probe(
     return await job_status(identifier, request) if identifier else envelope(None, request)
 
 
-@router.get("/probes/{job_id}")
+@router.get("/probes/{job_id}", response_model=Envelope[JobStatus])
 async def job_status(job_id: uuid.UUID, request: Request):
     async with request.app.state.sessions() as session:
         row = await session.get(PlanningJob, job_id)
@@ -580,7 +665,7 @@ class CloseProbe(Strict):
     acknowledge_unknown: Literal[True]
 
 
-@router.post("/probes/{job_id}/reconcile")
+@router.post("/probes/{job_id}/reconcile", response_model=Envelope[ProbeReconciled])
 async def reconcile_probe(job_id: uuid.UUID, request: Request):
     from autoeval.contracts import JobRef
     from autoeval.planning_transport import transport
@@ -638,7 +723,7 @@ async def reconcile_probe(job_id: uuid.UUID, request: Request):
         )
 
 
-@router.post("/probes/{job_id}/close")
+@router.post("/probes/{job_id}/close", response_model=Envelope[JobAccepted])
 async def close_probe(job_id: uuid.UUID, body: CloseProbe, request: Request):
     from autoeval.audit import AuditEvent
 
@@ -690,7 +775,7 @@ async def close_probe(job_id: uuid.UUID, body: CloseProbe, request: Request):
         return envelope({"id": str(row.id), "state": row.state, "result": row.result}, request)
 
 
-@router.post("/probes/{job_id}/cancel", status_code=202)
+@router.post("/probes/{job_id}/cancel", status_code=202, response_model=Envelope[Accepted])
 async def cancel_job(job_id: uuid.UUID, request: Request):
     async with request.app.state.sessions() as session, session.begin():
         row = await session.get(PlanningJob, job_id, with_for_update=True)
@@ -710,7 +795,7 @@ async def cancel_job(job_id: uuid.UUID, request: Request):
         return envelope({"accepted": row.cancel_requested}, request)
 
 
-@router.post("/plans", status_code=202)
+@router.post("/plans", status_code=202, response_model=Envelope[JobAccepted])
 async def plan(body: PlanInput, request: Request):
     async with request.app.state.sessions() as session:
         inputs = await resolve_inputs(session, request.app.state.settings, body)
@@ -731,7 +816,7 @@ async def plan(body: PlanInput, request: Request):
     return await enqueue("plan", inputs, request)
 
 
-@router.get("/plans/{job_id}")
+@router.get("/plans/{job_id}", response_model=Envelope[JobStatus])
 async def plan_status(job_id: uuid.UUID, request: Request):
     return await job_status(job_id, request)
 
@@ -780,7 +865,7 @@ async def current_preflight(session, inputs, *, require_selection=True):
     )
 
 
-@router.post("/plans/{job_id}/apply", status_code=201)
+@router.post("/plans/{job_id}/apply", status_code=201, response_model=Envelope[AppliedPlan])
 async def apply_plan(job_id: uuid.UUID, body: ApplyInput, request: Request):
     async with request.app.state.sessions() as session, session.begin():
         job = await session.get(PlanningJob, job_id)
@@ -826,7 +911,7 @@ async def apply_plan(job_id: uuid.UUID, body: ApplyInput, request: Request):
         )
 
 
-@router.post("/runs", status_code=202)
+@router.post("/runs", status_code=202, response_model=Envelope[SubmittedRun])
 async def submit_run(
     body: PlanInput,
     request: Request,
@@ -848,7 +933,7 @@ async def submit_run(
         )
 
 
-@router.get("/runs")
+@router.get("/runs", response_model=PageEnvelope[PlannedRunItem])
 async def list_runs(request: Request, offset: int = 0, limit: int = 20):
     from autoeval.models import EvaluationRun
 
@@ -878,7 +963,7 @@ async def list_runs(request: Request, offset: int = 0, limit: int = 20):
         }
 
 
-@router.get("/runs/{run_id}")
+@router.get("/runs/{run_id}", response_model=Envelope[PlannedRunDetail])
 async def run_detail(run_id: uuid.UUID, request: Request):
     from autoeval.models import EvaluationRun, RunSnapshot
     from autoeval.orchestration import DatasetExecution, child_view
@@ -920,7 +1005,7 @@ async def run_detail(run_id: uuid.UUID, request: Request):
         )
 
 
-@router.post("/runs/{run_id}/cancel", status_code=202)
+@router.post("/runs/{run_id}/cancel", status_code=202, response_model=Envelope[Accepted])
 async def cancel_run(run_id: uuid.UUID, request: Request):
     from autoeval.models import EvaluationRun
 
@@ -934,7 +1019,7 @@ async def cancel_run(run_id: uuid.UUID, request: Request):
         return envelope({"accepted": accepted}, request)
 
 
-@router.get("/runs/{run_id}/report")
+@router.get("/runs/{run_id}/report", response_model=Envelope[dict])
 async def run_report(run_id: uuid.UUID, request: Request):
     async with request.app.state.sessions() as session:
         report = await session.scalar(

@@ -2,9 +2,11 @@
 
 import asyncio
 import uuid
+from typing import Any
 
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
 from sqlalchemy import and_, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -15,8 +17,32 @@ from autoeval.datasets import read_manifest
 from autoeval.evaluations import EvaluationReport
 from autoeval.models import EvaluationRun, RunSnapshot
 from autoeval.report_integrity import report_evidence_status
+from autoeval.responses import Envelope, PageEnvelope
 
 router = APIRouter(prefix="/api/autoeval/v1/reports", tags=["reports"])
+
+
+class ReportView(BaseModel):
+    id: str
+    run_id: str
+    execution_kind: str
+    created_at: str
+    validity: str
+    evidence_status: str
+    summary: dict
+    dataset_key: str
+    sha256: str
+    snapshot_sha256: str
+    run_mode: str | None
+    remote_model: Any
+    config_version_id: Any = None
+    manifest_id: Any = None
+    nomination_conditions: dict
+    execution_origin: str
+    gate_status: str
+    analysis_status: str
+    analysis_id: str | None
+    baseline_comparison: dict
 
 
 def report_data(
@@ -68,7 +94,7 @@ def report_data(
     }
 
 
-@router.get("")
+@router.get("", response_model=PageEnvelope[ReportView])
 async def catalog(request: Request, offset: int = 0, limit: int = 20):
     if offset < 0 or not 1 <= limit <= 200:
         raise HTTPException(422, "Invalid pagination")
@@ -130,7 +156,7 @@ async def catalog(request: Request, offset: int = 0, limit: int = 20):
     }
 
 
-@router.get("/{report_id}")
+@router.get("/{report_id}", response_model=Envelope[ReportView])
 async def detail(report_id: uuid.UUID, request: Request):
     try:
         async with request.app.state.sessions() as session:
@@ -179,7 +205,7 @@ async def detail(report_id: uuid.UUID, request: Request):
     return {"data": data, "request_id": request.state.request_id}
 
 
-@router.get("/{report_id}/evidence")
+@router.get("/{report_id}/evidence", response_model=Envelope[dict])
 async def evidence(report_id: uuid.UUID, request: Request):
     try:
         async with request.app.state.sessions() as session:

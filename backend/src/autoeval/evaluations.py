@@ -23,6 +23,7 @@ from autoeval.models import Base, EvaluationRun, Outbox, Record, RunEvent, RunSn
 from autoeval.profiles import ConfigDatasetBinding, EvaluationProfile
 from autoeval.registry import AssetVersion
 from autoeval.resources import ResourceBinding
+from autoeval.responses import Accepted, Envelope, PageEnvelope
 from autoeval.runs import ExecutionLease
 from autoeval.ssh_resources import SSHResourceBinding
 from autoeval.targets import TargetBinding
@@ -51,10 +52,26 @@ class SubmitEvaluation(BaseModel):
     resource_kind: Literal["docker_local", "customer_ssh"] = "docker_local"
 
 
+class ExplorationSubmitted(BaseModel):
+    run_id: str
+    state: str
+    expected_samples: int | None = None
+    gate_status: str | None = None
+
+
+class RunListItem(BaseModel):
+    id: str
+    state: str
+    report_id: str | None
+    created_at: str
+    remote_model: str | None
+    resource_kind: str | None = None
+
+
 router = APIRouter(prefix="/api/autoeval/v1/runs", tags=["evaluation runs"])
 
 
-@router.get("")
+@router.get("", response_model=PageEnvelope[RunListItem])
 async def list_runs(request: Request, offset: int = 0, limit: int = 50):
     if offset < 0 or not 1 <= limit <= 200:
         raise HTTPException(422, "Invalid pagination")
@@ -104,7 +121,7 @@ async def list_runs(request: Request, offset: int = 0, limit: int = 50):
         raise HTTPException(503, "Run database unavailable") from exc
 
 
-@router.post("", status_code=202)
+@router.post("", status_code=202, response_model=Envelope[ExplorationSubmitted])
 async def submit(
     body: SubmitEvaluation,
     request: Request,
@@ -318,7 +335,7 @@ async def submit(
     return {"data": data, "request_id": request.state.request_id}
 
 
-@router.get("/{run_id}")
+@router.get("/{run_id}", response_model=Envelope[dict])
 async def detail(run_id: uuid.UUID, request: Request):
     from autoeval.cleanup import ExecutionCleanup, cleanup_view
 
@@ -413,7 +430,7 @@ async def detail(run_id: uuid.UUID, request: Request):
     return {"data": data, "request_id": request.state.request_id}
 
 
-@router.post("/{run_id}/cleanup", status_code=202)
+@router.post("/{run_id}/cleanup", status_code=202, response_model=Envelope[Accepted])
 async def retry_cleanup(run_id: uuid.UUID, request: Request):
     from autoeval.cleanup import schedule_cleanup
 
@@ -440,7 +457,7 @@ async def retry_cleanup(run_id: uuid.UUID, request: Request):
     return {"data": {"accepted": True}, "request_id": request.state.request_id}
 
 
-@router.post("/{run_id}/cancel", status_code=202)
+@router.post("/{run_id}/cancel", status_code=202, response_model=Envelope[Accepted])
 async def cancel(run_id: uuid.UUID, request: Request):
     try:
         async with request.app.state.sessions() as session, session.begin():
@@ -470,7 +487,7 @@ async def cancel(run_id: uuid.UUID, request: Request):
     return {"data": {"accepted": accepted}, "request_id": request.state.request_id}
 
 
-@router.get("/{run_id}/report")
+@router.get("/{run_id}/report", response_model=Envelope[dict])
 async def report_evidence(run_id: uuid.UUID, request: Request):
     try:
         async with request.app.state.sessions() as session:

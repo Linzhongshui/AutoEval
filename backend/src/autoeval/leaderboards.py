@@ -5,6 +5,7 @@ import math
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -13,8 +14,26 @@ from autoeval.datasets import canonical_manifest
 from autoeval.evaluations import EvaluationReport
 from autoeval.models import EvaluationRun, RunSnapshot
 from autoeval.report_integrity import report_evidence_status
+from autoeval.responses import LeaderboardEnvelope
 
 router = APIRouter(prefix="/api/autoeval/v1/leaderboard", tags=["internal leaderboard"])
+
+
+class LeaderboardEntry(BaseModel):
+    report_id: str
+    run_id: str
+    remote_model: str
+    created_at: str
+    value: int | float
+    rank: int
+
+
+class LeaderboardGroup(BaseModel):
+    comparison: dict
+    metric_name: str
+    unit: str
+    direction: str
+    entries: list[LeaderboardEntry]
 
 
 def rank_leaderboard(rows, *, dataset_key: str, metric_name: str):
@@ -74,7 +93,7 @@ def rank_leaderboard(rows, *, dataset_key: str, metric_name: str):
     return [groups[key] for key in sorted(groups)]
 
 
-@router.get("")
+@router.get("", response_model=LeaderboardEnvelope[LeaderboardGroup])
 async def leaderboard(
     request: Request,
     dataset_key: Literal["GPQA", "GPQA-Diamond", "MMMU-Pro", "AutomationBench"],

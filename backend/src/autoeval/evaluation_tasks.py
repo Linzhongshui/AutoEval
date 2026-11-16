@@ -4,12 +4,13 @@ import uuid
 
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, Header, HTTPException, Request
-from pydantic import Field, model_validator
+from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import String, cast, func, or_, select
 
 from autoeval.evaluations import EvaluationReport, detail, retry_cleanup
 from autoeval.models import EvaluationRun, RunSnapshot
 from autoeval.planning import PlanInput, ResourceRef, TaskInput, envelope, run_detail, submit_run
+from autoeval.responses import Accepted, Envelope, SubmittedRun, TaskListEnvelope
 
 
 class TaskSelection(TaskInput):
@@ -30,11 +31,26 @@ class SubmitTask(ResourceRef):
         return self
 
 
+class SubmittedTask(BaseModel):
+    run_id: str
+    state: str
+
+
+class TaskListItem(BaseModel):
+    id: str
+    state: str
+    created_at: str
+    report_id: str | None
+    remote_model: str | None
+    resource_kind: str | None
+    datasets: list[str]
+
+
 router = APIRouter(prefix="/api/autoeval/v1/evaluation-tasks", tags=["evaluation tasks"])
 SCOPES = ["local-operator:evaluation", "local-operator:orchestration"]
 
 
-@router.post("", status_code=202)
+@router.post("", status_code=202, response_model=Envelope[SubmittedRun])
 async def submit(
     body: SubmitTask, request: Request, idempotency_key: str = Header(min_length=1, max_length=256)
 ):
@@ -43,7 +59,7 @@ async def submit(
     return await submit_run(inputs, request, idempotency_key, None)
 
 
-@router.get("")
+@router.get("", response_model=TaskListEnvelope[TaskListItem])
 async def list_tasks(
     request: Request,
     offset: int = 0,
@@ -142,7 +158,7 @@ async def list_tasks(
         }
 
 
-@router.get("/{run_id}")
+@router.get("/{run_id}", response_model=Envelope[dict])
 async def task_detail(run_id: uuid.UUID, request: Request):
     async with request.app.state.sessions() as session:
         row = await session.get(EvaluationRun, run_id)
@@ -192,7 +208,7 @@ async def task_detail(run_id: uuid.UUID, request: Request):
     return result
 
 
-@router.get("/{run_id}/report")
+@router.get("/{run_id}/report", response_model=Envelope[dict])
 async def task_report(run_id: uuid.UUID, request: Request):
     from autoeval.evaluations import report_evidence
     from autoeval.planning import run_report
@@ -210,7 +226,7 @@ async def task_report(run_id: uuid.UUID, request: Request):
         raise HTTPException(503, "Report evidence unavailable or integrity check failed") from exc
 
 
-@router.post("/{run_id}/cancel", status_code=202)
+@router.post("/{run_id}/cancel", status_code=202, response_model=Envelope[Accepted])
 async def cancel_task(run_id: uuid.UUID, request: Request):
     from datetime import UTC, datetime
 
@@ -224,6 +240,6 @@ async def cancel_task(run_id: uuid.UUID, request: Request):
         return envelope({"accepted": accepted}, request)
 
 
-@router.post("/{run_id}/cleanup", status_code=202)
+@router.post("/{run_id}/cleanup", status_code=202, response_model=Envelope[Accepted])
 async def cleanup_task(run_id: uuid.UUID, request: Request):
     return await retry_cleanup(run_id, request)

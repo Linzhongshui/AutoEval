@@ -14,10 +14,12 @@ from autoeval.analysis import analysis_is_configured
 from autoeval.analysis import router as analysis_router
 from autoeval.audit import router as audit_router
 from autoeval.case_history import router as case_history_router
+from autoeval.catalog.configuration import router as configuration_router
+from autoeval.catalog.datasets import router as datasets_router
+from autoeval.catalog.profiles import router as profiles_router
+from autoeval.catalog.registry import router as registry_router
 from autoeval.config import Settings, get_settings
-from autoeval.configuration import router as configuration_router
 from autoeval.data_workbench import router as data_workbench_router
-from autoeval.datasets import router as datasets_router
 from autoeval.db import create_database
 from autoeval.evaluation_tasks import router as evaluation_tasks_router
 from autoeval.evaluations import router as evaluations_router
@@ -26,14 +28,12 @@ from autoeval.langfuse_integration import router as langfuse_router
 from autoeval.leaderboards import router as leaderboard_router
 from autoeval.monitored_execution import router as monitored_router
 from autoeval.planning import router as planning_router
-from autoeval.profiles import router as profiles_router
-from autoeval.registry import router as registry_router
 from autoeval.reports import router as reports_router
-from autoeval.resources import router as resources_router
+from autoeval.resources.docker_bindings import router as resources_router
+from autoeval.resources.ssh_resources import router as ssh_resources_router
+from autoeval.resources.targets import router as targets_router
 from autoeval.runs import router as runs_router
-from autoeval.ssh_resources import router as ssh_resources_router
 from autoeval.standard_inputs import router as standard_inputs_router
-from autoeval.targets import router as targets_router
 from autoeval.task_monitor import router as task_monitor_router
 from autoeval.unified_outputs import router as unified_outputs_router
 

@@ -4,23 +4,17 @@ from alembic import context
 
 import autoeval.analysis
 import autoeval.audit
-import autoeval.benchmarks
 import autoeval.case_history
+import autoeval.catalog
 import autoeval.cleanup
-import autoeval.configuration
 import autoeval.data_workbench
-import autoeval.datasets
 import autoeval.evaluations
 import autoeval.langfuse_integration
 import autoeval.orchestration
 import autoeval.planning
-import autoeval.profiles
-import autoeval.registry
 import autoeval.resources
 import autoeval.runs
-import autoeval.ssh_resources
 import autoeval.standard_inputs
-import autoeval.targets
 import autoeval.task_monitor
 import autoeval.unified_artifacts
 import autoeval.unified_outputs  # noqa: F401 -- register migration metadata

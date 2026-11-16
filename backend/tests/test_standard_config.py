@@ -24,7 +24,7 @@ from autoeval.db import create_database
 
 @pytest.fixture(scope="module")
 def standard_module():
-    return importlib.import_module("autoeval.import_standard_config")
+    return importlib.import_module("autoeval.catalog.import_standard_config")
 
 
 def valid_payload():

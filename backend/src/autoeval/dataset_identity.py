@@ -1,14 +1,5 @@
-"""Resolve benchmark identity from immutable sample provenance."""
+"""Compatibility exports; implementation moved to autoeval.catalog."""
 
+from autoeval.catalog.dataset_identity import report_dataset
 
-def report_dataset(snapshot):
-    samples = snapshot.get("samples") or []
-    tasks = (snapshot.get("inputs") or {}).get("tasks") or []
-    if not samples and len(tasks) == 1:
-        samples = tasks[0].get("samples") or []
-    if samples and all(
-        str(sample.get("sample_id", "")).startswith("gpqa_diamond:")
-        for sample in samples
-    ):
-        return "GPQA-Diamond"
-    return "GPQA"
+__all__ = ["report_dataset"]

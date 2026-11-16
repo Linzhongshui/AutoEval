@@ -1,0 +1,7 @@
+{
+  "trial_name": "fixture__agent__model__1",
+  "files": {
+    "agent/trajectory.json": "{\"session_id\": \"acceptance-fixture\", \"steps\": [{\"step_id\": 1, \"source\": \"user\", \"message\": \"Read synthetic record\", \"timestamp\": \"2026-11-16T10:00:00Z\"}, {\"step_id\": 2, \"source\": \"agent\", \"model_name\": \"fixture-no-model\", \"message\": \"\", \"timestamp\": \"2026-11-16T10:00:01Z\", \"tool_calls\": [{\"tool_call_id\": \"call-1\", \"function_name\": \"read_record\", \"arguments\": {\"id\": \"fixture\"}}]}, {\"step_id\": 3, \"source\": \"tool\", \"timestamp\": \"2026-11-16T10:00:02Z\", \"observation\": {\"results\": [{\"source_call_id\": \"call-1\", \"content\": \"synthetic record\"}]}}, {\"step_id\": 4, \"source\": \"agent\", \"model_name\": \"fixture-no-model\", \"message\": \"Done\", \"timestamp\": \"2026-11-16T10:00:03Z\"}]}",
+    "verifier/reward.txt": "1"
+  }
+}

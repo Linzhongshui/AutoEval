@@ -1,3 +1,4 @@
+import { ModelServices } from "./ModelServices";
 import { ProbeProgress } from "./ProbeProgress";
 import { useEffect, useRef, useState } from "react";
 import { apiGet, apiGetPage, apiPost } from "../services/api";
@@ -146,7 +147,7 @@ export function TaskPlanning() {
     <h2>1. 模型与执行资源</h2>
     <p className="planning-intro">支持 GPQA、MMMU-Pro、DeepSWE 的全量或已绑定 Lite 清单。AutomationBench 待来源与评分核验。</p>
     <div className="planning-fields">
-      <label><span>模型服务</span><select aria-label="规划模型服务" value={target} onChange={e => { setTarget(e.target.value); setSelection({}); }}><option value="">请选择</option>{targets.rows.map(t => <option key={t.id} value={t.id}>{t.remote_model} / {t.base_url}</option>)}</select></label>
+      <div className="planning-service-field"><div className="planning-service-heading"><label htmlFor="planning-service">模型服务</label><ManagementDrawer title="管理服务" onDismiss={targets.retry}><ModelServices /></ManagementDrawer></div><select id="planning-service" aria-label="规划模型服务" value={target} onChange={e => { setTarget(e.target.value); setSelection({}); }}><option value="">请选择</option>{targets.rows.map(t => <option key={t.id} value={t.id}>{t.service_name || t.remote_model} · {t.remote_model} · {t.id.slice(0, 8)}</option>)}</select></div>
       <label><span>执行环境</span><select value={resourceKind} onChange={e => { setResourceKind(e.target.value); setResource(""); }}><option value="docker_local">Docker</option><option value="customer_ssh">客户 SSH</option></select></label>
       <label><span>执行资源</span><select aria-label="规划执行资源" value={resource} onChange={e => setResource(e.target.value)}><option value="">请选择</option>{resources.rows.map(r => <option key={r.id} value={r.id}>{r.binding_key}</option>)}</select></label>
     </div>

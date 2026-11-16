@@ -14,7 +14,7 @@ export type Config = {
   items: Record<string, { output: number; concurrency: number; temperature: number; top_p: number; scope: string }>;
   profile_bindings: Record<string, string>;
 };
-export type Target = {
+export type Target = { service_name?: string;
   id: string;
   remote_model: string;
   base_url: string;

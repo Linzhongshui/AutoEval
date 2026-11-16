@@ -4037,3 +4037,10 @@ textarea { font: inherit; }
 .report-analysis-badge { color: var(--primary); background: #efebff; }
 .reports-table .run-report-action { white-space: nowrap; }
 .reports-table tbody tr:hover { background: #faf9ff; }
+
+.planning-fields > .planning-service-field { grid-column: 1 / -1; display: grid; gap: 8px; min-width: 0; }
+.planning-service-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.planning-service-heading > label { margin: 0; font-size: 13px; font-weight: 600; color: var(--muted); }
+.planning-service-heading > button { padding: 0; font-size: 12px; }
+.planning-service-field > select { width: 100%; min-width: 0; }
+.planning-fields > label { min-width: 0; }

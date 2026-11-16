@@ -1,3 +1,4 @@
+import { ModelServices } from "./ModelServices";
 import { datasetIdentity } from "../services/datasetIdentities";
 import { WorkbenchDatasets } from "./WorkbenchDatasets";
 import { StandardInputs } from "./StandardInputs";
@@ -73,7 +74,7 @@ export function DataWorkbench() {
   });
   const nominate = (report: Report) => perform(async () => {
     const source = await apiGet<Report & { nomination_conditions: Record<string, unknown> }>(`/reports/${report.id}`);
-    const entry = { source_key: `report-${report.id}`, source_type: "report", model_name: report.remote_model, dataset: "GPQA", metric: "accuracy", value: report.summary.accuracy, unit: "%", direction: "higher_is_better", scope: "lite", conditions: source.nomination_conditions, source_name: "AutoEval", source_url: null, source_version: report.id, source_sha256: report.sha256, report_id: report.id, notes: "报告成绩提名，正式发布门禁不适用。" };
+    const entry = { source_key: `report-${report.id}`, source_type: "report", model_name: report.remote_model, dataset: report.dataset_key || "GPQA", metric: "accuracy", value: report.summary.accuracy, unit: "%", direction: "higher_is_better", scope: "lite", conditions: source.nomination_conditions, source_name: "AutoEval", source_url: null, source_version: report.id, source_sha256: report.sha256, report_id: report.id, notes: "报告成绩提名，正式发布门禁不适用。" };
     await apiPost("/data-workbench/entries", entry); setTab("榜单数据维护"); setMessage("报告已提名，需评审后入榜。");
   });
   const importOfficial = () => perform(async () => {
@@ -89,8 +90,9 @@ export function DataWorkbench() {
   });
   return <div className="stack data-workbench">
     <div className="notice">开发环境数据维护入口。平台报告与外部来源独立留痕；评审批准仅控制内部榜单展示，不代表正式 Release 通过。</div>
-    <div className="workbench-toolbar"><div className="tabs">{["榜单数据维护", "模型列表", "数据集列表", "报告评审入榜", "官方数据导入", "标准仓输入", "环境诊断"].map((name) => <button key={name} className={tab === name ? "active" : ""} onClick={() => setTab(name)}>{name}</button>)}</div><button className="workbench-refresh" disabled={busy || loading} onClick={() => setRevision((v) => v + 1)}>刷新数据</button></div>
+    <div className="workbench-toolbar"><div className="tabs">{["榜单数据维护", "模型列表", "模型服务", "数据集列表", "报告评审入榜", "官方数据导入", "标准仓输入", "环境诊断"].map((name) => <button key={name} className={tab === name ? "active" : ""} onClick={() => setTab(name)}>{name}</button>)}</div><button className="workbench-refresh" disabled={busy || loading} onClick={() => setRevision((v) => v + 1)}>刷新数据</button></div>
     {(loading || message) && <p role="status">{loading ? "数据加载中…" : message}</p>}
+    {tab === "模型服务" && <ModelServices />}
     {tab === "模型列表" && <WorkbenchModels revision={revision} />}
     {tab === "数据集列表" && <WorkbenchDatasets revision={revision} />}
     {tab === "标准仓输入" && <StandardInputs />}

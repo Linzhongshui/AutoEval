@@ -7,7 +7,7 @@ from urllib.parse import urlsplit
 import httpx
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
-from sqlalchemy import DateTime, ForeignKey, String, select
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, select, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Mapped, mapped_column
@@ -22,6 +22,8 @@ class TargetBinding(Record, Base):
     model_version_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("asset_version.id", ondelete="RESTRICT")
     )
+    service_name: Mapped[str] = mapped_column(String(128), default="", server_default="")
+    archived: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     base_url: Mapped[str] = mapped_column(String(2048))
     remote_model: Mapped[str] = mapped_column(String(128))
     credential_ref: Mapped[str] = mapped_column(String(32))
@@ -170,6 +172,7 @@ async def list_targets(
     limit: int = 200,
     target_id: uuid.UUID | None = None,
     include_test: bool = False,
+    include_archived: bool = False,
 ):
     if offset < 0 or not 1 <= limit <= 200:
         raise HTTPException(422, "Invalid pagination")
@@ -182,6 +185,9 @@ async def list_targets(
                     .join(Asset, Asset.id == AssetVersion.asset_id)
                     .outerjoin(ModelConfigBinding, ModelConfigBinding.model_asset_id == Asset.id)
                     .where(TargetBinding.id == target_id if target_id else True)
+                    .where(
+                        True if include_archived or target_id else TargetBinding.archived.is_(False)
+                    )
                     .where(
                         True
                         if include_test or target_id
@@ -207,6 +213,8 @@ async def list_targets(
                     else None,
                     "base_url": t.base_url,
                     "remote_model": t.remote_model,
+                    "service_name": t.service_name or t.remote_model,
+                    "archived": t.archived,
                 }
                 for t, model, version, binding in rows[:limit]
             ]
@@ -215,5 +223,65 @@ async def list_targets(
     return {
         "data": data,
         "next_offset": offset + limit if len(rows) > limit else None,
+        "request_id": request.state.request_id,
+    }
+
+
+class ServiceUpdate(BaseModel):
+    service_name: str = Field(min_length=1, max_length=128)
+    archived: bool = False
+
+
+@router.patch("/target-bindings/{target_id}")
+async def update_service(target_id: uuid.UUID, body: ServiceUpdate, request: Request):
+    async with request.app.state.sessions() as session, session.begin():
+        target = await session.get(TargetBinding, target_id)
+        if target is None:
+            raise HTTPException(404, "Target not found")
+        target.service_name = body.service_name.strip()
+        target.archived = body.archived
+    return {"data": {"id": str(target_id)}, "request_id": request.state.request_id}
+
+
+@router.post("/target-bindings/deduplicate")
+async def deduplicate_services(request: Request):
+    # Preserve immutable targets used by historical workflows; archive redundant choices.
+    async with request.app.state.sessions() as session, session.begin():
+        await session.execute(text("SELECT pg_advisory_xact_lock(738921)"))
+        rows = list(
+            (
+                await session.scalars(
+                    select(TargetBinding)
+                    .where(TargetBinding.archived.is_(False))
+                    .order_by(TargetBinding.created_at, TargetBinding.id)
+                    .with_for_update()
+                )
+            ).all()
+        )
+        store = FileSecretStore(request.app.state.settings.secret_store_path)
+        groups = {}
+        removed = []
+        skipped = 0
+        import hashlib
+
+        for target in rows:
+            try:
+                digest = hashlib.sha256(store.get(target.credential_ref).encode()).digest()
+            except (OSError, ValueError):
+                skipped += 1
+                continue
+            key = (
+                target.model_version_id,
+                target.base_url.rstrip("/"),
+                target.remote_model,
+                digest,
+            )
+            if key in groups:
+                target.archived = True
+                removed.append(str(target.id))
+            else:
+                groups[key] = target.id
+    return {
+        "data": {"archived_ids": removed, "skipped_unavailable_credentials": skipped},
         "request_id": request.state.request_id,
     }

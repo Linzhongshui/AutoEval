@@ -1,19 +1,12 @@
 import { apiGetOptions } from "./api";
 import { useEffect, useRef, useState } from "react";
 import { apiGet, apiPost } from "./api";
+import type { components } from "../types/api";
 import { REGISTRY_PAGE_SIZE } from "../components/OffsetPagination";
 
-export type Config = {
-  source_url?: string | null; source_revision?: string | null; source_sha256?: string | null; approved_by?: string | null;
-  id: string;
-  config_key: string;
-  display_name: string;
-  version: number;
-  version_label: string;
-  kind: string;
-  items: Record<string, { output: number; concurrency: number; temperature: number; top_p: number; scope: string }>;
-  profile_bindings: Record<string, string>;
-};
+// Covered by the generated OpenAPI contract (backend test-configs list item).
+export type Config = components["schemas"]["ConfigListItem"];
+// Target/resource bindings have no response model yet; keep the local views.
 export type Target = { service_name?: string;
   id: string;
   remote_model: string;

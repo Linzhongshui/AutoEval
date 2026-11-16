@@ -1,4 +1,6 @@
 import { aisbenchCatalog } from "../services/standardCatalog";
+import { apiGet, apiPost } from "../services/api";
+import type { components } from "../types/api";
 import { AdapterFields } from "../components/AdapterFields";
 import { CustomAdapterEditor } from "../components/CustomAdapterEditor";
 import { StandardInputs } from "../components/StandardInputs";
@@ -121,19 +123,15 @@ export function useProfiles() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   useEffect(() => {
     const controller = new AbortController();
-    fetch("/api/autoeval/v1/test-configs?limit=200", { signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("配置服务不可用");
-        return response.json();
-      })
-      .then((body) => {
+    apiGet<Config[]>("/test-configs?limit=200", controller.signal)
+      .then((rows) => {
         const grouped = new Map<string, Profile>();
-        for (const item of body.data as Config[]) {
+        for (const item of rows) {
           const official = item.kind === "standard";
           const existing = grouped.get(item.config_key);
           if (existing) {
             existing.versions.push(item.version_label);
-            existing.data![item.version_label] = item.items;
+            existing.data![item.version_label] = item.items as Record<string, Param>;
             existing.provenance![item.version_label] = { url: item.source_url, revision: item.source_revision, sha256: item.source_sha256 };
           } else grouped.set(item.config_key, {
             id: item.config_key,
@@ -143,7 +141,7 @@ export function useProfiles() {
             persistedVersion: item.version,
             versions: [item.version_label],
             items: Object.keys(item.items),
-            data: { [item.version_label]: item.items },
+            data: { [item.version_label]: item.items as Record<string, Param> },
             provenance: { [item.version_label]: { url: item.source_url, revision: item.source_revision, sha256: item.source_sha256 } },
           });
         }
@@ -387,26 +385,20 @@ export function Configurations({ profiles, setProfiles, go, notify }: {
                       const items = Object.fromEntries(editing.items.map((name) => [name, params[name]]));
                       setSaving(true);
                       try {
-                        const response = await fetch("/api/autoeval/v1/test-configs", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({
+                        const savedVersion = await apiPost<{ version: number }>("/test-configs", {
                             config_key: key,
                             display_name: target?.name || versionName.trim(),
                             version_label: versionName.trim(),
                             expected_version: target?.persistedVersion || 0,
                             items,
-                          }),
                         });
-                        const body = await response.json();
-                        if (!response.ok) throw new Error(body.error?.message || "保存失败");
                         const saved: Profile = {
                           ...editing,
                           id: key,
                           name: target?.name || versionName.trim(),
                           official: false,
                           source: "后端持久化",
-                          persistedVersion: body.data.version,
+                          persistedVersion: savedVersion.version,
                           versions: [versionName.trim(), ...(target?.versions || [])],
                           items: [...editing.items],
                           data: { ...target?.data, [versionName.trim()]: structuredClone(items) },
@@ -496,10 +488,10 @@ export function EvaluationConsole({ profiles, setProfiles, notify }: {
     resource,
   );
   const visibleDatasets = names.filter((d) => d.toLowerCase().includes(datasetSearch.toLowerCase()));
-  const viewParams = view ? config?.items[view] : undefined;
+  const viewParams = view ? (config?.items as Record<string, Param> | undefined)?.[view] : undefined;
   const openEditor = () => {
     if (!config || config.kind !== "custom") return;
-    setDraftParams(structuredClone(config.items));
+    setDraftParams(structuredClone(config.items) as Record<string, Param>);
     setNewConfigName("");
     setNewVersionName("");
     setDrawer(true);
@@ -593,7 +585,7 @@ export function EvaluationConsole({ profiles, setProfiles, notify }: {
                     <td><input type="checkbox" aria-label={`选择 ${d}`} checked={d === "GPQA" && Boolean(config)} disabled readOnly /></td>
                     <td>{datasetTypes.find((item) => item.items.includes(d))?.label}</td>
                     <td>{d}</td>
-                    <td>{d === "GPQA" ? config?.items.GPQA.scope || "需选择配置" : "当前路径未开放"}</td>
+                    <td>{d === "GPQA" ? (config?.items.GPQA as Param | undefined)?.scope || "需选择配置" : "当前路径未开放"}</td>
                     <td><div className="inline">
                       {d === "GPQA" && <><button className="link" disabled={!config} onClick={() => setView(d)}>查看参数</button>
                       <button className="link" disabled={d !== "GPQA" || config?.kind !== "custom"} onClick={openEditor}>编辑参数</button></>}
@@ -631,7 +623,7 @@ export function EvaluationConsole({ profiles, setProfiles, notify }: {
           <details>
             <summary>展开选择明细</summary>
             <div className="summary-dataset-list">
-              {config ? <div><div className="spread"><b>GPQA</b><span>{config.items.GPQA.scope}</span></div><small>预计耗时：暂无可靠估算</small></div> : <p>尚未选择配置</p>}
+              {config ? <div><div className="spread"><b>GPQA</b><span>{(config.items as Record<string, Param>).GPQA.scope}</span></div><small>预计耗时：暂无可靠估算</small></div> : <p>尚未选择配置</p>}
             </div>
           </details>
         </section>
@@ -696,27 +688,27 @@ export function EvaluationConsole({ profiles, setProfiles, notify }: {
                 const items = { GPQA: draftParams.GPQA };
                 setSaving(true);
                 try {
-                  const response = await fetch("/api/autoeval/v1/test-configs", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      config_key: key,
-                      display_name: name,
-                      version_label: version,
-                      expected_version: 0,
-                      items,
-                      profile_bindings: { GPQA: config.profile_bindings.GPQA },
-                    }),
-                  });
-                  const body = await response.json();
-                  if (!response.ok) throw new Error(body.error?.message || "配置保存失败");
-                  const saved: Config = {
-                    id: body.data.id,
+                  const row = await apiPost<components["schemas"]["CreatedConfig"]>("/test-configs", {
                     config_key: key,
                     display_name: name,
-                    version: body.data.version,
+                    version_label: version,
+                    expected_version: 0,
+                    items,
+                    profile_bindings: { GPQA: config.profile_bindings.GPQA },
+                  });
+                  const saved: Config = {
+                    id: row.id,
+                    config_key: key,
+                    display_name: name,
+                    version: row.version,
                     version_label: version,
                     kind: "custom",
+                    content_hash: row.content_hash,
+                    approval_status: "not_required",
+                    source_url: null,
+                    source_revision: null,
+                    source_sha256: null,
+                    approved_by: null,
                     items,
                     profile_bindings: config.profile_bindings,
                   };
@@ -725,7 +717,7 @@ export function EvaluationConsole({ profiles, setProfiles, notify }: {
                     name,
                     source: "后端持久化",
                     official: false,
-                    persistedVersion: body.data.version,
+                    persistedVersion: row.version,
                     versions: [version],
                     items: ["GPQA"],
                     data: { [version]: structuredClone(items) },

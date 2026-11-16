@@ -1,8 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { apiGet, apiPost } from "../services/api";
 import type { Config, Resource, Target } from "../services/evaluation";
+import type { components } from "../types/api";
 
-type Spec = { bindings_complete: boolean; spec: { items: { sample_count: number; manifest_id: string; tool: unknown }[] } };
+// Covered by the generated OpenAPI contract (backend execution-spec response).
+type Spec = components["schemas"]["ExecutionSpecData"];
+// Local view over the saved GPQA parameter values; backend guarantees the shape.
+type SavedParams = { output: number; concurrency: number; temperature: number; top_p: number; scope: string };
 export function SubmissionReview({ config, target, resource, resourceKind, busy, submit }: {
   config: Config | null; target: Target | null; resource: Resource | null; resourceKind: string;
   busy: boolean; submit: () => void;
@@ -31,7 +35,7 @@ export function SubmissionReview({ config, target, resource, resourceKind, busy,
     const modelOK = model.status === "fulfilled" && model.value.outcome === "matched";
     const hostOK = host.status === "fulfilled" && host.value.environment_ready && (resourceKind !== "customer_ssh" || host.value.evaluation_ready);
     const value = configuration.status === "fulfilled" ? configuration.value : null;
-    const params = config.items.GPQA;
+    const params = config.items.GPQA as SavedParams | undefined;
     const configOK = !!value?.bindings_complete && value.spec.items.length === 1 && value.spec.items[0].sample_count > 0 && value.spec.items[0].sample_count <= 5 && params?.scope === "Lite" && params.output > 0 && params.output <= (resourceKind === "aisbench_monitor" ? 2048 : 64) && params.concurrency === 1 && params.temperature === 0 && params.top_p === 1;
     setSpec(value);
     setChecks([
@@ -47,7 +51,7 @@ export function SubmissionReview({ config, target, resource, resourceKind, busy,
     <p className="muted">预检不调用模型生成；检查结果仅代表检查时状态，提交与执行仍会复核。</p>
     {checks.map((row) => <p key={row.label} role={row.ok ? "status" : "alert"}><b>{row.label} · {row.ok ? "通过" : "未通过"}</b><small>{row.message}</small></p>)}
     {checkedAt > 0 && <small>检查时间：{new Date(checkedAt).toLocaleTimeString("zh-CN")}</small>}
-    {spec && <details><summary>本次执行范围</summary><dl><dt>模型 / 配置版本</dt><dd>{target?.remote_model} / {config?.version_label}</dd><dt>资源</dt><dd>{resource?.binding_key}</dd><dt>GPQA Lite 样本数</dt><dd>{spec.spec.items[0]?.sample_count ?? "未配置"}</dd><dt>请求上限 / 回答长度上限</dt><dd>5 次 / {config?.items.GPQA?.output} Token</dd><dt>样本清单</dt><dd>{spec.spec.items[0]?.manifest_id || "未绑定"}</dd></dl></details>}
+    {spec && <details><summary>本次执行范围</summary><dl><dt>模型 / 配置版本</dt><dd>{target?.remote_model} / {config?.version_label}</dd><dt>资源</dt><dd>{resource?.binding_key}</dd><dt>GPQA Lite 样本数</dt><dd>{spec.spec.items[0]?.sample_count ?? "未配置"}</dd><dt>请求上限 / 回答长度上限</dt><dd>5 次 / {(config?.items.GPQA as SavedParams | undefined)?.output} Token</dd><dt>样本清单</dt><dd>{spec.spec.items[0]?.manifest_id || "未绑定"}</dd></dl></details>}
     <label className="inline"><input type="checkbox" checked={confirmed} disabled={!ready} onChange={(e) => setConfirmed(e.target.checked)} />确认本次范围及资源，开始探索测评</label>
     <button className="primary" disabled={!ready || !confirmed || checking || busy} onClick={() => {
       if (Date.now() - checkedAt > 300000) { setConfirmed(false); setChecks([]); setCheckedAt(0); return; }

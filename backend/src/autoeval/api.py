@@ -12,16 +12,16 @@ from temporalio.client import Client
 
 from autoeval.analysis import analysis_is_configured
 from autoeval.analysis import router as analysis_router
-from autoeval.audit import router as audit_router
 from autoeval.catalog.configuration import router as configuration_router
 from autoeval.catalog.datasets import router as datasets_router
 from autoeval.catalog.profiles import router as profiles_router
 from autoeval.catalog.registry import router as registry_router
-from autoeval.config import Settings, get_settings
-from autoeval.db import create_database
 from autoeval.evaluation_tasks import router as evaluation_tasks_router
 from autoeval.evaluations import router as evaluations_router
 from autoeval.fixture_pipeline import router as fixture_pipeline_router
+from autoeval.infrastructure.audit import router as audit_router
+from autoeval.infrastructure.config import Settings, get_settings
+from autoeval.infrastructure.db import create_database
 from autoeval.langfuse_integration import router as langfuse_router
 from autoeval.monitored_execution import router as monitored_router
 from autoeval.planning import router as planning_router

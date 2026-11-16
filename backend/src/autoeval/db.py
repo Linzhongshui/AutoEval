@@ -1,12 +1,7 @@
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+"""Compatibility alias: implementation moved to autoeval.infrastructure.db."""
 
-from autoeval.config import Settings
+import sys
 
+from autoeval.infrastructure import db as _impl
 
-def create_database(settings: Settings):
-    engine = create_async_engine(
-        settings.database_url.get_secret_value(),
-        pool_pre_ping=True,
-        connect_args={"timeout": settings.dependency_timeout_seconds},
-    )
-    return engine, async_sessionmaker(engine, expire_on_commit=False)
+sys.modules[__name__] = _impl

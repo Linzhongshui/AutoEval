@@ -9,54 +9,20 @@ from typing import Literal
 
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, HTTPException, Request
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, select
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Mapped, mapped_column
 
-from autoeval.datasets import canonical_manifest
-from autoeval.models import Base, Outbox, Record
+from autoeval.analysis.models import ReportAnalysis
+from autoeval.catalog.datasets import canonical_manifest
+from autoeval.models import Outbox
 from autoeval.resources import ResourceBinding
-from autoeval.targets import TargetBinding
+from autoeval.resources.targets import TargetBinding
 
 HEX256 = re.compile(r"^[0-9a-f]{64}$")
 
 
 class AnalysisConfigurationError(ValueError):
     """Analysis cannot be enabled without changing the original report outcome."""
-
-
-class ReportAnalysis(Record, Base):
-    __tablename__ = "report_analysis"
-    report_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("evaluation_report.id", ondelete="RESTRICT"), unique=True
-    )
-    run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("evaluation_run.id", ondelete="RESTRICT"))
-    state: Mapped[str] = mapped_column(String(16), server_default="queued")
-    retry_history: Mapped[list] = mapped_column(JSONB, server_default="[]")
-    trigger: Mapped[str] = mapped_column(String(24))
-    retry_count: Mapped[int] = mapped_column(server_default="0")
-    report_sha256: Mapped[str] = mapped_column(String(64))
-    snapshot_sha256: Mapped[str] = mapped_column(String(64))
-    baseline_comparison_sha256: Mapped[str | None] = mapped_column(String(64))
-    baseline_comparison: Mapped[dict | None] = mapped_column(JSONB)
-    target_snapshot: Mapped[dict] = mapped_column(JSONB)
-    evidence_catalog: Mapped[dict] = mapped_column(JSONB, server_default="{}")
-    input_object_key: Mapped[str | None] = mapped_column(String(256))
-    input_sha256: Mapped[str | None] = mapped_column(String(64))
-    object_key: Mapped[str | None] = mapped_column(String(256))
-    sha256: Mapped[str | None] = mapped_column(String(64))
-    error_code: Mapped[str | None] = mapped_column(String(64))
-    usage: Mapped[dict | None] = mapped_column(JSONB)
-    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    __table_args__ = (
-        CheckConstraint("state IN ('queued','running','succeeded','failed','unresolved')"),
-        CheckConstraint("trigger IN ('report_created','manual_start','manual_retry')"),
-        CheckConstraint("retry_count >= 0"),
-        CheckConstraint("report_sha256 ~ '^[0-9a-f]{64}$'"),
-        CheckConstraint("snapshot_sha256 ~ '^[0-9a-f]{64}$'"),
-    )
 
 
 def analysis_is_configured(settings) -> bool:
@@ -75,7 +41,7 @@ def analysis_status_for(job, settings, *, execution_origin="real"):
 
 
 async def current_baseline_comparison(session, report, snapshot):
-    from autoeval.benchmarks import BenchmarkBaseline, compare_baseline
+    from autoeval.catalog.benchmarks import BenchmarkBaseline, compare_baseline
 
     baselines = (await session.scalars(select(BenchmarkBaseline))).all()
     return compare_baseline(report.summary, snapshot.canonical_body, baselines)
@@ -430,7 +396,7 @@ router = APIRouter(prefix="/api/autoeval/v1/reports", tags=["report analysis"])
 
 @router.get("/{report_id}/analysis")
 async def get_analysis(report_id: uuid.UUID, request: Request):
-    from autoeval.analysis_activity import read_analysis_result
+    from autoeval.analysis.activity import read_analysis_result
     from autoeval.evaluations import EvaluationReport
     from autoeval.models import EvaluationRun
 

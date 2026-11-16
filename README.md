@@ -260,3 +260,21 @@ uv run pytest -q
 历史探测“查询探测状态”调用只读远程查证接口 `/planning/probes/{id}/reconcile`，不会提交或重跑模型。若当前固定环境找不到原作业，仍保留结果未知，显示查证时间；操作员可在“历史异常记录处理”中填写原因并确认后调用 `/close` 结案。结案标为失败并保留未知用量、原始异常和审计记录，不生成曲线；仍运行或未查证的记录禁止结案。
 
 本地专用探测 Worker 建议从 backend/ 使用 `uv run python scripts/start_probe_worker.py` 启动。它保留带时区的ISO截止时间，避免PowerShell日期格式转换导致启动失败；执行器已在线则不重复启动。真机验证见[吞吐探测验收](./docs/probe-live-acceptance-2026-11-16.md)。
+
+## GPQA Diamond 20 题真机验证（2026-11-16）
+
+本次通过服务器网页提交一次 DeepSeek-V4.1-Flash-1017 测评，固定第 0–19 题：20 题执行及评分完成，18 题正确，准确率 90%；GLM-5.3 独立分析在保留首次失败后，经授权重试一次成功，报告已评审入榜。录屏覆盖提交、任务和日志、报告、智能分析、入榜、榜单列表及图表，见[验收记录与录屏说明](./docs/live-e2e-gpqa20-2026-11-16.md)。
+
+该成绩仅代表 20 题 Lite 清单；日志在本次在途任务中补收并校验，实时样本监控没有通过本次验收。未采集的性能与逐题时间不补造。
+
+后续已修复统一任务的[样本进度和模型输入输出展示](./docs/progress-native-fix-2026-11-16.md)：已有任务显示归档完成比例并读取已校验原生输入输出；新任务逐题计数来自原生预测记录。本次修复未重新调用模型，不补造历史实时快照。
+
+独立 OpenAI 兼容分析可配置 `AE_ANALYSIS_RUNNER=openai_compatible`，同时显式设置独立分析目标、资源、允许的 HTTPS 主机和输出上限（最多 4096）。`AE_ANALYSIS_SHORT_CITATIONS=true` 使用绑定原始证据 UUID/哈希的短引用；解析器仍拒绝未知引用。后台通过 SSH 调用独立受控容器时，可使用 [analysis-docker-ssh.py](./deploy/intranet/analysis-docker-ssh.py)；其受保护绑定文件仅包含容器身份与 SSH 资源 ID，不包含明文凭据。该配置不会自动发起分析或重测。
+
+相关交付与验证：
+
+- [20 题流程展示录屏（9 分 08 秒）](./deliverables/live-e2e-gpqa20-20261116.mp4)、[原始片段拼接版（35 分 35 秒）](./deliverables/live-e2e-gpqa20-20261116-full.mp4)及[验收标识与哈希](./deliverables/live-e2e-gpqa20-20261116.json)。分段与等待删减方式见验收说明。
+- 报告、报告图表及榜单按冻结样本来源识别 GPQA-Diamond，保留 GPQA 查询兼容；AutomationBench 等 Agent 结果的允许数据集名称从冻结适配器配置显式推导。
+- Langfuse 的[人工轨迹样例](./backend/tests/fixtures/langfuse/automationbench-artifact.json)与[平台归档验收脚本](./deploy/langfuse/acceptance-fixture.py)用于开发/测试环境，覆盖重复收集及缺失、损坏轨迹。脚本须在已配置的平台容器中手动运行：`python /path/to/acceptance-fixture.py /path/to/automationbench-artifact.json`。其任务明确标记 simulation，不调用模型，不代表 AutomationBench 真机测评通过，也不进入普通任务列表或有效榜单。
+
+版本库保留可复用代码、测试样例、验收说明和经核对的交付录屏；本地编辑器计划、数据库备份、重启日志、原始 WebM 和重复调试截图由 `.gitignore` 排除。

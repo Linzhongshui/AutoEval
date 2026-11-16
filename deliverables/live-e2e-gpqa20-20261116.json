@@ -1,0 +1,54 @@
+{
+  "run_id": "51e71d49-c74d-448d-bb94-4e44e5e4e847",
+  "report_id": "6cfa1d79-460a-4aad-a406-697a6655e4a1",
+  "report_sha256": "c1e2b29f3a18d43f6c0b324359cd1b4695415c15c1f4a50ef96404ba0bcc194d",
+  "snapshot_sha256": "c7a2b0635ddd642172f1bbf8dba26c1a50eb834b7fec5fe862891cf02c7a641a",
+  "case_attempts": 20,
+  "correct": 18,
+  "accuracy": 90,
+  "scoring_status": "succeeded",
+  "duration_sec": 1829.63738,
+  "token_coverage": {
+    "known_attempts": 20,
+    "total_attempts": 20,
+    "input_tokens_known_sum": 5256,
+    "output_tokens_known_sum": 279326
+  },
+  "analysis_id": "3598c0d2-88ae-4d96-9488-015aac4916ef",
+  "analysis_sha256": "bd551e0a3ff0b23e560a22d14a9eae1a758659a6c54e50ec237ed6a20223d0c2",
+  "analysis_retry_count": 1,
+  "analysis_history_count": 1,
+  "analysis_usage": {
+    "input_tokens": 6482,
+    "output_tokens": 1785
+  },
+  "entry_id": "6c10371d-c4e2-4ca8-b0b9-7de5d468d9a2",
+  "entry_state": "approved",
+  "entry_revision": 2,
+  "log_object_key": "execution-logs/51e71d49-c74d-448d-bb94-4e44e5e4e847/8712d07573256692d29bef593f391cd2d902dd7a2567ab8e722a7a41e0a66718.json",
+  "log_bundle_sha256": "8712d07573256692d29bef593f391cd2d902dd7a2567ab8e722a7a41e0a66718",
+  "log_sha256": "6bcc32a7ab55cfd8389d2e7bddf71f3319aa8d582ffa7642234b2ff1f857c98c",
+  "released_capacity_leases": 1,
+  "start_run_intents": 1,
+  "test_scope": "GPQA Diamond indices 0-19, Lite 20 of 198",
+  "workflow_id": "demo/run/51e71d49-c74d-448d-bb94-4e44e5e4e847",
+  "workflow_status": "COMPLETED",
+  "videos": [
+    {
+      "file": "live-e2e-gpqa20-20261116.mp4",
+      "sha256": "7af5deb5472ae93ea6af73e2df81fef65a6bb138a71654261e4870e9b6e74e9e",
+      "bytes": 5621107
+    },
+    {
+      "file": "live-e2e-gpqa20-20261116-full.mp4",
+      "sha256": "1f50000a82f525e63e6174a8f7cdcf7c8a13d9e2f4b70049b39f6cd29dbde0ff",
+      "bytes": 15612810
+    }
+  ],
+  "analysis_calls": 2,
+  "sample_monitor_acceptance": "not_collected",
+  "log_collection": "owned final log supplemental archive",
+  "platform_model_version": "DeepSeek-V4.1-Flash-1017",
+  "remote_model": "deepseek-flash",
+  "analysis_model": "glm-5.3"
+}

@@ -26,3 +26,15 @@ __pycache__/
 # backend/src/autoeval/scan_result_analyze.py instead of committing artifacts.
 /result/
 analysis_out/
+
+# Local editor plans, database backups and service restart diagnostics.
+/.claude/
+/backend/local-backups/
+/backend/*.stdout.log
+/backend/*.stderr.log
+/frontend/*.stdout.log
+/frontend/*.stderr.log
+
+# Keep reviewed MP4 deliverables; raw recordings and duplicate debug captures stay local.
+/deliverables/*.webm
+/deliverables/langfuse-trace-debug.png

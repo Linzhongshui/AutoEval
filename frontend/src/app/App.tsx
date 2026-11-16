@@ -1,15 +1,16 @@
-import { BackendConnection } from "../components/BackendConnection";
-import { DataWorkbench, PublishedLeaderboard } from "../components/DataWorkbench";
-import { DatasetManifests } from "../components/DatasetManifests";
-import { ExecutionBindings } from "../components/ExecutionBindings";
-import { ManagementDrawer } from "../components/ManagementDrawer";
-import { StandardInputs } from "../components/StandardInputs";
-import { TaskPlanning } from "../components/TaskPlanning";
-import { EvaluationRuns } from "../components/EvaluationRuns";
-import { RealReports } from "../components/RealReports";
-import { RealLeaderboard } from "../components/RealLeaderboard";
-import { apiGet, apiGetPage } from "../services/api";
-import { Configurations, useProfiles } from "./Workflow";
+import { apiGet, apiGetPage } from "../shared/api";
+import { BackendConnection } from "../shared/ui/BackendConnection";
+import { ManagementDrawer } from "../shared/ui/ManagementDrawer";
+import { DataWorkbench, PublishedLeaderboard } from "../features/reporting/DataWorkbench";
+import { DatasetManifests } from "../features/catalog/DatasetManifests";
+import { ExecutionBindings } from "../features/catalog/ExecutionBindings";
+import { StandardInputs } from "../features/catalog/StandardInputs";
+import { Configurations } from "../features/catalog/Configurations";
+import { useProfiles } from "../features/catalog/useProfiles";
+import { TaskPlanning } from "../features/planning/TaskPlanning";
+import { EvaluationRuns } from "../features/evaluation/EvaluationRuns";
+import { RealReports } from "../features/reporting/RealReports";
+import { RealLeaderboard } from "../features/reporting/RealLeaderboard";
 import { useEffect, useState } from "react";
 import {
   Activity,

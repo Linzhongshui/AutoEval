@@ -8,7 +8,8 @@
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "generate:api": "openapi-typescript ../backend/openapi.json -o src/types/api.ts"
+    "generate:api": "openapi-typescript ../backend/openapi.json -o src/shared/types/api.ts",
+    "check:boundaries": "node scripts/check-boundaries.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.552.0",

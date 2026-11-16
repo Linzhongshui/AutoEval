@@ -13,6 +13,10 @@
 
 说明：121 项跳过为 AE_INFRA_TEST、AE_SSH_SIM_TEST、AE_BROWSER_LIVE_TEST 等条件门控的专项，不计为通过也不计为失败。补齐 response_model 后全量测试与基线一致（302 passed, 121 skipped）。
 
+阶段二各批次完成后均为 304 passed / 121 skipped（新增 2 个后端边界测试），`openapi.json` 零差异，37 张 ORM 表注册完整。
+
+阶段三验证（2026-11-16）：`npm run typecheck`、`npm run build`（CSS 96.64 kB / JS 454.06 kB）、`npm run check:boundaries`（60 文件）通过；浏览器检查 `AE_BROWSER_TEST=1` 结果 11 passed / 5 failed / 9 skipped，失败集合与阶段一基线完全相同（standard_inputs、mocked_flows×3、unified_output），非本次改动引入。
+
 ## 二、后端路由 → 目标模块映射（96 路由 / 23 router）
 
 | 目标模块 | 现有文件（router 前缀 / 路由数） |
@@ -34,25 +38,40 @@
 - 33 张 ORM 表散布 19 个模块；migrations/env.py import 22 个模块注册元数据。
 - 事务统一走 `async with sessions() as session, session.begin()`（87 处），显式 commit 仅 targets.py:156。
 
-## 三、前端手写类型盘点（63 处 / 27 文件）
+## 三、前端结构与类型盘点
 
-无 OpenAPI 生成前的重复定义（阶段一后由 `src/types/api.ts` 生成类型覆盖接口响应）：
+阶段三已完成 `app / features / shared` 重组（2026-11-16）：
 
-| 类型名 | 重复处 | 形状是否一致 |
+| 目录 | 内容 |
+|---|---|
+| `app/` | App.tsx（hash 路由、导航、布局、toast/Overview） |
+| `features/evaluation/` | types.ts / logic.ts / hooks.ts / submitIntent.ts、EvaluationRuns、EvaluationConsole、RunMonitor、DiagnosticTasks、FixturePipeline、SubmissionReview、ProbeProgress |
+| `features/catalog/` | Configurations、DatasetTree、ParameterCards、StandardInputs、DatasetManifests、ModelRegistry、Workbench*、AdapterFields、CustomAdapterEditor、数据集元数据与 identity 转换 |
+| `features/resources/` | ServiceBindings、SSHResources、ModelServices |
+| `features/reporting/` | ReportView、RealReports、RealLeaderboard、CaseHistory、DataWorkbench、AnalysisPanel、ReportCharts、UnifiedOutputSummary |
+| `features/planning/` | TaskPlanning（估算/探测/建议/提交区块仍在同一文件的 6 个区块内） |
+| `shared/` | api.ts（请求层）、types/api.ts（OpenAPI 生成）、types/domain.ts、hooks/useRequest.ts、hooks/usePolling.ts、status.ts（任务/数据集/证据/有效性/清理状态映射）、constants.ts、ui/*（分页、抽屉、提示等基础控件） |
+
+- 提交意图与幂等键：`features/evaluation/submitIntent.ts`，sessionStorage key 仍为 `autoeval.pending-exploration.v1`。
+- 轮询统一走 `usePolling`：上次请求完成后才调度下一次、页面隐藏暂停并在恢复可见时立即刷新；任务详情进入终态停止；列表请求变化用世代号丢弃过期响应。
+- 边界检查：`npm run check:boundaries`（shared 不得依赖 features/app；features 不得依赖 app；手写类型不得重定义生成的 schema 名）。
+- 原 `components/`、`services/`、`types/`、`layouts/AppLayout.tsx`（死代码）已移除。
+
+阶段一前的重复定义（现由生成类型与域类型统一）：
+
+| 类型名 | 原重复处 | 处理 |
 |---|---|---|
-| `Config` | services/evaluation.ts、components/ExecutionBindings.tsx、components/ModelRegistry.tsx | 不一致（各自子集） |
-| `Target` | services/evaluation.ts、ExecutionBindings.tsx、ModelRegistry.tsx | 不一致 |
-| `Resource` | services/evaluation.ts、ExecutionBindings.tsx、ModelRegistry.tsx | 不一致 |
-| `Snapshot` | components/EvaluationRuns.tsx、components/RunMonitor.tsx | 语义不同（运行快照 vs 监控快照），不合并 |
-| `Report` | components/TaskPlanning.tsx、app/ReportView.tsx | 语义不同（估算报告 vs 证据报告），不合并 |
-| `Run`/`Detail` | components/EvaluationRuns.tsx、components/DiagnosticTasks.tsx | 语义不同（测评任务 vs 诊断任务） |
-
-处理原则：与生成类型（`components["schemas"]`）重合的响应结构删除手写定义并引用生成类型；语义不同的同名类型保留但重命名区分（阶段三执行）。
+| `Config` | services/evaluation.ts、ExecutionBindings.tsx、ModelRegistry.tsx | 统一 `features/evaluation/types.ts` 中生成类型别名 |
+| `Target`/`Resource` | services/evaluation.ts、ExecutionBindings.tsx、ModelRegistry.tsx | 统一 `features/evaluation/types.ts`（后端暂无响应模型） |
+| `Snapshot` | EvaluationRuns.tsx、RunMonitor.tsx | 语义不同，分别命名为 `RunSnapshot` 与监控 `Snapshot` |
+| `Report` | TaskPlanning.tsx、app/ReportView.tsx | 语义不同（估算报告 vs 证据报告），未合并 |
+| `Run`/`Detail` | EvaluationRuns.tsx、DiagnosticTasks.tsx | 语义不同，分别命名 `Run`/`RunDetail` 与诊断 `Run`/`Detail` |
+| `Bundle` | catalog/StandardInputs.tsx | 与生成 schema 同名但形状不同 → 重命名 `StandardBundleView` |
 
 ## 四、契约与生成流程
 
 - 后端导出：`backend/` 下 `uv run python scripts/export_openapi.py` → `backend/openapi.json`（纳入版本管理，作为契约快照）。
-- 前端生成：`frontend/` 下 `npm run generate:api` → `src/types/api.ts`（纳入版本管理）。
+- 前端生成：`frontend/` 下 `npm run generate:api` → `src/shared/types/api.ts`（纳入版本管理）。
 - 契约差异检查：`git diff backend/openapi.json`。
 - 工具版本：`openapi-typescript` 7.13.0（package-lock 锁定）。
 

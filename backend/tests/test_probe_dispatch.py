@@ -14,7 +14,7 @@ async def test_unavailable_probe_consumer_does_not_enqueue(monkeypatch):
         raise AssertionError("No worker: must not create a paid probe intent")
 
     monkeypatch.setattr("autoeval.probe_dispatch.consumer_ready", unavailable)
-    monkeypatch.setattr("autoeval.planning.enqueue", forbidden)
+    monkeypatch.setattr("autoeval.planning.routes.enqueue", forbidden)
     app = create_app(get_settings())
     async with (
         app.router.lifespan_context(app),

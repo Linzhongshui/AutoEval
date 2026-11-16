@@ -11,15 +11,14 @@ from typing import Literal
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import ForeignKey, String, or_, select
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from sqlalchemy.orm import Mapped, mapped_column
 
 from autoeval.configuration import TestConfigItem, TestConfigVersion
 from autoeval.datasets import DatasetManifest, canonical_manifest, read_manifest
+from autoeval.evaluation.models import EvaluationReport
 from autoeval.execution_transport import frozen_ssh_resource
-from autoeval.models import Base, EvaluationRun, Outbox, Record, RunEvent, RunSnapshot
+from autoeval.models import EvaluationRun, Outbox, RunEvent, RunSnapshot
 from autoeval.profiles import ConfigDatasetBinding, EvaluationProfile
 from autoeval.registry import AssetVersion
 from autoeval.resources import ResourceBinding
@@ -27,19 +26,6 @@ from autoeval.responses import Accepted, Envelope, PageEnvelope
 from autoeval.runs import ExecutionLease
 from autoeval.ssh_resources import SSHResourceBinding
 from autoeval.targets import TargetBinding
-
-
-class EvaluationReport(Record, Base):
-    __tablename__ = "evaluation_report"
-    run_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("evaluation_run.id", ondelete="RESTRICT"), unique=True
-    )
-    validity: Mapped[str] = mapped_column(String(24))
-    snapshot_sha256: Mapped[str] = mapped_column(String(64))
-    summary: Mapped[dict] = mapped_column(JSONB)
-    object_key: Mapped[str] = mapped_column(String(256))
-    sha256: Mapped[str] = mapped_column(String(64))
-    execution_origin: Mapped[str] = mapped_column(String(16), server_default="unverified")
 
 
 class SubmitEvaluation(BaseModel):
@@ -337,124 +323,23 @@ async def submit(
 
 @router.get("/{run_id}", response_model=Envelope[dict])
 async def detail(run_id: uuid.UUID, request: Request):
-    from autoeval.cleanup import ExecutionCleanup, cleanup_view
+    # Deferred: keeps module import free of the standard-inputs/data-workbench cycle.
+    from autoeval.evaluation.service import evaluation_run_detail
 
-    try:
-        async with request.app.state.sessions() as session:
-            row = await session.get(EvaluationRun, run_id)
-            if row is None or row.trigger_scope not in {
-                "local-operator:evaluation",
-                "local-operator:orchestration",
-            }:
-                raise HTTPException(404, "Evaluation run not found")
-            events = (
-                await session.scalars(
-                    select(RunEvent).where(RunEvent.run_id == run_id).order_by(RunEvent.seq)
-                )
-            ).all()
-            report = await session.scalar(
-                select(EvaluationReport).where(EvaluationReport.run_id == run_id)
-            )
-            cleanup = await session.scalar(
-                select(ExecutionCleanup).where(ExecutionCleanup.run_id == run_id)
-            )
-            snapshot = await session.scalar(select(RunSnapshot).where(RunSnapshot.run_id == run_id))
-            data = {
-                "id": str(row.id),
-                "state": row.state,
-                "created_at": row.created_at.isoformat(),
-                "updated_at": events[-1].created_at.isoformat()
-                if events
-                else row.created_at.isoformat(),
-                "cancel_requested_at": row.cancel_requested_at.isoformat()
-                if row.cancel_requested_at
-                else None,
-                "run_mode": row.run_mode,
-                "snapshot": {
-                    "sha256": snapshot.sha256,
-                    **{
-                        key: snapshot.canonical_body.get(key)
-                        for key in (
-                            "config_version_id",
-                            "config_sha256",
-                            "parameters",
-                            "tool",
-                            "profile_id",
-                            "profile_sha256",
-                            "max_model_requests",
-                            "target_id",
-                            "model_version_id",
-                            "remote_model",
-                            "resource_id",
-                            "resource_kind",
-                            "manifest_id",
-                            "manifest_sha256",
-                            "execution_origin",
-                        )
-                    },
-                    # Planned runs freeze per-dataset samples instead of a top-level list.
-                    "sample_count": len(snapshot.canonical_body.get("samples", []))
-                    if snapshot.canonical_body.get("samples") is not None
-                    else sum(
-                        len(task.get("samples") or [])
-                        for task in (snapshot.canonical_body.get("inputs") or {}).get("tasks", [])
-                    ),
-                }
-                if snapshot
-                else None,
-                "gate_status": "not_applicable",
-                "cleanup": cleanup_view(
-                    cleanup,
-                    required=bool(
-                        snapshot
-                        and snapshot.canonical_body.get("resource_kind") == "customer_ssh"
-                        and row.trigger_scope == "local-operator:evaluation"
-                    ),
-                ),
-                "execution_unresolved": bool(events and events[-1].type == "execution_unresolved"),
-                "events": [
-                    {"seq": e.seq, "type": e.type, "created_at": e.created_at.isoformat()}
-                    for e in events
-                ],
-                "report": {
-                    "id": str(report.id),
-                    "validity": report.validity,
-                    "summary": report.summary,
-                    "sha256": report.sha256,
-                }
-                if report
-                else None,
-            }
-    except SQLAlchemyError as exc:
-        raise HTTPException(503, "Run database unavailable") from exc
+    data = await evaluation_run_detail(
+        request.app.state.sessions, request.app.state.settings, run_id
+    )
     return {"data": data, "request_id": request.state.request_id}
 
 
 @router.post("/{run_id}/cleanup", status_code=202, response_model=Envelope[Accepted])
 async def retry_cleanup(run_id: uuid.UUID, request: Request):
-    from autoeval.cleanup import schedule_cleanup
+    from autoeval.evaluation.service import evaluation_retry_cleanup
 
-    async with request.app.state.sessions() as session, session.begin():
-        row = await session.scalar(
-            select(EvaluationRun).where(EvaluationRun.id == run_id).with_for_update()
-        )
-        snapshot = await session.scalar(select(RunSnapshot).where(RunSnapshot.run_id == run_id))
-        if row is None or row.trigger_scope != "local-operator:evaluation":
-            raise HTTPException(404, "Evaluation run not found")
-        if (
-            row.state not in {"completed", "failed", "cancelled"}
-            or snapshot is None
-            or snapshot.canonical_body.get("resource_kind") != "customer_ssh"
-            or snapshot.canonical_body.get("execution_origin")
-            != request.app.state.settings.evaluation_origin
-        ):
-            raise HTTPException(
-                409, "Only terminal SSH runs from this execution origin may be reclaimed"
-            )
-        cleanup = await schedule_cleanup(session, run_id)
-        if cleanup.state != "cleaned":
-            cleanup.next_retry_at = None
-    return {"data": {"accepted": True}, "request_id": request.state.request_id}
+    data = await evaluation_retry_cleanup(
+        request.app.state.sessions, request.app.state.settings, run_id
+    )
+    return {"data": data, "request_id": request.state.request_id}
 
 
 @router.post("/{run_id}/cancel", status_code=202, response_model=Envelope[Accepted])
@@ -489,16 +374,9 @@ async def cancel(run_id: uuid.UUID, request: Request):
 
 @router.get("/{run_id}/report", response_model=Envelope[dict])
 async def report_evidence(run_id: uuid.UUID, request: Request):
-    try:
-        async with request.app.state.sessions() as session:
-            report = await session.scalar(
-                select(EvaluationReport).where(EvaluationReport.run_id == run_id)
-            )
-            if report is None:
-                raise HTTPException(404, "Report not available")
-            data = await asyncio.to_thread(read_manifest, request.app.state.settings, report)
-    except SQLAlchemyError as exc:
-        raise HTTPException(503, "Report database unavailable") from exc
-    except (BotoCoreError, ClientError, ValueError) as exc:
-        raise HTTPException(503, "Report evidence unavailable or integrity check failed") from exc
+    from autoeval.evaluation.service import evaluation_run_report
+
+    data = await evaluation_run_report(
+        request.app.state.sessions, request.app.state.settings, run_id
+    )
     return {"data": data, "request_id": request.state.request_id}

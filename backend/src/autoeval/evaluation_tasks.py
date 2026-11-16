@@ -7,10 +7,18 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
 from sqlalchemy import String, cast, func, or_, select
 
-from autoeval.evaluations import EvaluationReport, detail, retry_cleanup
+from autoeval.evaluation.models import EvaluationReport
+from autoeval.evaluation.service import (
+    evaluation_retry_cleanup,
+    evaluation_run_detail,
+    evaluation_run_report,
+    planned_run_detail,
+    planned_run_report,
+    submit_planned_run,
+)
 from autoeval.models import EvaluationRun, RunSnapshot
-from autoeval.planning import PlanInput, ResourceRef, TaskInput, envelope, run_detail, submit_run
-from autoeval.responses import Accepted, Envelope, SubmittedRun, TaskListEnvelope
+from autoeval.planning import PlanInput, ResourceRef, TaskInput
+from autoeval.responses import Accepted, Envelope, SubmittedRun, TaskListEnvelope, envelope
 
 
 class TaskSelection(TaskInput):
@@ -56,7 +64,14 @@ async def submit(
 ):
     # No Planner job/plan ID is accepted. Final parameters are validated and frozen normally.
     inputs = PlanInput(**body.model_dump(), recommend=False)
-    return await submit_run(inputs, request, idempotency_key, None)
+    data = await submit_planned_run(
+        request.app.state.sessions,
+        request.app.state.settings,
+        inputs,
+        None,
+        idempotency_key,
+    )
+    return envelope(data, request)
 
 
 @router.get("", response_model=TaskListEnvelope[TaskListItem])
@@ -160,19 +175,19 @@ async def list_tasks(
 
 @router.get("/{run_id}", response_model=Envelope[dict])
 async def task_detail(run_id: uuid.UUID, request: Request):
-    async with request.app.state.sessions() as session:
+    sessions = request.app.state.sessions
+    async with sessions() as session:
         row = await session.get(EvaluationRun, run_id)
         if not row or row.trigger_scope not in SCOPES:
             raise HTTPException(404, "Evaluation task not found")
         scope = row.trigger_scope
-    result = await detail(run_id, request)
-    data = result["data"]
+    data = await evaluation_run_detail(sessions, request.app.state.settings, run_id)
     if scope == "local-operator:orchestration":
-        extra = (await run_detail(run_id, request))["data"]
+        extra = await planned_run_detail(sessions, run_id)
         data.update(
             datasets=extra["datasets"], estimate=extra["estimate"], dataset_report=extra["report"]
         )
-        async with request.app.state.sessions() as session:
+        async with sessions() as session:
             frozen = await session.scalar(select(RunSnapshot).where(RunSnapshot.run_id == run_id))
             tasks = frozen.canonical_body.get("inputs", {}).get("tasks", [])
             data["snapshot"]["dataset_configurations"] = [
@@ -205,25 +220,26 @@ async def task_detail(run_id: uuid.UUID, request: Request):
                 "finished_at": None,
             }
         ]
-    return result
+    return envelope(data, request)
 
 
 @router.get("/{run_id}/report", response_model=Envelope[dict])
 async def task_report(run_id: uuid.UUID, request: Request):
-    from autoeval.evaluations import report_evidence
-    from autoeval.planning import run_report
-
-    async with request.app.state.sessions() as session:
+    sessions = request.app.state.sessions
+    async with sessions() as session:
         row = await session.get(EvaluationRun, run_id)
         if not row or row.trigger_scope not in SCOPES:
             raise HTTPException(404, "Evaluation task not found")
         grouped = row.trigger_scope == "local-operator:orchestration"
     try:
-        return (
-            await run_report(run_id, request) if grouped else await report_evidence(run_id, request)
+        data = (
+            await planned_run_report(sessions, request.app.state.settings, run_id)
+            if grouped
+            else await evaluation_run_report(sessions, request.app.state.settings, run_id)
         )
     except (BotoCoreError, ClientError) as exc:
         raise HTTPException(503, "Report evidence unavailable or integrity check failed") from exc
+    return envelope(data, request)
 
 
 @router.post("/{run_id}/cancel", status_code=202, response_model=Envelope[Accepted])
@@ -242,4 +258,7 @@ async def cancel_task(run_id: uuid.UUID, request: Request):
 
 @router.post("/{run_id}/cleanup", status_code=202, response_model=Envelope[Accepted])
 async def cleanup_task(run_id: uuid.UUID, request: Request):
-    return await retry_cleanup(run_id, request)
+    data = await evaluation_retry_cleanup(
+        request.app.state.sessions, request.app.state.settings, run_id
+    )
+    return envelope(data, request)

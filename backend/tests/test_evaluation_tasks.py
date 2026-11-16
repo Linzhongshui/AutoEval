@@ -121,7 +121,7 @@ async def test_final_form_concurrency_cannot_override_standard_lock(monkeypatch)
     async def target(*args):
         return {"model": "TEST", "base_url": "https://fixture.invalid"}
 
-    monkeypatch.setattr("autoeval.planning.target_data", target)
+    monkeypatch.setattr("autoeval.evaluation.service.target_data", target)
     with pytest.raises(HTTPException, match="Standard lock conflicts") as exc:
         await resolve_inputs(Session(), get_settings(), body)
     assert exc.value.status_code == 422
@@ -304,7 +304,7 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                     return None
 
                 monkeypatch.setattr("autoeval.probe_dispatch.consumer_ready", ready)
-                monkeypatch.setattr("autoeval.planning.artifact", no_object_write)
+                monkeypatch.setattr("autoeval.planning.routes.artifact", no_object_write)
                 probe_body = {
                     "target_id": target_id,
                     "resource_id": body["resource_id"],

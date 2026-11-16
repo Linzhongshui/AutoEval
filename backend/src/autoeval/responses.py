@@ -5,7 +5,13 @@ the hand-written dictionaries the routes used to return; dynamic payloads
 (artifact/evidence bodies) intentionally stay ``dict`` so nothing is filtered.
 """
 
+from fastapi import Request
 from pydantic import BaseModel
+
+
+def envelope(data, request: Request):
+    """Route-level response envelope shared by planning and evaluation tasks."""
+    return {"data": data, "request_id": request.state.request_id}
 
 
 class Accepted(BaseModel):

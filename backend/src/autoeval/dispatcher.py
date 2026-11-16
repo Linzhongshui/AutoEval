@@ -1,4 +1,4 @@
-"""Initial run outbox dispatcher. Report/analysis intents are not enabled yet."""
+"""Dispatch durable execution and analysis intents with stable workflow identities."""
 
 import asyncio
 import logging
@@ -63,6 +63,7 @@ async def deliver_once(sessions, client, *, run_id=None) -> bool:
                 analysis_id = row.payload["analysis_id"]
                 request = {
                     "analysis_id": analysis_id,
+                    "retry_count": row.payload.get("retry_count", 0),
                     "activity_queue": row.payload.get("activity_queue", "demo.result.v1"),
                 }
                 workflow_id = f"demo/analysis/{analysis_id}/{row.payload.get('retry_count', 0)}"

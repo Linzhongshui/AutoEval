@@ -95,6 +95,7 @@ def build_analysis_input(
     attempts: list[dict],
     baseline_comparison: dict | None = None,
     baseline_comparison_sha256: str | None = None,
+    short_case_ids: bool = False,
 ):
     """Build the exact model input and its closed citation registry."""
     if not HEX256.fullmatch(report_sha256) or not HEX256.fullmatch(snapshot_sha256):
@@ -133,7 +134,7 @@ def build_analysis_input(
         ):
             raise ValueError("Attempt evidence identity is inconsistent")
         seen_attempts.add(attempt_id)
-        alias = f"attempt:{parsed_id}"
+        alias = f"case.{len(seen_attempts):03d}" if short_case_ids else f"attempt:{parsed_id}"
         catalog[alias] = _catalog_entry("case_attempt", attempt["sha256"], attempt_id)
         evidence.append({"evidence_id": alias, "content": body})
     if baseline_comparison is not None:
@@ -144,7 +145,7 @@ def build_analysis_input(
         )
         evidence.append({"evidence_id": "baseline.comparison", "content": baseline_comparison})
     return {
-        "schema_version": "analysis-input.v1",
+        "schema_version": "analysis-input.v2" if short_case_ids else "analysis-input.v1",
         "report_id": str(report_id),
         "report_sha256": report_sha256,
         "snapshot_sha256": snapshot_sha256,
@@ -156,6 +157,10 @@ def build_analysis_input(
 
 def validate_analysis_output(raw, evidence_catalog: dict) -> dict:
     """Reject malformed output, foreign citations, and authority-expanding fields."""
+    if isinstance(raw, str):
+        fenced = re.fullmatch(r"\s*```(?:json)?[ \t]*\r?\n(.*?)\r?\n```\s*", raw, re.DOTALL)
+        if fenced:
+            raw = fenced.group(1)
     try:
         body = json.loads(raw) if isinstance(raw, str) else raw
     except (json.JSONDecodeError, TypeError) as exc:
@@ -286,7 +291,7 @@ async def enqueue_analysis(
     evaluated_target = await session.get(TargetBinding, uuid.UUID(evaluated["target_id"]))
     if evaluated_target is None or (
         str(target.id) == evaluated["target_id"]
-        or str(target.model_version_id) == evaluated["model_version_id"]
+        or target.model_version_id == evaluated_target.model_version_id
         or target.remote_model == evaluated["remote_model"]
         or target.credential_ref == evaluated_target.credential_ref
         or str(resource.id) == evaluated["resource_id"]
@@ -438,7 +443,9 @@ async def get_analysis(report_id: uuid.UUID, request: Request):
                 .where(
                     ReportAnalysis.report_id == report_id,
                     EvaluationReport.execution_origin == "real",
-                    EvaluationRun.trigger_scope == "local-operator:evaluation",
+                    EvaluationRun.trigger_scope.in_(
+                        ["local-operator:evaluation", "local-operator:orchestration"]
+                    ),
                 )
             )
             if job is None:
@@ -468,7 +475,9 @@ async def start_analysis(report_id: uuid.UUID, request: Request):
                 .where(
                     EvaluationReport.id == report_id,
                     EvaluationReport.execution_origin == "real",
-                    EvaluationRun.trigger_scope == "local-operator:evaluation",
+                    EvaluationRun.trigger_scope.in_(
+                        ["local-operator:evaluation", "local-operator:orchestration"]
+                    ),
                 )
             )
             if report is None:
@@ -516,7 +525,9 @@ async def retry_analysis(report_id: uuid.UUID, request: Request):
                 .where(
                     EvaluationReport.id == report_id,
                     EvaluationReport.execution_origin == "real",
-                    EvaluationRun.trigger_scope == "local-operator:evaluation",
+                    EvaluationRun.trigger_scope.in_(
+                        ["local-operator:evaluation", "local-operator:orchestration"]
+                    ),
                 )
             )
             if report is None:

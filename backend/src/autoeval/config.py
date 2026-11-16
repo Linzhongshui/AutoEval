@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     analysis_activity_queue: str = "demo.result.v1"
     analysis_workflow_queue: str = "demo.workflow.v1"
     analysis_max_output_tokens: int = Field(default=2048, ge=1, le=4096)
+    analysis_runner: Literal["native", "openai_compatible"] = "native"
+    analysis_short_citations: bool = False
     evaluation_origin: Literal["real", "simulation"] = "real"
     allowed_model_hosts: list[str] = ["api.deepseek.com"]
     docker_executable: str = "docker"

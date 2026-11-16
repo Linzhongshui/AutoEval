@@ -187,6 +187,7 @@ async def execute_report_analysis(analysis_id: str, retry_count: int = 0):
             attempts=attempt_evidence,
             baseline_comparison=baseline if job.baseline_comparison_sha256 else None,
             baseline_comparison_sha256=job.baseline_comparison_sha256,
+            short_case_ids=getattr(settings, "analysis_short_citations", False),
         )
         input_raw = canonical_manifest(evidence_input)
         input_digest = hashlib.sha256(input_raw).hexdigest()
@@ -222,7 +223,9 @@ async def execute_report_analysis(analysis_id: str, retry_count: int = 0):
         )
         activity.heartbeat(analysis_id)
         native = await asyncio.to_thread(
-            invoke,
+            invoke
+            if getattr(settings, "analysis_runner", "native") == "native"
+            else invoke_compatible_analysis,
             settings,
             resource.container_id,
             {
@@ -232,6 +235,7 @@ async def execute_report_analysis(analysis_id: str, retry_count: int = 0):
                 "model": target.remote_model,
                 "max_tokens": settings.analysis_max_output_tokens,
                 "api_key": credential,
+                "allowed_hosts": settings.allowed_model_hosts,
             },
         )
         result_body = build_analysis_result(
@@ -278,6 +282,28 @@ async def execute_report_analysis(analysis_id: str, retry_count: int = 0):
         return {"analysis_id": analysis_id, "state": "unresolved", "retry_sent": False}
     finally:
         await engine.dispose()
+
+
+def invoke_compatible_analysis(settings, container_id, payload):
+    """Use an independent managed executor; credentials travel only through stdin."""
+    import json
+
+    output = subprocess.run(
+        [
+            settings.docker_executable,
+            "exec",
+            "-i",
+            container_id,
+            "python",
+            "-m",
+            "autoeval.analysis_runtime",
+        ],
+        input=json.dumps(payload).encode(),
+        capture_output=True,
+        timeout=190,
+        check=True,
+    )
+    return json.loads(output.stdout)
 
 
 async def read_analysis_result(settings, job):

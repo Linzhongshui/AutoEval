@@ -101,7 +101,7 @@ async def test_report_evidence_and_score_cannot_be_overridden(
     )
     request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(settings=None)))
     monkeypatch.setattr(
-        "autoeval.data_workbench.report_evidence_status", AsyncMock(return_value=evidence_status)
+        "autoeval.reporting.data_workbench.report_evidence_status", AsyncMock(return_value=evidence_status)
     )
     with pytest.raises(HTTPException) as exc:
         await validate_report(request, session, entry)

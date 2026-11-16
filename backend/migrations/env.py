@@ -2,22 +2,6 @@ import asyncio
 
 from alembic import context
 
-import autoeval.analysis
-import autoeval.audit
-import autoeval.case_history
-import autoeval.catalog
-import autoeval.cleanup
-import autoeval.data_workbench
-import autoeval.evaluations
-import autoeval.langfuse_integration
-import autoeval.orchestration
-import autoeval.planning
-import autoeval.resources
-import autoeval.runs
-import autoeval.standard_inputs
-import autoeval.task_monitor
-import autoeval.unified_artifacts
-import autoeval.unified_outputs  # noqa: F401 -- register migration metadata
 from autoeval.config import get_settings
 from autoeval.db import create_database
 from autoeval.models import Base

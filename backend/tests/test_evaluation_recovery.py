@@ -12,7 +12,7 @@ from temporalio.client import WorkflowExecutionStatus
 from temporalio.common import WorkflowIDReusePolicy
 from temporalio.service import RPCError, RPCStatusCode
 
-from autoeval import case_history, evaluation_activity, reconciler
+from autoeval import evaluation_activity, reconciler
 from autoeval.audit import AuditEvent
 from autoeval.case_history import (
     AttemptEvidence,
@@ -26,6 +26,7 @@ from autoeval.datasets import canonical_manifest
 from autoeval.evaluations import EvaluationReport
 from autoeval.models import EvaluationRun, RunEvent, RunSnapshot
 from autoeval.registry import Asset, AssetVersion
+from autoeval.reporting import case_history
 from autoeval.run_activities import transition
 from autoeval.runs import ExecutionLease
 from autoeval.secrets import FileSecretStore

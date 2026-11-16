@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 from botocore.exceptions import ClientError, EndpointConnectionError
 
-from autoeval import leaderboards, report_integrity
+from autoeval.reporting import leaderboards, report_integrity
 
 
 @pytest.mark.parametrize(

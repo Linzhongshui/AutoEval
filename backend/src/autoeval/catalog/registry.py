@@ -90,7 +90,7 @@ class CatalogRegistration(BaseModel):
 @router.post("/from-catalog")
 async def register_catalog_model(body: CatalogRegistration, request: Request):
     """Register identity from persisted official evidence, never invent a service."""
-    from autoeval.data_workbench import LeaderboardRecord, development
+    from autoeval.reporting.data_workbench import LeaderboardRecord, development
 
     development(request)
     async with request.app.state.sessions() as session, session.begin():

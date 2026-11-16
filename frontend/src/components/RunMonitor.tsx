@@ -65,7 +65,7 @@ function MonitorProgress({ value, error = false, stage, terminal = false }: { va
       <i style={known ? { width: `${percent}%` } : undefined} />
     </div>
     <small>{stage && <>当前阶段：{stage} · </>}
-      {stale ? "数据已过期，保留最后观测值" : known ? "进度来自工具监控，执行完成不代表评分通过" : terminal ? "任务已结束，未记录有效样本计数" : "样本计数尚未返回，当前阶段与耗时持续更新"}
+      {stale ? "数据已过期，保留最后观测值" : known ? value?.source === "archived_case_executions" ? "进度来自已归档执行记录，不代表历史实时监控或评分通过" : "进度来自工具执行记录，执行完成不代表评分通过" : terminal ? "任务已结束，未记录有效样本计数" : "样本计数尚未返回，当前阶段与耗时持续更新"}
       {value?.snapshot_kind === "final" ? " · 终态已归档" : value?.snapshot_kind === "last_observed" ? " · 仅最后观测（非终态）" : ""}
     </small>
   </div>;
@@ -80,8 +80,8 @@ const duration = (milliseconds: number) => {
   return `${hours ? `${hours}小时 ` : ""}${Math.floor(seconds % 3600 / 60)}分 ${String(seconds % 60).padStart(2, "0")}秒`;
 };
 
-export function RunProgress({ runId, terminal, stage, state, createdAt, events = [] }: {
-  runId: string; terminal: boolean; stage: string; state: string; createdAt?: string; events?: ProgressEvent[];
+export function RunProgress({ runId, terminal, stage, state, createdAt, events = [], showSampleProgress = true }: {
+  runId: string; terminal: boolean; stage: string; state: string; createdAt?: string; events?: ProgressEvent[]; showSampleProgress?: boolean;
 }) {
   const [value, setValue] = useState<Monitor | null>(null);
   const [unavailable, setUnavailable] = useState(false);
@@ -129,7 +129,7 @@ export function RunProgress({ runId, terminal, stage, state, createdAt, events =
       </li>)}
     </ol>
     {!terminal && <p className="task-wait-hint">{state === "accepted" || state === "queued" ? "提交已接收，正在等待执行资源" : state === "preparing" ? "正在校验环境并启动工具，阶段变化会自动更新" : state === "aggregating" ? "正在收集结果、校验证据并生成报告" : state === "cancelling" ? "正在确认远程作业停止，资源仍保留占用" : "工具正在执行；样本计数返回后自动显示完成比例"}</p>}
-    <MonitorProgress value={value} error={unavailable} terminal={terminal} />
+    {showSampleProgress ? <MonitorProgress value={value} error={unavailable} terminal={terminal} /> : <p className="muted">样本进度按下方各数据集分别展示，不合并不同工具的计数。</p>}
     <small className="muted">任务耗时包含排队、环境准备、测评与归档；样本进度和评分结论分别记录。</small>
   </section>;
 }
@@ -199,7 +199,7 @@ export function RunMonitor({ runId, terminal }: { runId: string; terminal: boole
 
   if (loading && !value) return <p className="muted" role="status">正在读取工具监控…</p>;
   if (!value) return <p className="muted" role="status">{error || "工具监控暂不可用。"}</p>;
-  if (value.collection_status === "not_collected") return <p className="muted" role="status">{error || "本次运行未采集工具监控。"}</p>;
+  if (value.collection_status === "not_collected" && !value.log) return <p className="muted" role="status">{error || "本次运行未采集工具监控。"}</p>;
 
   const kind = value.snapshot_kind || "live";
   const kindTone = value.stale || error ? "orange" : kind === "final" ? "green" : kind === "live" ? "blue" : "orange";

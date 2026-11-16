@@ -165,3 +165,18 @@ def test_unknown_progress_is_empty_and_stage_animates_only_while_active(browser_
     expect(panel.locator(".phase-spinner")).to_have_count(0)
     expect(panel.get_by_text("未记录样本进度", exact=True)).to_be_visible()
     expect(panel.locator('[aria-current="step"]')).to_contain_text("环境准备")
+
+
+def test_native_prediction_progress_updates_before_report_exists(browser_page):
+    page, url, _ = browser_page
+    page.add_init_script(path=FIXTURE)
+    page.add_init_script("window.detail.report=null;window.monitor.source='aisbench_native_predictions';window.monitor.finish_count=0")
+    page.goto(url + "/#run/fixture-run")
+    bar = page.get_by_role("progressbar", name="工具执行进度")
+    expect(bar).to_have_attribute("aria-valuenow", "0")
+    page.evaluate("window.monitor.finish_count=2")
+    expect(bar).to_have_attribute("aria-valuenow", "40", timeout=7000)
+    expect(page.get_by_text("2 / 5 · 40%", exact=True)).to_be_visible()
+    page.evaluate("window.monitor.finish_count=5;window.monitor.snapshot_kind='final'")
+    expect(bar).to_have_attribute("aria-valuenow", "100", timeout=7000)
+    expect(page.get_by_text("5 / 5 · 100%", exact=True)).to_be_visible()

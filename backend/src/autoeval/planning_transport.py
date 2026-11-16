@@ -42,6 +42,7 @@ def runtime_files():
         ).read_bytes(),
         "planning_calculation.py": engine.encode(),
         "planning_contract.py": contract.encode(),
+        "native_predictions.py": RUNTIME.with_name("native_predictions.py").read_bytes(),
     }
 
 
@@ -136,6 +137,30 @@ class PlanningRemoteContainer(DockerExecutor):
 
     async def progress(self, job):
         return await read_container_progress(self, job)
+
+    async def collect_log(self, job):
+        """Read only this owned job's tool log before its files are cleaned."""
+        import uuid
+
+        key = str(uuid.UUID(job.submission_key))
+        script = (
+            "import pathlib,sys,json;p=pathlib.Path(sys.argv[1]);"
+            "assert not p.is_symlink();raw=p.read_bytes();"
+            "print(json.dumps({'content':raw[-2097152:].decode('utf-8',errors='replace'),"
+            "'truncated':len(raw)>2097152}))"
+        )
+        raw = await asyncio.to_thread(
+            self.command,
+            [
+                "exec",
+                self.container_id,
+                "python3",
+                "-c",
+                script,
+                self.remote_dir + "/jobs/" + key + "/tool.log",
+            ],
+        )
+        return json.loads(raw)
 
     async def preflight(self, tasks=None):
         await self.validate({"kind": "framework_smoke", "duration_seconds": 0})

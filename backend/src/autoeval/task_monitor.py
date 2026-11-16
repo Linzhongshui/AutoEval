@@ -105,7 +105,11 @@ def normalize(task, identity, source, observed_at, *, snapshot_kind="live"):
     if stamp.utcoffset() is None:
         raise ValueError("Timezone required")
     observed_at = stamp.astimezone(UTC).isoformat()
-    if source not in {"local_monitor", "harbor_monitor"} or snapshot_kind not in {
+    if source not in {
+        "local_monitor",
+        "harbor_monitor",
+        "aisbench_native_predictions",
+    } or snapshot_kind not in {
         "live",
         "final",
         "last_observed",
@@ -278,7 +282,8 @@ router = APIRouter(prefix="/api/autoeval/v1/runs", tags=["run monitoring"])
 @router.get("/{run_id}/monitor")
 async def latest(run_id: uuid.UUID, request: Request):
     async with request.app.state.sessions() as session:
-        if await session.get(EvaluationRun, run_id) is None:
+        run = await session.get(EvaluationRun, run_id)
+        if run is None:
             raise HTTPException(404, "Run not found")
         binding = await session.scalar(
             select(MonitorBinding)
@@ -291,13 +296,51 @@ async def latest(run_id: uuid.UUID, request: Request):
             if binding and binding.latest
             else {"collection_status": "not_collected", "stale": False}
         )
+        if (not binding or not binding.latest) and run.state in {
+            "completed",
+            "failed",
+            "cancelled",
+        }:
+            from autoeval.case_history import CaseExecutionRecord
+            from autoeval.models import RunSnapshot
+
+            frozen = await session.scalar(select(RunSnapshot).where(RunSnapshot.run_id == run_id))
+            tasks = frozen.canonical_body.get("inputs", {}).get("tasks", []) if frozen else []
+            expected = {(t["dataset"], s["sample_id"]) for t in tasks for s in t["samples"]}
+            if expected:
+                attempts = list(
+                    await session.scalars(
+                        select(CaseExecutionRecord).where(
+                            CaseExecutionRecord.run_id == run_id,
+                            CaseExecutionRecord.state.in_(["succeeded", "failed"]),
+                        )
+                    )
+                )
+                done = {(a.dataset_key, a.sample_id) for a in attempts} & expected
+                projection = {
+                    "collection_status": "archived_cases",
+                    "source": "archived_case_executions",
+                    "snapshot_kind": "final",
+                    "run_id": str(run_id),
+                    "stale": False,
+                    "finish_count": len(done),
+                    "total_count": len(expected),
+                    "progress_description": "已归档执行记录；不代表历史实时监控已采集",
+                }
         artifact = await session.scalar(
             select(UnifiedArtifact).where(
                 UnifiedArtifact.run_id == run_id,
-                UnifiedArtifact.collection_key == "cli-native-v1",
+                (UnifiedArtifact.collection_key == "cli-native-v1")
+                | UnifiedArtifact.collection_key.startswith("planning-log:"),
             )
         )
         if artifact:
+            if projection["collection_status"] == "not_collected":
+                projection.update(
+                    collection_status="archived_log_only",
+                    snapshot_kind="last_observed",
+                    diagnostics=["本次未采集实时监控；仅提供已归档作业日志。"],
+                )
             logs = [
                 row for row in artifact.manifest.get("files", []) if row.get("path") == "job.log"
             ]
@@ -370,7 +413,9 @@ async def archived_log(run_id: uuid.UUID, request: Request):
     async with request.app.state.sessions() as session:
         artifact = await session.scalar(
             select(UnifiedArtifact).where(
-                UnifiedArtifact.run_id == run_id, UnifiedArtifact.collection_key == "cli-native-v1"
+                UnifiedArtifact.run_id == run_id,
+                (UnifiedArtifact.collection_key == "cli-native-v1")
+                | UnifiedArtifact.collection_key.startswith("planning-log:"),
             )
         )
         if artifact is None:

@@ -199,7 +199,12 @@ def validate_spec(spec):
         ):
             raise ValueError("Invalid probe budget")
     else:
-        if set(spec) != {"kind", "compilation", "tool", "credential"}:
+        if set(spec) - {"kind", "compilation", "tool", "credential", "case_contract"} or not {
+            "kind",
+            "compilation",
+            "tool",
+            "credential",
+        }.issubset(spec):
             raise ValueError("Unknown adaptor fields")
         if spec["compilation"]["adaptor_revision"] != ADAPTOR_REVISION:
             raise ValueError("Unpinned adaptor")
@@ -382,10 +387,41 @@ def execute(folder, spec):
             "observed_at": datetime.now(UTC).isoformat(),
         }
         (folder / "progress.json").write_text(json.dumps(progress))
+        import time
+
+        from native_predictions import collect, selected
+
+        contract = spec.get("case_contract")
+        start = datetime.now(UTC).timestamp()
         with (folder / "tool.log").open("wb") as log:
-            completed = subprocess.run(
-                command, check=False, stdout=log, stderr=subprocess.STDOUT, env=environment
-            )
+            proc = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, env=environment)
+
+            def publish(final=False):
+                value = dict(progress, observed_at=datetime.now(UTC).isoformat())
+                if contract:
+                    try:
+                        found = selected(collect(output, contract), contract)
+                        value.update(
+                            finish_count=len(found),
+                            total_count=len(contract["case_ids"]),
+                            source="aisbench_native_predictions",
+                            process_id=proc.pid,
+                            start_time=start,
+                            snapshot_kind="final" if final else "live",
+                        )
+                        if final:
+                            value["tool_exit_code"] = proc.returncode
+                    except (OSError, ValueError, UnicodeError):
+                        value["collection_error"] = "native_prediction_observation_failed"
+                temporary = folder / "progress.tmp"
+                temporary.write_text(json.dumps(value))
+                temporary.replace(folder / "progress.json")
+
+            while proc.poll() is None:
+                publish()
+                time.sleep(2)
+            completed = subprocess.CompletedProcess(command, proc.returncode)
+            publish(final=True)
         diagnostic = (folder / "tool.log").read_bytes()[-12000:].decode("utf-8", errors="replace")
         if key:
             diagnostic = diagnostic.replace(key, "[REDACTED]")
@@ -437,6 +473,8 @@ def execute(folder, spec):
                 case["harbor_artifact"] = artifact
         return {
             "unified_result": result,
+            "native_files": collect(output, contract) if contract else [],
+            "case_contract": contract,
             "tool_exit_code": completed.returncode,
             "diagnostic": diagnostic if completed.returncode else None,
         }

@@ -321,6 +321,9 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                         try:
                             progress = await progress_reader(job)
                             if progress:
+                                from autoeval.planning_observations import publish
+
+                                await publish(sessions, settings, run_id, child.id, progress)
                                 await update_child(
                                     sessions, child.id, summary={"progress": progress}
                                 )
@@ -329,8 +332,64 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                 continue
             summary = None
             state = observation.state
+            log_reader = getattr(adapter, "collect_log", None)
+            if log_reader and observation.state in TERMINAL:
+                from autoeval.unified_artifacts import UnifiedArtifact
+
+                log_key = "planning-log:" + str(child.id)
+                async with sessions() as session, session.begin():
+                    existing_log = await session.scalar(
+                        select(UnifiedArtifact).where(
+                            UnifiedArtifact.run_id == run_id,
+                            UnifiedArtifact.collection_key == log_key,
+                        )
+                    )
+                    if existing_log is None:
+                        observed_log = await log_reader(job)
+                        content = observed_log["content"].replace(secret, "[REDACTED]")
+                        import hashlib
+
+                        file = {
+                            "path": "job.log",
+                            "content": content,
+                            "sha256": hashlib.sha256(content.encode()).hexdigest(),
+                            "truncated": observed_log["truncated"],
+                        }
+                        bundle = {
+                            "run_id": str(run_id),
+                            "child_id": str(child.id),
+                            "source": "adaptor_tool_log",
+                            "files": [file],
+                        }
+                        sha = digest(bundle)
+                        key = f"execution-logs/{run_id}/{child.id}/{sha}.json"
+                        await asyncio.to_thread(
+                            write_manifest, settings, key, canonical_manifest(bundle)
+                        )
+                        from types import SimpleNamespace
+
+                        from autoeval.datasets import read_manifest
+
+                        await asyncio.to_thread(
+                            read_manifest, settings, SimpleNamespace(object_key=key, sha256=sha)
+                        )
+                        session.add(
+                            UnifiedArtifact(
+                                run_id=run_id,
+                                collection_key=log_key,
+                                object_key=key,
+                                sha256=sha,
+                                manifest=bundle,
+                            )
+                        )
             if state == "succeeded":
                 result = await adapter.collect(job)
+                from autoeval.planning_observations import archive_native, publish
+
+                await archive_native(sessions, settings, run_id, child, result["result"], secret)
+                reader = getattr(adapter, "progress", None)
+                if reader:
+                    await publish(sessions, settings, run_id, child.id, await reader(job))
                 unified = result["result"]["unified_result"]
                 async with sessions() as session, session.begin():
                     await artifact(
@@ -342,18 +401,11 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                 try:
                     aliases = {s["tool_case_id"]: s["sample_id"] for s in child.payload["samples"]}
                     allowed_ids = {s["sample_id"] for s in child.payload["samples"]}
-                    params = child.payload["compilation"]["config"]["params"]
-                    result_aliases = {
-                        "GPQA": "GPQA_diamond",
-                        "MMMU-Pro": "mmmu_pro",
-                        "DeepSWE": "harbor_deepswe-v1.1",
-                    }
-                    allowed_datasets = {
-                        child.payload["dataset"],
-                        result_aliases[child.payload["dataset"]],
-                        params.get("dataset_abbr"),
-                        *(params.get("datasets") or []),
-                    }
+                    from autoeval.result_identity import allowed_result_datasets
+
+                    allowed_datasets = allowed_result_datasets(
+                        child.payload["dataset"], child.payload["compilation"]["config"]
+                    )
                     for case in unified.get("cases", []):
                         if case.get("dataset") not in allowed_datasets:
                             raise ValueError("Unexpected result dataset")
@@ -427,12 +479,16 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
             # The durable submitting intent precedes network I/O. A lost reply is reconciled
             # by lookup, never by issuing a new model-generating submission.
             try:
+                from autoeval.planning_observations import case_contract
+
+                contract = case_contract(child.payload)
                 await adapter.submit(
                     {
                         "kind": "adaptor",
                         "compilation": child.payload["compilation"],
                         "tool": child.payload["tool"],
                         "credential": secret,
+                        **({"case_contract": contract} if contract else {}),
                     },
                     str(child.id),
                 )

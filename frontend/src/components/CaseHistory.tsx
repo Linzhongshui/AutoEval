@@ -192,9 +192,10 @@ export function CaseHistory({ initialRun = "" }: { initialRun?: string }) {
           {detail && !("message" in detail) && (
             <>
               <h3>模型输入</h3>
-              <pre className="snapshot">{String(detail.prompt ?? "未提供")}</pre>
+              <pre className="snapshot" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{detail.prompt == null ? "原始输入未采集" : String(detail.prompt) || "（输入为空）"}</pre>
               <h3>模型响应</h3>
-              <pre className="snapshot">{String(detail.response ?? "无响应")}</pre>
+              <pre className="snapshot" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{detail.response == null ? "原始响应未采集" : String(detail.response) || "（响应为空）"}</pre>
+              {detail.native_evidence != null && <p className="muted">输入与响应来自已校验的原生预测归档，原始执行证据及评分保持不变。</p>}
             </>
           )}
           <details>

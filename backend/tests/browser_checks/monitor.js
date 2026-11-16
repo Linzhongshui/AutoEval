@@ -49,9 +49,9 @@
       data = { id, state: id === 'a1' ? 'failed' : 'succeeded', prompt: 'Fixture prompt', response: id === 'a1' ? null : 'A', error_code: id === 'a1' ? 'UPSTREAM_TIMEOUT' : null };
     } else if (url.pathname === '/api/autoeval/v1/runs/fixture-run/unified-output') {
       data = { validity: 'complete', observed_cases: 2, expected_cases: 2, missing_cases: 0, token_coverage: { known_attempts: 2, total_attempts: 2, input_tokens_known_sum: 12, output_tokens_known_sum: 3 } };
-    } else if (url.pathname === '/api/autoeval/v1/runs/fixture-run') {
+    } else if (url.pathname === '/api/autoeval/v1/runs/fixture-run' || url.pathname === '/api/autoeval/v1/evaluation-tasks/fixture-run') {
       data = window.detail;
-    } else if (url.pathname === '/api/autoeval/v1/runs') {
+    } else if (url.pathname === '/api/autoeval/v1/runs' || url.pathname === '/api/autoeval/v1/evaluation-tasks') {
       data = [window.detail];
     } else if (url.pathname.endsWith('/capabilities')) {
       data = { evaluation_enabled: false, analysis_enabled: false, customer_ssh_enabled: false, workspace_mode: 'single', subject: 'fixture' };

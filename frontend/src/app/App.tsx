@@ -4,12 +4,12 @@ import { DatasetManifests } from "../components/DatasetManifests";
 import { ExecutionBindings } from "../components/ExecutionBindings";
 import { ManagementDrawer } from "../components/ManagementDrawer";
 import { StandardInputs } from "../components/StandardInputs";
-import { TaskPlanning, PlannedRunView, PlannedRuns } from "../components/TaskPlanning";
+import { TaskPlanning } from "../components/TaskPlanning";
 import { EvaluationRuns } from "../components/EvaluationRuns";
 import { RealReports } from "../components/RealReports";
 import { RealLeaderboard } from "../components/RealLeaderboard";
 import { apiGet, apiGetPage } from "../services/api";
-import { Configurations, EvaluationConsole, useProfiles } from "./Workflow";
+import { Configurations, useProfiles } from "./Workflow";
 import { useEffect, useState } from "react";
 import {
   Activity,
@@ -82,8 +82,6 @@ export function App() {
     return () => controller.abort();
   }, []);
   const [page, setPage] = useState(location.hash.slice(1) || "console");
-  const [taskKind, setTaskKind] = useState("evaluation");
-  const [consoleMode, setConsoleMode] = useState("planning");
   const [toast, setToast] = useState("");
   const evaluationPage = page === "tasks" || page.startsWith("run/") || page.startsWith("evaluate?");
   const go = (path: string) => {
@@ -93,7 +91,13 @@ export function App() {
   };
 
   useEffect(() => {
-    const onHashChange = () => setPage(location.hash.slice(1) || "console");
+    const onHashChange = () => {
+      const hash = location.hash.slice(1) || "console";
+      if (hash.startsWith("planned-run/")) { location.replace(`#run/${hash.slice(12)}`); return; }
+      if (hash.startsWith("evaluate?")) { location.replace("#console"); return; }
+      setPage(hash);
+    };
+    onHashChange();
     window.addEventListener("hashchange", onHashChange);
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
@@ -114,7 +118,7 @@ export function App() {
           : menus.find((menu) => menu.id === page)?.label || "控制台";
   const descriptions: Record<string, string> = {
     home: "从一次测评开始，让模型能力与执行证据清晰可见。",
-    console: "选择模型服务、执行配置与资源，估算任务耗时并编排测评。",
+    console: "选择模型、数据集与执行资源，按当前参数发起测评；可选获取耗时估算和参数建议。",
     config: "按模型与数据集分别维护测试参数、清单和执行绑定。",
     tasks: "追踪每一次测评，定位每一个问题。",
     reports: "查看测评报告，追溯历史结果。",
@@ -134,7 +138,6 @@ export function App() {
             <a
               key={menu.id}
               href={`#${menu.id}`}
-              onClick={() => { if (menu.id === "tasks") setTaskKind("evaluation"); }}
               className={
                 page === menu.id ||
                 ((evaluationPage || page.startsWith("planned-run/")) && menu.id === "tasks") ||
@@ -175,16 +178,7 @@ export function App() {
         </header>
 
         {page === "home" && <Overview go={go} />}
-        {page === "console" && (
-          <div className="console-workspace stack">
-            <div className="console-mode-switch" role="group" aria-label="测评入口">
-              <button aria-pressed={consoleMode === "planning"} onClick={() => setConsoleMode("planning")}>测评规划</button>
-              <button aria-pressed={consoleMode === "lite"} onClick={() => setConsoleMode("lite")}>GPQA Lite 快速验证</button>
-            </div>
-            <div hidden={consoleMode !== "planning"}><TaskPlanning /></div>
-            <div hidden={consoleMode !== "lite"}><p className="mode-description">快速验证 · 仅 GPQA Lite · 单数据集串行 · 最多 5 次模型请求</p><EvaluationConsole profiles={profiles} setProfiles={setProfiles} notify={setToast} /></div>
-          </div>
-        )}
+        {page === "console" && <TaskPlanning />}
         {page === "config" && <div className="management-toolbar">
           <ManagementDrawer title="管理样本清单"><DatasetManifests /></ManagementDrawer>
           <ManagementDrawer title="执行规则与绑定"><ExecutionBindings /></ManagementDrawer>
@@ -193,15 +187,7 @@ export function App() {
         {(page === "config" || page.startsWith("config/")) && (
           <Configurations profiles={profiles} setProfiles={setProfiles} go={go} notify={setToast} />
         )}
-        {page.startsWith("planned-run/") && <PlannedRunView runId={page.slice(12)} />}
-        {page === "tasks" && <div className="task-kind-bar">
-          <div className="console-mode-switch" role="group" aria-label="任务类型">
-            <button aria-pressed={taskKind === "planned"} onClick={() => setTaskKind("planned")}>编排测评任务</button>
-            <button aria-pressed={taskKind === "evaluation"} onClick={() => setTaskKind("evaluation")}>测评任务</button>
-          </div><p>按任务类型查看记录；各列表独立分页与统计。</p>
-        </div>}
-        {page === "tasks" && taskKind === "planned" && <PlannedRuns />}
-        {evaluationPage && (page !== "tasks" || taskKind === "evaluation") && (
+        {evaluationPage && (
           <div className="stack evaluation-tasks">
             <EvaluationRuns
               runId={page.startsWith("run/") ? page.slice(4) : undefined}
@@ -210,7 +196,7 @@ export function App() {
                   ? new URLSearchParams(page.slice(9)).get("target") || ""
                   : ""
               }
-              allowSubmit={page.startsWith("evaluate?")}
+              allowSubmit={false}
             />
 
           </div>

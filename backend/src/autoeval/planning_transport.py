@@ -79,17 +79,16 @@ class PlanningRemoteContainer(DockerExecutor):
         super().__init__("docker", container_id, image_id)
         self.control = SSHExecutor(connection)
         self.files = {"job_runtime.py": self.runtime.read_bytes(), **runtime_files()}
-        distribution = importlib.metadata.distribution("autoeval-task-planner")
         from autoeval.planning_runtime import PLANNER_REVISION, installed_revision
 
-        if installed_revision("autoeval-task-planner") != PLANNER_REVISION:
-            raise ValueError("Local Planner distribution does not match pin")
-        for item in distribution.files:
-            name = str(item).replace("\\", "/")
-            if ".." in Path(name).parts or "__pycache__" in name or name.endswith(".pyc"):
-                continue
-            if name.startswith("autoeval_planner/") or ".dist-info/" in name:
-                self.files["deps/" + name] = distribution.locate_file(item).read_bytes()
+        if installed_revision("autoeval-task-planner") == PLANNER_REVISION:
+            distribution = importlib.metadata.distribution("autoeval-task-planner")
+            for item in distribution.files:
+                name = str(item).replace("\\", "/")
+                if ".." in Path(name).parts or "__pycache__" in name or name.endswith(".pyc"):
+                    continue
+                if name.startswith("autoeval_planner/") or ".dist-info/" in name:
+                    self.files["deps/" + name] = distribution.locate_file(item).read_bytes()
         sha = hashlib.sha256(b"".join(self.files[k] for k in sorted(self.files))).hexdigest()
         self.remote_dir = "/tmp/autoeval-planning-runtime/" + sha
 

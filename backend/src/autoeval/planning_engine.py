@@ -5,16 +5,6 @@ import re
 from dataclasses import replace
 from pathlib import Path
 
-from autoeval_planner.config import parse_taskset
-from autoeval_planner.library.db import CaseRecord, Library, ServerSnapshot
-from autoeval_planner.library.profile import profile_from_rows
-from autoeval_planner.optimize import OptimizationResult, _monte_carlo, optimize
-from autoeval_planner.report import build_report
-from autoeval_planner.resources import build_provider
-from autoeval_planner.simulate import Plan, percentile, simulate
-from autoeval_planner.taskset import build_task_models, plan_tasks
-from autoeval_planner.throughput import ThroughputProfile
-
 from autoeval.standard_inputs import digest, leaves, validate_config
 
 PLANNER_REVISION = "0ee9abf49a57c5accc62df8900693cdcea88ea9a"
@@ -72,6 +62,8 @@ def apply_concurrency(compilation, concurrency):
 
 def import_history(library, observations):
     """Only known token observations enter Planner; unknown tokens stay unknown upstream."""
+    from autoeval_planner.library.db import CaseRecord
+
     for observation in observations:
         meta = observation["metadata"]
         if meta.get("input_tokens") is None or meta.get("output_tokens") is None:
@@ -114,6 +106,16 @@ def import_history(library, observations):
 
 def calculate(inputs, curve, snapshot, history, directory, *, recommend=True):
     """Build a private SQLite snapshot per job; database advisory lock owns cache writes."""
+    from autoeval_planner.config import parse_taskset
+    from autoeval_planner.library.db import Library, ServerSnapshot
+    from autoeval_planner.library.profile import profile_from_rows
+    from autoeval_planner.optimize import OptimizationResult, _monte_carlo, optimize
+    from autoeval_planner.report import build_report
+    from autoeval_planner.resources import build_provider
+    from autoeval_planner.simulate import Plan, percentile, simulate
+    from autoeval_planner.taskset import build_task_models, plan_tasks
+    from autoeval_planner.throughput import ThroughputProfile
+
     directory = Path(directory)
     library = Library(directory / "history.sqlite3")
     try:
@@ -192,9 +194,7 @@ def calculate(inputs, curve, snapshot, history, directory, *, recommend=True):
                         and observation["metadata"].get("output_tokens") is not None
                     }
                 )
-                profile = profile_from_rows(
-                    item["dataset"], model.task_type, matching, source_runs
-                )
+                profile = profile_from_rows(item["dataset"], model.task_type, matching, source_runs)
                 count = len(item["samples"]) * item["attempts"]
                 model.cases = profile.cases * item["attempts"]
                 model.pool = list(model.cases)

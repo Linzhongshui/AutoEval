@@ -1,0 +1,229 @@
+"""One public task contract; workflow and historical snapshot formats stay private."""
+
+import uuid
+
+from botocore.exceptions import BotoCoreError, ClientError
+from fastapi import APIRouter, Header, HTTPException, Request
+from pydantic import Field, model_validator
+from sqlalchemy import String, cast, func, or_, select
+
+from autoeval.evaluations import EvaluationReport, detail, retry_cleanup
+from autoeval.models import EvaluationRun, RunSnapshot
+from autoeval.planning import PlanInput, ResourceRef, TaskInput, envelope, run_detail, submit_run
+
+
+class TaskSelection(TaskInput):
+    concurrency: int | None = Field(default=None, ge=1, le=256)
+
+
+class SubmitTask(ResourceRef):
+    target_id: uuid.UUID
+    tasks: list[TaskSelection] = Field(min_length=1, max_length=4)
+    dataset_concurrency: int = Field(default=1, ge=1, le=3)
+
+    @model_validator(mode="after")
+    def unique_selection(self):
+        if len({t.task_id for t in self.tasks}) != len(self.tasks) or len(
+            {t.dataset for t in self.tasks}
+        ) != len(self.tasks):
+            raise ValueError("Duplicate task or dataset")
+        return self
+
+
+router = APIRouter(prefix="/api/autoeval/v1/evaluation-tasks", tags=["evaluation tasks"])
+SCOPES = ["local-operator:evaluation", "local-operator:orchestration"]
+
+
+@router.post("", status_code=202)
+async def submit(
+    body: SubmitTask, request: Request, idempotency_key: str = Header(min_length=1, max_length=256)
+):
+    # No Planner job/plan ID is accepted. Final parameters are validated and frozen normally.
+    inputs = PlanInput(**body.model_dump(), recommend=False)
+    return await submit_run(inputs, request, idempotency_key, None)
+
+
+@router.get("")
+async def list_tasks(
+    request: Request,
+    offset: int = 0,
+    limit: int = 50,
+    state: str | None = None,
+    resource_kind: str | None = None,
+    query: str = "",
+    include_test: bool = False,
+):
+    if offset < 0 or not 1 <= limit <= 200:
+        raise HTTPException(422, "Invalid pagination")
+    body = RunSnapshot.canonical_body
+    conditions = [EvaluationRun.trigger_scope.in_(SCOPES)]
+    if not include_test:
+        conditions += [
+            func.coalesce(body["execution_origin"].astext, "unverified") == "real",
+            ~func.coalesce(body["remote_model"].astext, "").bool_op("~*")(
+                "^(test|fixture|browser|simulation)([-_:]|$)"
+            ),
+            ~EvaluationRun.created_by.bool_op("~*")("^(test|fixture|browser)([-_:]|$)"),
+        ]
+    if state == "active":
+        conditions.append(EvaluationRun.state.notin_(["completed", "failed", "cancelled"]))
+    elif state:
+        conditions.append(EvaluationRun.state == state)
+    if resource_kind:
+        conditions.append(body["resource_kind"].astext == resource_kind)
+    if query.strip():
+        term = (
+            "%" + query.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        )
+        conditions.append(
+            or_(
+                cast(EvaluationRun.id, String).ilike(term, escape="\\"),
+                body["remote_model"].astext.ilike(term, escape="\\"),
+            )
+        )
+    async with request.app.state.sessions() as session:
+        base = (
+            select(EvaluationRun, RunSnapshot, EvaluationReport.id)
+            .join(RunSnapshot, RunSnapshot.run_id == EvaluationRun.id)
+            .outerjoin(EvaluationReport, EvaluationReport.run_id == EvaluationRun.id)
+            .where(*conditions)
+        )
+        counts = (
+            await session.execute(
+                select(EvaluationRun.state, func.count())
+                .join(RunSnapshot, RunSnapshot.run_id == EvaluationRun.id)
+                .where(*conditions)
+                .group_by(EvaluationRun.state)
+            )
+        ).all()
+        statistics = {
+            "total": sum(n for _, n in counts),
+            "active": 0,
+            "completed": 0,
+            "failed_cancelled": 0,
+        }
+        for status, n in counts:
+            statistics[
+                "completed"
+                if status == "completed"
+                else "failed_cancelled"
+                if status in {"failed", "cancelled"}
+                else "active"
+            ] += n
+        rows = (
+            await session.execute(
+                base.order_by(EvaluationRun.created_at.desc(), EvaluationRun.id.desc())
+                .offset(offset)
+                .limit(limit + 1)
+            )
+        ).all()
+        return {
+            **envelope(
+                [
+                    {
+                        "id": str(r.id),
+                        "state": r.state,
+                        "created_at": r.created_at.isoformat(),
+                        "report_id": str(report_id) if report_id else None,
+                        "remote_model": s.canonical_body.get("remote_model"),
+                        "resource_kind": s.canonical_body.get("resource_kind"),
+                        "datasets": [
+                            t["dataset"]
+                            for t in s.canonical_body.get("inputs", {}).get("tasks", [])
+                        ]
+                        or [s.canonical_body.get("dataset_key", "GPQA")],
+                    }
+                    for r, s, report_id in rows[:limit]
+                ],
+                request,
+            ),
+            "statistics": statistics,
+            "next_offset": offset + limit if len(rows) > limit else None,
+        }
+
+
+@router.get("/{run_id}")
+async def task_detail(run_id: uuid.UUID, request: Request):
+    async with request.app.state.sessions() as session:
+        row = await session.get(EvaluationRun, run_id)
+        if not row or row.trigger_scope not in SCOPES:
+            raise HTTPException(404, "Evaluation task not found")
+        scope = row.trigger_scope
+    result = await detail(run_id, request)
+    data = result["data"]
+    if scope == "local-operator:orchestration":
+        extra = (await run_detail(run_id, request))["data"]
+        data.update(
+            datasets=extra["datasets"], estimate=extra["estimate"], dataset_report=extra["report"]
+        )
+        async with request.app.state.sessions() as session:
+            frozen = await session.scalar(select(RunSnapshot).where(RunSnapshot.run_id == run_id))
+            tasks = frozen.canonical_body.get("inputs", {}).get("tasks", [])
+            data["snapshot"]["dataset_configurations"] = [
+                {
+                    **{
+                        k: t.get(k)
+                        for k in (
+                            "dataset",
+                            "compilation_id",
+                            "manifest_id",
+                            "manifest_sha256",
+                            "concurrency",
+                            "tool",
+                        )
+                    },
+                    "config": t.get("compilation", {}).get("config"),
+                }
+                for t in tasks
+            ]
+    else:
+        snap = data.get("snapshot") or {}
+        data["datasets"] = [
+            {
+                "id": str(run_id),
+                "dataset": snap.get("dataset_key", "GPQA"),
+                "state": data["state"],
+                "summary": (data.get("report") or {}).get("summary"),
+                "actual_duration_sec": None,
+                "started_at": None,
+                "finished_at": None,
+            }
+        ]
+    return result
+
+
+@router.get("/{run_id}/report")
+async def task_report(run_id: uuid.UUID, request: Request):
+    from autoeval.evaluations import report_evidence
+    from autoeval.planning import run_report
+
+    async with request.app.state.sessions() as session:
+        row = await session.get(EvaluationRun, run_id)
+        if not row or row.trigger_scope not in SCOPES:
+            raise HTTPException(404, "Evaluation task not found")
+        grouped = row.trigger_scope == "local-operator:orchestration"
+    try:
+        return (
+            await run_report(run_id, request) if grouped else await report_evidence(run_id, request)
+        )
+    except (BotoCoreError, ClientError) as exc:
+        raise HTTPException(503, "Report evidence unavailable or integrity check failed") from exc
+
+
+@router.post("/{run_id}/cancel", status_code=202)
+async def cancel_task(run_id: uuid.UUID, request: Request):
+    from datetime import UTC, datetime
+
+    async with request.app.state.sessions() as session, session.begin():
+        row = await session.get(EvaluationRun, run_id, with_for_update=True)
+        if not row or row.trigger_scope not in SCOPES:
+            raise HTTPException(404, "Evaluation task not found")
+        accepted = row.state not in {"completed", "failed", "cancelled"}
+        if accepted and row.cancel_requested_at is None:
+            row.cancel_requested_at = datetime.now(UTC)
+        return envelope({"accepted": accepted}, request)
+
+
+@router.post("/{run_id}/cleanup", status_code=202)
+async def cleanup_task(run_id: uuid.UUID, request: Request):
+    return await retry_cleanup(run_id, request)

@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Header, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 from sqlalchemy import DateTime, String, select, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -71,10 +71,19 @@ class ProbeInput(ResourceRef):
 
 
 class TaskInput(Strict):
+    concurrency: int | None = Field(default=None, ge=1, le=256)
     task_id: str = Field(pattern=r"^[a-zA-Z0-9_-]{1,64}$")
     compilation_id: uuid.UUID
     manifest_id: uuid.UUID
     dataset: Literal["GPQA", "MMMU-Pro", "DeepSWE", "AutomationBench"]
+
+    @model_serializer(mode="wrap")
+    def serialize(self, handler):
+        value = handler(self)
+        # Preserve old request hashes when callers do not supply the new optional setting.
+        if self.concurrency is None:
+            value.pop("concurrency", None)
+        return value
 
 
 class PlanInput(ResourceRef):
@@ -141,6 +150,8 @@ async def resolve_inputs(session, settings, body):
     target = await target_data(session, body.target_id)
     tasks = []
     for spec in body.tasks:
+        if spec.manifest_id in settings.archived_manifest_ids:
+            raise HTTPException(409, "该样本清单已归档，请重新选择可用清单")
         compilation = await session.get(StandardInputCompilation, spec.compilation_id)
         manifest = await session.get(DatasetManifest, spec.manifest_id)
         if not compilation or not manifest:
@@ -172,6 +183,11 @@ async def resolve_inputs(session, settings, body):
         source_input = await session.get(StandardInputVersion, compilation.input_id)
         if source_input.benchmark != ("GPQA_Diamond" if spec.dataset == "GPQA" else spec.dataset):
             raise HTTPException(422, "Compilation dataset identity mismatch")
+        if spec.concurrency is not None:
+            try:
+                compiled = apply_concurrency(compiled, spec.concurrency)
+            except ValueError as exc:
+                raise HTTPException(422, str(exc)) from exc
         config = compiled["config"]
         params = config["params"]
         if config["subcommand"] == "llm_accuracy":
@@ -182,12 +198,19 @@ async def resolve_inputs(session, settings, body):
             params["dump_eval_details"] = True
         if config["subcommand"] == "llm_accuracy" and len(params.get("datasets", [])) != 1:
             raise HTTPException(422, "Each compilation must select exactly one dataset")
-        if (spec.dataset in {"DeepSWE", "AutomationBench"}) != (config["subcommand"] == "harbor_agent"):
+        if (spec.dataset in {"DeepSWE", "AutomationBench"}) != (
+            config["subcommand"] == "harbor_agent"
+        ):
             raise HTTPException(422, "Dataset tool family mismatch")
         full = await session.get(DatasetManifest, profile.full_manifest_id)
         source = await asyncio.to_thread(read_manifest, settings, full)
         samples = [
-            dict(sample, tool_case_id=str(i) if spec.dataset not in {"DeepSWE", "AutomationBench"} else sample["sample_id"])
+            dict(
+                sample,
+                tool_case_id=str(i)
+                if spec.dataset not in {"DeepSWE", "AutomationBench"}
+                else sample["sample_id"],
+            )
             for i, sample in enumerate(source["samples"])
         ]
         if manifest.scope == "lite":
@@ -220,7 +243,11 @@ async def resolve_inputs(session, settings, body):
                 f"[{chosen[0]['tool_case_id']}:{int(chosen[-1]['tool_case_id']) + 1}]"
             )
         field = "batch_size" if config["subcommand"] == "llm_accuracy" else "n_concurrent_trials"
-        attempts = int(params.get("n_attempts", 1)) if spec.dataset in {"DeepSWE", "AutomationBench"} else 1
+        attempts = (
+            int(params.get("n_attempts", 1))
+            if spec.dataset in {"DeepSWE", "AutomationBench"}
+            else 1
+        )
         concurrency = int(params.get(field, 1))
         if not 1 <= concurrency <= 256 or not 1 <= attempts <= 100:
             raise HTTPException(422, "Invalid concurrency or attempts")
@@ -301,7 +328,10 @@ async def options(request: Request, offset: int = 0, limit: int = 100, include_t
         manifest_ids = {m for p in profiles for m in (p.full_manifest_id, p.lite_manifest_id) if m}
         manifests = list(
             await session.scalars(
-                select(DatasetManifest).where(DatasetManifest.id.in_(manifest_ids))
+                select(DatasetManifest).where(
+                    DatasetManifest.id.in_(manifest_ids),
+                    DatasetManifest.id.notin_(request.app.state.settings.archived_manifest_ids),
+                )
             )
         )
         return {
@@ -441,6 +471,29 @@ async def enqueue(kind, payload, request):
                     {"id": str(old.id), "state": old.state, "result": old.result}, request
                 )
             payload = {**payload, "intent_key": key}
+        if kind == "probe":
+            scope = ":".join(str(payload[k]) for k in ("target_id", "resource_kind", "resource_id"))
+            await session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
+                {"key": "probe-active:" + scope},
+            )
+            active = await session.scalar(
+                select(PlanningJob.id)
+                .where(
+                    PlanningJob.kind == "probe",
+                    PlanningJob.state.in_(["pending", "running", "unresolved"]),
+                    *[
+                        PlanningJob.payload[k].astext == str(payload[k])
+                        for k in ("target_id", "resource_kind", "resource_id")
+                    ],
+                )
+                .limit(1)
+            )
+            if active:
+                raise HTTPException(
+                    409,
+                    f"已有探测任务 {active} 尚未结束或状态待查证，请查询或取消原任务，不能重复启动",
+                )
         await artifact(session, request.app.state.settings, "job_input", payload)
         job = PlanningJob(kind=kind, payload=payload)
         session.add(job)
@@ -450,7 +503,11 @@ async def enqueue(kind, payload, request):
 
 @router.post("/probes", status_code=202)
 async def probe(body: ProbeInput, request: Request):
-    async with request.app.state.sessions() as session:
+    from autoeval.probe_dispatch import consumer_ready
+
+    async with request.app.state.sessions() as session, session.begin():
+        if not await consumer_ready(session):
+            raise HTTPException(503, "探测执行器未启用，未创建探测任务；请启动专用探测 Worker")
         await target_data(session, body.target_id)
     count = 2 * sum(max(n, body.requests_per_level) for n in body.concurrency)
     return await enqueue(
@@ -464,24 +521,173 @@ async def probe(body: ProbeInput, request: Request):
     )
 
 
+@router.get("/active-probe")
+async def active_probe(
+    target_id: uuid.UUID,
+    resource_id: uuid.UUID,
+    resource_kind: Literal["docker_local", "customer_ssh"],
+    request: Request,
+):
+    async with request.app.state.sessions() as session:
+        identifier = await session.scalar(
+            select(PlanningJob.id)
+            .where(
+                PlanningJob.kind == "probe",
+                PlanningJob.state.in_(["pending", "running", "unresolved"]),
+                PlanningJob.payload["target_id"].astext == str(target_id),
+                PlanningJob.payload["resource_id"].astext == str(resource_id),
+                PlanningJob.payload["resource_kind"].astext == resource_kind,
+            )
+            .order_by(PlanningJob.created_at.desc())
+            .limit(1)
+        )
+    return await job_status(identifier, request) if identifier else envelope(None, request)
+
+
 @router.get("/probes/{job_id}")
 async def job_status(job_id: uuid.UUID, request: Request):
     async with request.app.state.sessions() as session:
         row = await session.get(PlanningJob, job_id)
         if row is None:
             raise HTTPException(404, "Planning job not found")
+        result = row.result
+        if row.kind == "probe" and row.state == "pending":
+            from autoeval.probe_dispatch import consumer_ready
+
+            if not await consumer_ready(session, row.id, row.created_at):
+                result = {
+                    **(result or {}),
+                    "dispatch_blocked": True,
+                    "reason": "探测执行器未启用，尚未开始模型请求；请联系维护人员或取消探测",
+                }
         return envelope(
             {
                 "id": str(row.id),
                 "kind": row.kind,
                 "state": row.state,
-                "result": row.result,
+                "result": result,
                 "cancel_requested": row.cancel_requested,
                 "created_at": row.created_at.isoformat(),
                 "updated_at": row.updated_at.isoformat(),
             },
             request,
         )
+
+
+class CloseProbe(Strict):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    reason: str = Field(min_length=5, max_length=1000)
+    acknowledge_unknown: Literal[True]
+
+
+@router.post("/probes/{job_id}/reconcile")
+async def reconcile_probe(job_id: uuid.UUID, request: Request):
+    from autoeval.contracts import JobRef
+    from autoeval.planning_transport import transport
+
+    async with request.app.state.sessions() as session, session.begin():
+        idle = await session.scalar(
+            text("SELECT pg_try_advisory_xact_lock(hashtext(:key))"),
+            {"key": "planning:" + str(job_id)},
+        )
+        if not idle:
+            raise HTTPException(409, "后台正在处理此探测，请稍后查询")
+        row = await session.get(PlanningJob, job_id, with_for_update=True)
+        if not row or row.kind != "probe":
+            raise HTTPException(404, "Probe not found")
+        if row.state in {"completed", "failed", "cancelled"}:
+            return envelope({"id": str(row.id), "state": row.state, "result": row.result}, request)
+        try:
+            adapter = await transport(session, request.app.state.settings, row.payload)
+            observed = await adapter.status(
+                JobRef(external_job_id=str(job_id), submission_key=str(job_id))
+            )
+        except Exception:  # noqa: BLE001 -- do not expose remote credentials or retry generation
+            raise HTTPException(503, "远程查证失败，未改变任务状态；不会重新提交模型请求") from None
+        check = {
+            "state": observed.state,
+            "checked_at": datetime.now(UTC).isoformat(),
+            "scope": "current_pinned_runtime",
+        }
+        result = {
+            **(row.result or {}),
+            "original_result": (row.result or {}).get("original_result", row.result),
+            "remote_check": check,
+        }
+        if observed.state == "unknown":
+            result["reason"] = (
+                "当前固定执行环境未找到原作业；历史结果及用量未知。可由操作员确认后结束历史记录，不代表探测成功或从未调用模型。"
+            )
+        elif observed.state in {"failed", "cancelled"}:
+            row.state = observed.state
+            result["reason"] = "远程已确认探测终止；未重新提交模型请求"
+        elif observed.state == "succeeded":
+            result["reason"] = "远程执行已结束，结果尚需归档；不能直接视为有效吞吐曲线"
+        else:
+            result["reason"] = "远程作业仍存在，请等待或申请取消；不会重复提交"
+        row.result = result
+        return envelope(
+            {
+                "id": str(row.id),
+                "state": row.state,
+                "created_at": row.created_at.isoformat(),
+                "updated_at": row.updated_at.isoformat(),
+                "result": row.result,
+            },
+            request,
+        )
+
+
+@router.post("/probes/{job_id}/close")
+async def close_probe(job_id: uuid.UUID, body: CloseProbe, request: Request):
+    from autoeval.audit import AuditEvent
+
+    async with request.app.state.sessions() as session, session.begin():
+        idle = await session.scalar(
+            text("SELECT pg_try_advisory_xact_lock(hashtext(:key))"),
+            {"key": "planning:" + str(job_id)},
+        )
+        if not idle:
+            raise HTTPException(409, "后台正在处理，不能结束记录")
+        row = await session.get(PlanningJob, job_id, with_for_update=True)
+        if not row or row.kind != "probe":
+            raise HTTPException(404, "Probe not found")
+        check = (row.result or {}).get("remote_check", {})
+        if (
+            row.state != "unresolved"
+            or check.get("state") != "unknown"
+            or datetime.fromisoformat(check["checked_at"])
+            < datetime.now(UTC) - timedelta(minutes=10)
+        ):
+            raise HTTPException(409, "请先进行远程查证；仅允许结束最近已查证但结果仍未知的历史记录")
+        before = row.result
+        row.state = "failed"
+        row.result = {
+            **(before or {}),
+            "reason": "历史探测已人工结案，执行结果及用量仍未知，不生成曲线",
+            "closure": {
+                "reason": body.reason,
+                "closed_at": datetime.now(UTC).isoformat(),
+                "execution_outcome": "unknown",
+            },
+        }
+        session.add(
+            AuditEvent(
+                actor="local-operator",
+                action="probe_history_closed",
+                resource_type="planning_job",
+                resource_id=str(row.id),
+                run_id=None,
+                outcome="failed",
+                request_id=request.state.request_id,
+                details={
+                    "reason": body.reason,
+                    "previous_result": before,
+                    "execution_outcome": "unknown",
+                },
+            )
+        )
+        return envelope({"id": str(row.id), "state": row.state, "result": row.result}, request)
 
 
 @router.post("/probes/{job_id}/cancel", status_code=202)
@@ -492,6 +698,15 @@ async def cancel_job(job_id: uuid.UUID, request: Request):
             raise HTTPException(404, "Planning job not found")
         if row.state in {"pending", "running", "unresolved"}:
             row.cancel_requested = True
+            if row.kind == "probe" and row.state == "pending":
+                # Exclude a concurrent worker before confirming that no remote submit occurred.
+                idle = await session.scalar(
+                    text("SELECT pg_try_advisory_xact_lock(hashtext(:key))"),
+                    {"key": "planning:" + str(job_id)},
+                )
+                if idle:
+                    row.state = "cancelled"
+                    row.updated_at = datetime.now(UTC)
         return envelope({"accepted": row.cancel_requested}, request)
 
 
@@ -530,6 +745,7 @@ def selection_identity(inputs):
                     for key in ("task_id", "dataset", "compilation_id", "manifest_id")
                 },
                 "profile_sha256": task.get("profile_sha256"),
+                "concurrency": task.get("concurrency"),
             }
             for task in inputs.get("tasks", [])
         ),

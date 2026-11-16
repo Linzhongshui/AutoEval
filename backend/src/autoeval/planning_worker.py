@@ -1,7 +1,10 @@
 """Durable planning worker: python -m autoeval.planning_worker."""
 
 import asyncio
+import logging
 import os
+import traceback
+import uuid
 from datetime import UTC, datetime
 
 from sqlalchemy import select, text
@@ -16,12 +19,18 @@ from autoeval.secrets import FileSecretStore
 from autoeval.targets import TargetBinding, validate_url
 
 
+class ProbePreflightBlocked(ValueError):
+    """No generating submission has been attempted by this pending probe."""
+
+
 async def set_job(sessions, identifier, **values):
     async with sessions() as session, session.begin():
         row = await session.get(PlanningJob, identifier, with_for_update=True)
         if values.get("state") == "completed" and row.cancel_requested:
             values["state"] = "cancelled"
         for key, value in values.items():
+            if key == "result" and isinstance(value, dict):
+                value = {**(row.result or {}), **value}
             setattr(row, key, value)
         row.updated_at = datetime.now(UTC)
 
@@ -36,7 +45,8 @@ async def execute_job(sessions, settings, identifier):
             await set_job(sessions, identifier, state="cancelled")
             return
         adapter = await transport(session, settings, inputs)
-    await set_job(sessions, identifier, state="running")
+    if kind != "probe" or previous != "pending":
+        await set_job(sessions, identifier, state="running")
     if kind == "preflight":
         checks = [
             {key: item[key] for key in ("task_id", "dataset", "compilation", "tool")}
@@ -150,10 +160,22 @@ async def execute_job(sessions, settings, identifier):
     # Remote probe submission is never automatically repeated after an uncertain response.
     async with sessions() as session:
         snapshot = await current_preflight(session, inputs, require_selection=False)
-        if not snapshot or not snapshot.payload.get("planner_ready"):
-            raise ValueError("Fresh resource preflight with pinned Planner required")
-        if max(inputs["concurrency"]) > snapshot.payload["max_probe_concurrency"]:
-            raise ValueError("Probe exceeds configured service concurrency")
+        if previous == "pending":
+            # Selection preflight may expire while users review budgets. Refresh read-only
+            # environment evidence here; never let a stale check imply a model was called.
+            resource = snapshot.payload if snapshot else None
+            if not resource or not resource.get("planner_ready"):
+                try:
+                    resource = await adapter.preflight()
+                except Exception as exc:
+                    raise ProbePreflightBlocked(
+                        "探测前环境检查失败，未提交模型请求，请检查执行资源后重试"
+                    ) from exc
+            if not resource.get("planner_ready"):
+                raise ProbePreflightBlocked("探测组件版本未就绪，未提交模型请求")
+            maximum = resource.get("max_probe_concurrency")
+            if not isinstance(maximum, int) or max(inputs["concurrency"]) > maximum:
+                raise ProbePreflightBlocked("探测并发超过资源允许范围，未提交模型请求")
         target = await session.get(TargetBinding, inputs["target_id"])
         validate_url(target.base_url, settings.allowed_model_hosts)
         spec = {
@@ -168,6 +190,12 @@ async def execute_job(sessions, settings, identifier):
         }
     key = str(identifier)
     if previous == "pending":
+        async with sessions() as session:
+            cancelled = (await session.get(PlanningJob, identifier)).cancel_requested
+        if cancelled:
+            await set_job(sessions, identifier, state="cancelled")
+            return
+        await set_job(sessions, identifier, state="running")
         job = await adapter.submit(spec, key)
     else:
         from autoeval.contracts import JobRef
@@ -238,6 +266,33 @@ async def execute_job(sessions, settings, identifier):
 async def serve():
     settings = get_settings()
     engine, sessions = create_database(settings)
+    probe_ids = [
+        uuid.UUID(v.strip())
+        for v in os.environ.get("AE_PLANNING_PROBE_JOB_IDS", "").split(",")
+        if v.strip()
+    ]
+    kinds = os.environ.get("AE_PLANNING_JOB_KINDS", "preflight,plan").split(",")
+    cutoff_value = os.environ.get("AE_PLANNING_PROBE_ACCEPT_AFTER")
+    cutoff = datetime.fromisoformat(cutoff_value) if cutoff_value else None
+    if cutoff is not None and cutoff.tzinfo is None:
+        raise ValueError("Probe cutoff must include timezone")
+    consumer = None
+    if "probe" in kinds:
+        from autoeval.probe_dispatch import consumer_key
+
+        consumer = await engine.connect()
+        for key in (
+            [consumer_key(v) for v in probe_ids] if probe_ids and not cutoff else [consumer_key()]
+        ):
+            await consumer.execute(
+                text("SELECT pg_advisory_lock_shared(hashtext(:key))"), {"key": key}
+            )
+        if cutoff:
+            await consumer.execute(
+                text("SELECT pg_advisory_lock_shared(1095062608, :cutoff)"),
+                {"cutoff": int(cutoff.timestamp())},
+            )
+        await consumer.commit()
     try:
         while True:
             async with sessions() as session:
@@ -258,6 +313,16 @@ async def serve():
                                 )
                             ),
                         )
+                        .where(
+                            (PlanningJob.kind != "probe")
+                            | (
+                                PlanningJob.id.in_(probe_ids)
+                                | (PlanningJob.created_at >= cutoff if cutoff else False)
+                            )
+                            if probe_ids or cutoff
+                            else True
+                        )
+                        .where(PlanningJob.kind.in_(kinds))
                         .order_by(PlanningJob.created_at)
                         .limit(20)
                     )
@@ -273,18 +338,40 @@ async def serve():
                         continue
                     try:
                         await execute_job(sessions, settings, identifier)
-                    except Exception:  # noqa: BLE001 -- isolate third-party errors without leaking credentials
+                    except Exception as exc:  # noqa: BLE001 -- isolate third-party errors without leaking credentials
+                        # Do not log exception messages or locals: third-party errors may contain keys.
+                        logging.getLogger(__name__).error(
+                            "Planning job failed job=%s exception_type=%s frames=%s",
+                            identifier,
+                            type(exc).__name__,
+                            [
+                                (
+                                    PathFrame.filename.rsplit("/", 1)[-1],
+                                    PathFrame.lineno,
+                                    PathFrame.name,
+                                )
+                                for PathFrame in traceback.extract_tb(exc.__traceback__)
+                            ],
+                        )
                         async with sessions() as session:
                             failed = await session.get(PlanningJob, identifier)
                             uncertain = (
-                                failed.kind in {"probe", "plan"} and failed.state == "running"
+                                failed.kind in {"probe", "plan"}
+                                and failed.state == "running"
+                                and not isinstance(exc, ProbePreflightBlocked)
                             )
                         await set_job(
                             sessions,
                             identifier,
                             state="unresolved" if uncertain else "failed",
                             result={
-                                "reason": "Planning operation failed; check resource preflight and pinned inputs"
+                                "reason": str(exc)
+                                if isinstance(exc, ProbePreflightBlocked)
+                                else "操作失败，请检查执行资源与工具版本；未确认提交结果前不会自动重试",
+                                "error_code": "probe_preflight_blocked"
+                                if isinstance(exc, ProbePreflightBlocked)
+                                else "planning_operation_failed",
+                                "exception_type": type(exc).__name__,
                             },
                         )
                     finally:
@@ -293,6 +380,8 @@ async def serve():
                         )
             await asyncio.sleep(settings.poll_seconds)
     finally:
+        if consumer is not None:
+            await consumer.close()
         await engine.dispose()
 
 

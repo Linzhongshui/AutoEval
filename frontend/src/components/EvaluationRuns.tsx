@@ -13,15 +13,23 @@ import {
 } from "../services/evaluation";
 import { CaseHistory } from "./CaseHistory";
 
-type Run = { report_id?: string | null; id: string; state: string; remote_model?: string; resource_kind?: string; created_at: string };
+type Run = { report_id?: string | null; id: string; state: string; remote_model?: string; resource_kind?: string; created_at: string; datasets?: string[] };
 type Snapshot = { sha256: string; config_version_id: string; config_sha256: string; target_id: string; remote_model: string; resource_kind: string; sample_count: number; parameters: Record<string, unknown>; manifest_id: string; manifest_sha256: string; tool?: Record<string, unknown>; profile_id?: string; max_model_requests?: number; execution_origin: string };
-type Detail = Run & { updated_at?: string; cancel_requested_at?: string; events?: { seq: number; type: string; created_at: string }[]; run_mode: string; gate_status: string; snapshot: Snapshot | null; execution_unresolved: boolean; cleanup: { state: string; attempt_count: number; last_error_code: string | null }; report: null | { id: string; validity: string; summary: Record<string, unknown> } };
+type DatasetResult = { id: string; dataset: string; state: string; summary?: Record<string, unknown> | null; actual_duration_sec?: number | null };
+type Detail = Omit<Run, "datasets"> & { datasets?: DatasetResult[]; dataset_report?: { datasets?: DatasetResult[] } | null; updated_at?: string; cancel_requested_at?: string; events?: { seq: number; type: string; created_at: string }[]; run_mode: string; gate_status: string; snapshot: Snapshot | null; execution_unresolved: boolean; cleanup: { state: string; attempt_count: number; last_error_code: string | null }; report: null | { id: string; validity: string; summary: Record<string, unknown> } };
 const terminal = (state: string) => ["completed", "failed", "cancelled"].includes(state);
 const resourceLabel = (kind?: string) => kind === "aisbench_monitor" ? "远程 AISBench" : kind === "customer_ssh" ? "客户 SSH 服务器" : "本机 Docker";
 const time = (value?: string) => value && !Number.isNaN(Date.parse(value)) ? new Date(value).toLocaleString("zh-CN") : "暂无记录";
+const datasetProgress = (summary?: Record<string, unknown> | null) => {
+  const progress = summary?.progress;
+  if (!progress || typeof progress !== "object") return "未采集样本进度";
+  const p = progress as Record<string, unknown>;
+  return typeof p.finish_count === "number" && typeof p.total_count === "number"
+    ? `已完成 ${p.finish_count}/${p.total_count}${p.stale ? "（已过期）" : ""}` : "执行状态已采集，等待样本计数";
+};
 const stateLabel = (value: string) => ({ completed: "已完成", failed: "执行失败", cancelled: "已取消" }[value] || "执行中");
 
-export function EvaluationRuns({ runId = "", initialTarget = "", allowSubmit = true }: { runId?: string; initialTarget?: string; allowSubmit?: boolean }) {
+export function EvaluationRuns({ runId = "", initialTarget = "", allowSubmit = false }: { runId?: string; initialTarget?: string; allowSubmit?: boolean }) {
   const configs = useOptions<Config>("/test-configs");
   const targets = useOptions<Target>("/target-bindings");
   const docker = useOptions<Resource>("/resources");
@@ -33,6 +41,7 @@ export function EvaluationRuns({ runId = "", initialTarget = "", allowSubmit = t
   const [resource, setResource] = useState<Resource | null>(null);
   const { config, setConfig, loadingDefault, defaultError, setDefaultError, reloadDefault } = useDefaultConfig(target);
   const { busy, setBusy, message, setMessage, submit } = useExplorationSubmission();
+  const [statistics, setStatistics] = useState({ total: 0, active: 0, completed: 0, failed_cancelled: 0 });
   const [runs, setRuns] = useState<Run[]>([]);
   const [offset, setOffset] = useState(0);
   const [pageSize,setPageSize] = useState(5);
@@ -41,6 +50,7 @@ export function EvaluationRuns({ runId = "", initialTarget = "", allowSubmit = t
   const [listError, setListError] = useState("");
   const [detailTab, setDetailTab] = useState("执行进度");
   const [detail, setDetail] = useState<Detail | null>(null);
+  const [reportEvidence, setReportEvidence] = useState<unknown>(null);
   const [lastRefresh, setLastRefresh] = useState(0);
   const [detailError, setDetailError] = useState("");
   const [statusFilter, setStatusFilter] = useState("全部状态");
@@ -68,14 +78,15 @@ export function EvaluationRuns({ runId = "", initialTarget = "", allowSubmit = t
       if (refreshing || document.hidden) return;
       refreshing = true;
       try {
-        const page = await apiGetPage<Run[]>(`/runs?offset=${offset}&limit=${pageSize}`, controller.signal);
-        if (!controller.signal.aborted) { setRuns(page.data); setNext(page.next_offset); setListError(""); setListLoading(false); }
+        const page = await apiGetPage<Run[]>(`/evaluation-tasks?offset=${offset}&limit=${pageSize}&state=${encodeURIComponent(statusFilter === "全部状态" ? "" : statusFilter === "执行中" ? "active" : statusFilter)}&resource_kind=${encodeURIComponent(resourceFilter === "全部资源" ? "" : resourceFilter)}&query=${encodeURIComponent(query)}`, controller.signal);
+        if (!controller.signal.aborted) { setRuns(page.data); setNext(page.next_offset); if (page.statistics) setStatistics(page.statistics); setListError(""); setListLoading(false); }
       } catch { if (!controller.signal.aborted) { setListError("任务列表查询失败，恢复连接后自动重试；不能据此判断没有任务。"); setListLoading(false); } }
       finally { refreshing = false; }
     };
     void refresh(); const timer = setInterval(() => void refresh(), 5000);
     return () => { controller.abort(); clearInterval(timer); };
-  }, [offset, runId, pageSize]);
+  }, [offset, runId, pageSize, statusFilter, resourceFilter, query]);
+  useEffect(() => { setOffset(0); }, [statusFilter, resourceFilter, query]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -86,7 +97,7 @@ export function EvaluationRuns({ runId = "", initialTarget = "", allowSubmit = t
       if (refreshing || document.hidden) return;
       refreshing = true;
       try {
-        const row = await apiGet<Detail>(`/runs/${encodeURIComponent(runId)}`, controller.signal);
+        const row = await apiGet<Detail>(`/evaluation-tasks/${encodeURIComponent(runId)}`, controller.signal);
         if (!controller.signal.aborted) { setDetail(row); setLastRefresh(Date.now()); setDetailError(""); }
       } catch { if (!controller.signal.aborted) setDetailError("任务不存在或查询失败；已显示的状态可能过期，请勿据此重新提交。"); }
       finally { refreshing = false; }
@@ -97,19 +108,14 @@ export function EvaluationRuns({ runId = "", initialTarget = "", allowSubmit = t
 
   const action = async (kind: "cancel" | "cleanup") => {
     setBusy(true);
-    try { await apiPost(`/runs/${runId}/${kind}`); setMessage(kind === "cleanup" ? "清理意图已保存；后台核验归档后重试，不会重新测评。" : "取消意图已保存；等待当前请求返回后停止后续样本，已产生的用量不会撤销。"); }
+    try { await apiPost(`/evaluation-tasks/${runId}/${kind}`); setMessage(kind === "cleanup" ? "清理意图已保存；后台核验归档后重试，不会重新测评。" : "取消意图已保存；等待当前请求返回后停止后续样本，已产生的用量不会撤销。"); }
     catch { setMessage("操作未确认，请查询任务状态后重试。"); }
     finally { setBusy(false); }
   };
   const configRows = withSelected(configs.rows.filter(eligibleConfig), config);
   const targetRows = withSelected(targets.rows.filter(eligibleTarget), target);
   const resourceRows = withSelected(resources.rows.filter((row) => resourceKind !== "customer_ssh" || row.native_tool_root), resource);
-  const filteredRuns = runs.filter((row) => {
-    const statusMatches = statusFilter === "全部状态" || (statusFilter === "执行中" ? !terminal(row.state) : row.state === statusFilter);
-    const resourceMatches = resourceFilter === "全部资源" || row.resource_kind === resourceFilter;
-    const queryMatches = `${row.id} ${row.remote_model || ""}`.toLowerCase().includes(query.toLowerCase());
-    return statusMatches && resourceMatches && queryMatches;
-  });
+  const filteredRuns = runs;
 
   return (
     <div className="stack evaluation-runs">
@@ -132,21 +138,21 @@ export function EvaluationRuns({ runId = "", initialTarget = "", allowSubmit = t
 
       {!runId && !initialTarget && (
         <>
-          <div className="stats task-stats" aria-label="当前页任务统计">
-            <section className="card"><div className="stat-icon"><Layers /></div><div>当前页任务<strong>{runs.length}</strong></div></section>
-            <section className="card"><div className="stat-icon tone-1"><Play /></div><div>当前页执行中<strong>{runs.filter((row) => !terminal(row.state)).length}</strong></div></section>
-            <section className="card"><div className="stat-icon tone-2"><CheckCircle2 /></div><div>当前页已完成<strong>{runs.filter((row) => row.state === "completed").length}</strong></div></section>
-            <section className="card"><div className="stat-icon tone-3"><CircleAlert /></div><div>当前页失败 / 取消<strong>{runs.filter((row) => ["failed", "cancelled"].includes(row.state)).length}</strong></div></section>
+          <div className="stats task-stats" aria-label="筛选结果任务统计">
+            <section className="card"><div className="stat-icon"><Layers /></div><div>筛选结果任务<strong>{statistics.total}</strong></div></section>
+            <section className="card"><div className="stat-icon tone-1"><Play /></div><div>执行中<strong>{statistics.active}</strong></div></section>
+            <section className="card"><div className="stat-icon tone-2"><CheckCircle2 /></div><div>已完成<strong>{statistics.completed}</strong></div></section>
+            <section className="card"><div className="stat-icon tone-3"><CircleAlert /></div><div>失败 / 取消<strong>{statistics.failed_cancelled}</strong></div></section>
           </div>
           <section className="card stack">
-            <div className="spread"><div><h2>测评任务</h2><p className="muted">统计与筛选范围为当前页。</p></div><a className="link" href="#console">发起探索测评</a></div>
+            <div className="spread"><div><h2>测评任务</h2><p className="muted">统计与筛选覆盖全部匹配任务；列表按页展示。</p></div><a className="link" href="#console">发起测评</a></div>
             <div className="filters">
               <label className="select-field"><span>状态</span><select aria-label="任务状态筛选" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option>全部状态</option><option>执行中</option><option value="completed">已完成</option><option value="failed">执行失败</option><option value="cancelled">已取消</option></select></label>
               <label className="select-field"><span>资源</span><select aria-label="任务资源筛选" value={resourceFilter} onChange={(event) => setResourceFilter(event.target.value)}><option value="全部资源">全部资源</option><option value="docker_local">本机 Docker</option><option value="customer_ssh">客户 SSH 服务器</option><option value="aisbench_monitor">远程 AISBench</option></select></label>
               <label className="search"><input aria-label="搜索任务" placeholder="搜索任务 ID 或模型" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
             </div>
 
-            <div className="table-wrap"><table className="evaluation-run-table"><thead><tr><th>任务</th><th>模型</th><th>运行方式</th><th>资源</th><th>状态</th><th>报告</th><th>创建时间</th><th>操作</th></tr></thead><tbody>{filteredRuns.map((row) => <tr key={row.id}><td><a className="link strong" href={runLink(row.id)} title={row.id}>任务 {row.id.slice(0, 8)}</a></td><td>{row.remote_model || "—"}</td><td>GPQA Lite · 探索</td><td>{resourceLabel(row.resource_kind)}</td><td><span className={`run-state-badge ${row.state === "completed" ? "passed" : ["failed", "cancelled"].includes(row.state) ? "error" : "running"}`}>{{ completed: "已完成", failed: "执行失败", cancelled: "已取消" }[row.state] || "执行中"}</span></td><td>{row.report_id ? <a className="run-report-action" aria-label={`查看任务 ${row.id.slice(0, 8)} 的报告`} href={`#report/${row.report_id}`}>查看报告</a> : <span className="run-report-empty">未生成</span>}</td><td>{time(row.created_at)}</td><td><a className="link" href={runLink(row.id)}>查看</a></td></tr>)}</tbody></table>{!filteredRuns.length && <div className="empty">{listLoading ? "任务加载中…" : listError ? "任务查询失败" : "当前页没有符合条件的任务"}</div>}</div>
+            <div className="table-wrap"><table className="evaluation-run-table"><thead><tr><th>任务</th><th>模型</th><th>运行方式</th><th>资源</th><th>状态</th><th>报告</th><th>创建时间</th><th>操作</th></tr></thead><tbody>{filteredRuns.map((row) => <tr key={row.id}><td><a className="link strong" href={runLink(row.id)} title={row.id}>任务 {row.id.slice(0, 8)}</a></td><td>{row.remote_model || "—"}</td><td>{row.datasets?.join("、") || "历史测评"}</td><td>{resourceLabel(row.resource_kind)}</td><td><span className={`run-state-badge ${row.state === "completed" ? "passed" : ["failed", "cancelled"].includes(row.state) ? "error" : "running"}`}>{{ completed: "已完成", failed: "执行失败", cancelled: "已取消" }[row.state] || "执行中"}</span></td><td>{row.report_id ? <a className="run-report-action" aria-label={`查看任务 ${row.id.slice(0, 8)} 的报告`} href={`#report/${row.report_id}`}>查看报告</a> : <span className="run-report-empty">未生成</span>}</td><td>{time(row.created_at)}</td><td><a className="link" href={runLink(row.id)}>查看</a></td></tr>)}</tbody></table>{!filteredRuns.length && <div className="empty">{listLoading ? "任务加载中…" : listError ? "任务查询失败" : "当前页没有符合条件的任务"}</div>}</div>
             <ListPagination label="任务" offset={offset} nextOffset={next} pageSize={pageSize} onOffsetChange={setOffset} onPageSizeChange={setPageSize} disabled={busy} />
           </section>
         </>
@@ -171,15 +177,16 @@ export function EvaluationRuns({ runId = "", initialTarget = "", allowSubmit = t
             <RunMonitor runId={detail.id} terminal={terminal(detail.state)} />
           ) : <>
             <section className="detail-progress">
-              <div className="spread"><b>GPQA 执行状态</b><span>{stateLabel(detail.state)} · GPQA Lite</span></div>
+              <div className="spread"><b>测评执行状态</b><span>{stateLabel(detail.state)} · {detail.datasets?.map(d => d.dataset).join("、") || "测评任务"}</span></div>
               {detailError && <p className="notice" role="alert">当前展示为上次查询结果，状态可能过期；恢复连接后自动刷新。</p>}
               {detail.state === "failed" && <p role="alert">执行失败。请查看下方 Case 的错误类别和证据，确认原因后再决定后续操作。<button className="link" onClick={() => document.getElementById("case-detail")?.scrollIntoView({ behavior: "smooth", block: "start" })}>定位失败记录</button></p>}
-              <RunProgress runId={detail.id} terminal={terminal(detail.state)} state={detail.state} createdAt={detail.created_at} events={detail.events} stage={({ accepted: "已接收，等待调度", queued: "排队中", preparing: "准备执行环境", running: "测评执行中", aggregating: "收集结果与生成报告", completed: "执行结束", cancelling: "取消确认中，仍可能保留资源占用", cancelled: "取消已确认", failed: "执行失败" } as Record<string, string>)[detail.state] || "状态待确认"} />
+              <RunProgress showSampleProgress={(detail.datasets?.length || 0) <= 1} runId={detail.id} terminal={terminal(detail.state)} state={detail.state} createdAt={detail.created_at} events={detail.events} stage={({ accepted: "已接收，等待调度", queued: "排队中", preparing: "准备执行环境", running: "测评执行中", aggregating: "收集结果与生成报告", completed: "执行结束", cancelling: "取消确认中，仍可能保留资源占用", cancelled: "取消已确认", failed: "执行失败" } as Record<string, string>)[detail.state] || "状态待确认"} />
               {detail.cancel_requested_at && <p>取消请求：{time(detail.cancel_requested_at)}；以终止确认及清理状态为准。</p>}
               <p className="muted">{detail.report ? "报告已归档，当前仅展示历史执行统计；成绩与证据完整性请查看报告。" : "报告尚未归档；工具进度来自监控观测，不代表评分结论。"}</p>
               <p className="muted">执行成功与判分通过分别记录；Case 列表保留每次尝试，缺失值不补零。</p>
             </section>
             <div className="task-overview-stats">{[["计划样本", detail.snapshot?.sample_count], ["执行成功", detail.report?.summary.successful_samples], ["执行失败", detail.report?.summary.failed_samples], ["缺测样本", detail.report?.summary.missing_samples], ["判分准确率", typeof detail.report?.summary.accuracy === "number" ? `${detail.report.summary.accuracy}%` : "—"], ["报告有效性", detail.report?.validity || "—"]].map(([label, value]) => <div className="case-stat" key={String(label)}><span>{String(label)}</span><strong>{value === undefined || value === null ? "—" : String(value)}</strong></div>)}</div>
+            {!!detail.datasets?.length && <section className="card stack" aria-label="数据集执行结果"><h3>数据集执行结果</h3><div className="table-wrap"><table><thead><tr><th>数据集</th><th>状态</th><th>已归档样本</th><th>准确率</th><th>耗时</th><th>失败原因</th></tr></thead><tbody>{detail.datasets.map(d => <tr key={d.id}><td>{d.dataset}</td><td>{({ succeeded: "执行完成", completed: "已完成", failed: "执行失败", cancelled: "已取消", pending: "待执行", submitting: "准备执行", running: "执行中", unresolved: "状态待查证" } as Record<string, string>)[d.state] || d.state}<small>{datasetProgress(d.summary)}</small></td><td>{String(d.summary?.observed_cases ?? "—")} / {String(d.summary?.expected_cases ?? "—")}</td><td>{typeof d.summary?.accuracy === "number" ? `${d.summary.accuracy}%` : "—"}</td><td>{d.actual_duration_sec == null ? "—" : `${d.actual_duration_sec.toFixed(1)}秒`}</td><td>{String(d.summary?.diagnostic ?? d.summary?.reason ?? "—")}</td></tr>)}</tbody></table></div><p className="muted">各数据集历史执行摘要独立展示，不生成跨数据集综合分；成绩有效性以归档证据核验为准。</p>{detail.dataset_report && <ManagementDrawer title="数据集报告与证据"><p>读取归档对象时核验哈希；不能读取时不以历史摘要替代。</p><button onClick={() => void apiGet(`/evaluation-tasks/${detail.id}/report`).then(setReportEvidence).catch(() => setMessage("报告证据读取或完整性校验失败"))}>读取归档报告</button>{reportEvidence != null && <pre className="snapshot">{JSON.stringify(reportEvidence, null, 2)}</pre>}</ManagementDrawer>}</section>}
             <section id="case-detail" data-testid="case-detail">
               <CaseHistory key={`${detail.id}:${terminal(detail.state)}`} initialRun={detail.id} />
             </section>

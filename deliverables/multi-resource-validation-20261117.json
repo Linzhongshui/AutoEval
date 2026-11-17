@@ -1,0 +1,31 @@
+{
+  "preflight_job_id": "e113094d-3df1-4e1b-b93a-4e18a3a60503",
+  "assignments": {
+    "GPQA": "51278e81-b71b-4425-b89f-fd90ce287402",
+    "AutomationBench": "c84c335e-2249-40a1-b856-613a607d2f23"
+  },
+  "execution_ready": true,
+  "dataset_checks": [
+    {
+      "dataset": "GPQA",
+      "task_id": "GPQA",
+      "data_path": "/benchmark/ais_bench/datasets",
+      "tool_root": "/benchmark",
+      "tool_revision": "525ed1779f50a8ac068b8638771f633a151e769f",
+      "blocking_reasons": [],
+      "expected_tool_revision": "525ed1779f50a8ac068b8638771f633a151e769f"
+    },
+    {
+      "dataset": "AutomationBench",
+      "task_id": "AutomationBench",
+      "data_path": "/home/chenluwen/autoeval-automationbench-acceptance-20261116/tasks-public",
+      "tool_root": "/benchmark",
+      "tool_revision": "698ff2d1e027c07df37bdd158b62aace2a41ae3b",
+      "blocking_reasons": [],
+      "expected_tool_revision": "698ff2d1e027c07df37bdd158b62aace2a41ae3b"
+    }
+  ],
+  "pool_change": "incompatible_selection_cleared",
+  "page_errors": [],
+  "model_calls": 0
+}

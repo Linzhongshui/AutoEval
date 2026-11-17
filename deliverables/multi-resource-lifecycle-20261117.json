@@ -1,0 +1,48 @@
+{
+  "kind": "real_ssh_framework_smoke",
+  "model_calls": 0,
+  "results": [
+    {
+      "dataset": "GPQA",
+      "resource_id": "51278e81-b71b-4425-b89f-fd90ce287402",
+      "job_id": "bef07cbb-24a1-47c1-83dd-fdcfa43584c2",
+      "duplicate_submit": "same_job",
+      "restored_adapter_status": "succeeded",
+      "model_called": false,
+      "collection": "passed",
+      "cleanup": {
+        "state": "cleaned",
+        "observed_state": "succeeded",
+        "cleaned": true
+      },
+      "cancel_job_id": "4898863b-e880-4355-8c8f-9ba5526c33ee",
+      "cancel": "confirmed",
+      "cancel_cleanup": {
+        "state": "cleaned",
+        "observed_state": "cancelled",
+        "cleaned": true
+      }
+    },
+    {
+      "dataset": "AutomationBench",
+      "resource_id": "c84c335e-2249-40a1-b856-613a607d2f23",
+      "job_id": "0b8998a5-f043-4413-b02b-6e74b87c92ce",
+      "duplicate_submit": "same_job",
+      "restored_adapter_status": "succeeded",
+      "model_called": false,
+      "collection": "passed",
+      "cleanup": {
+        "state": "cleaned",
+        "observed_state": "succeeded",
+        "cleaned": true
+      },
+      "cancel_job_id": "24230c40-8b2a-48d9-a42e-10e3f488ad28",
+      "cancel": "confirmed",
+      "cancel_cleanup": {
+        "state": "cleaned",
+        "observed_state": "cancelled",
+        "cleaned": true
+      }
+    }
+  ]
+}

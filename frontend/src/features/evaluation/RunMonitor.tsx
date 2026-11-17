@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { apiGet, apiGetPage } from "../../shared/api";
 
 type Monitor = {
+  datasets?: (Monitor & { dataset?: string })[];
+  platform_state?: string;
   collection_status: string;
   stale: boolean;
   source?: string;
@@ -56,7 +58,7 @@ function MonitorProgress({ value, error = false, stage, terminal = false }: { va
   const percent = known ? Math.round(done / total * 100) : undefined;
   const stale = Boolean(value?.stale || error);
   const kind = value?.snapshot_kind || "live";
-  const waiting = terminal ? "未记录样本进度" : stale ? "等待恢复采集" : "等待样本计数";
+  const waiting = terminal ? "未记录样本进度" : value?.collection_status === "waiting_tool" ? "等待作业启动" : stale ? "等待恢复采集" : "等待样本计数";
   return <div className={`run-progress ${kind}${stale ? " stale" : ""}`} data-testid="run-progress">
     <div className="run-progress-head"><span>样本执行进度</span><b>{known ? `${done} / ${total} · ${percent}%` : waiting}</b></div>
     <div className={`run-progress-track${known ? "" : " unknown"}`} role="progressbar"
@@ -201,7 +203,12 @@ export function RunMonitor({ runId, terminal }: { runId: string; terminal: boole
   if (!value) return <p className="muted" role="status">{error || "工具监控暂不可用。"}</p>;
   if (value.collection_status === "not_collected" && !value.log) return <p className="muted" role="status">{error || "本次运行未采集工具监控。"}</p>;
 
-  const kind = value.snapshot_kind || "live";
+  const multi = (value.datasets?.length || 0) > 1;
+  const finalCount = value.datasets?.filter(item => item.snapshot_kind === "final").length || 0;
+  const allFinal = multi && finalCount === value.datasets!.length;
+  const kind = multi ? allFinal ? "final" : "live" : value.snapshot_kind || "live";
+  const headerKind = multi ? allFinal ? "全部数据集终态已归档" : finalCount ? "部分数据集已结束" : "数据集执行中" : KIND_LABEL[kind] || kind;
+  const headerStatus = multi ? `${finalCount} / ${value.datasets!.length} 个数据集已结束` : STATUS_LABEL[value.tool_status || ""] || value.tool_status || "状态未知";
   const kindTone = value.stale || error ? "orange" : kind === "final" ? "green" : kind === "live" ? "blue" : "orange";
   const evidenceRow = typeof evidence === "object" && evidence !== null ? (evidence as Record<string, unknown>) : null;
   const projection = evidenceRow && typeof evidenceRow.projection === "object" ? evidenceRow.projection : evidence;
@@ -212,11 +219,15 @@ export function RunMonitor({ runId, terminal }: { runId: string; terminal: boole
       <div className="spread">
         <h3>工具运行监控</h3>
         <div className="inline">
-          <span className={`badge ${kindTone}`}>{KIND_LABEL[kind] || kind}</span>
-          <span className="muted">{STATUS_LABEL[value.tool_status || ""] || value.tool_status || "状态未知"}</span>
+          <span className={`badge ${kindTone}`}>{headerKind}</span>
+          <span className="muted">{headerStatus}</span>
         </div>
       </div>
-      <MonitorProgress value={value} error={Boolean(error)} terminal={terminal} />
+      {value.datasets && value.datasets.length > 1 ? value.datasets.map(item => <section className="card stack" key={item.attempt}>
+        <h4>{item.dataset || item.task_name} · {STATUS_LABEL[item.tool_status || ""] || item.tool_status || "等待中"}</h4>
+        <MonitorProgress value={item} error={Boolean(error)} terminal={item.snapshot_kind === "final"} />
+        <p className="muted">{item.source === "executor_lifecycle" ? "远程作业状态采集；不是工具原生样本进度" : item.source} · {item.observed_at || "等待采集"}{item.stale ? " · 数据已过期" : ""}</p>
+      </section>) : <MonitorProgress value={value} error={Boolean(error)} terminal={terminal} />}
       {(value.stale || error) && (
         <p className="notice" role="status">数据已过期 / 不可达，以下为最后观测值；采集失败不会触发测评重启。</p>
       )}

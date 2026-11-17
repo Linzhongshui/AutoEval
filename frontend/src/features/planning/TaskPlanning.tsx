@@ -89,8 +89,6 @@ export function TaskPlanning() {
   const [closeReason, setCloseReason] = useState("");
   const [closeAcknowledged, setCloseAcknowledged] = useState(false);
   const probeDialog = useRef<HTMLDialogElement>(null);
-  const [runConfirmed, setRunConfirmed] = useState(false);
-  const [ignoreBudget, setIgnoreBudget] = useState(false);
   const [curveText, setCurveText] = useState("");
   const [levels, setLevels] = useState("1,2,4,8");
   const [promptTokens, setPromptTokens] = useState(512);
@@ -142,7 +140,7 @@ export function TaskPlanning() {
   useEffect(() => { setParallel(v => Math.min(v, Math.max(1, enabled.length))); }, [enabled.length]);
   const preflightFingerprint = JSON.stringify({ target_id: target, resource_id: resource, resource_kind: resourceKind, resource_ids: resourceIds, tasks: payload.tasks });
   useEffect(() => {
-    generation.current++; if (job) setStaleEstimate(true); setJob(null); setAdviceJob(null); setRunConfirmed(false); setIgnoreBudget(false);
+    generation.current++; if (job) setStaleEstimate(true); setJob(null); setAdviceJob(null);
   }, [fingerprint]);
   useEffect(() => { setPreflight(null); }, [preflightFingerprint]);
   useEffect(() => { setPreflight(null); setProbeReview(false); setCurve(""); }, [target, resource, resourceKind]);
@@ -213,7 +211,7 @@ export function TaskPlanning() {
       if (matching.length) { setResourceIds(ids => [...new Set([...ids, ...matching])]); if (!resource) setResource(matching[0]); }
     }
   };
-  const blocker = !target ? "请选择模型服务" : !resource ? "请选择执行资源" : !enabled.length ? "请启用至少一个数据集" : incomplete ? "请补全已启用数据集的配置与样本范围" : checking ? "正在检查执行环境，请稍候…" : !preflight?.result?.execution_ready ? "请完成环境检查并处理阻塞项" : !runConfirmed ? "请确认测评范围与模型调用费用" : "配置已就绪，可以提交测评";
+  const blocker = !target ? "请选择模型服务" : !resource ? "请选择执行资源" : !enabled.length ? "请启用至少一个数据集" : incomplete ? "请补全已启用数据集的配置与样本范围" : checking ? "正在检查执行环境，请稍候…" : !preflight?.result?.execution_ready ? "请完成环境检查并处理阻塞项" : "配置已就绪，可以提交测评";
   useEffect(() => {
     if (!curve || !ready || !preflight?.result?.execution_ready) return;
     let stopped = false;
@@ -311,7 +309,7 @@ export function TaskPlanning() {
       {probeBlocked && <div className="inline"><button disabled={busy} onClick={() => void action(async () => { setCloseAcknowledged(false); setProbe(await apiPost<Job>(`/planning/probes/${probe!.id}/reconcile`, {})); })}>查询探测状态</button><button disabled={busy} onClick={() => void action(async () => { await apiPost(`/planning/probes/${probe!.id}/cancel`, {}); setProbe(await apiGet<Job>(`/planning/probes/${probe!.id}`)); })}>取消探测</button></div>}
       {probe?.state === "unresolved" && probe.result?.remote_check?.state === "unknown" && <details className="probe-import"><summary>历史异常记录处理</summary><p>仅结束平台记录，不停止远程进程，不认定原探测成功或未产生费用；原始异常与查证记录会保留。新探测需另行确认预算。</p><label>处理原因<textarea aria-label="历史探测处理原因" value={closeReason} onChange={e => setCloseReason(e.target.value)} /></label><label><input type="checkbox" checked={closeAcknowledged} onChange={e => setCloseAcknowledged(e.target.checked)} />确认原执行结果及用量仍未知，保留历史后结束此记录</label><button disabled={busy || !closeAcknowledged || closeReason.trim().length < 5} onClick={() => void action(async () => { setProbe(await apiPost<Job>(`/planning/probes/${probe.id}/close`, { reason: closeReason.trim(), acknowledge_unknown: true })); setCloseAcknowledged(false); setCloseReason(""); const next = await apiGet<Job | null>(`/planning/active-probe?target_id=${encodeURIComponent(target)}&resource_id=${encodeURIComponent(resource)}&resource_kind=${resourceKind}`); setProbe(next); })}>结束历史记录</button></details>}
       <dialog ref={probeDialog} className="probe-budget-dialog" aria-labelledby="probe-budget-heading" onCancel={() => setProbeReview(false)}>
-        <h3 id="probe-budget-heading">确认吞吐探测预算</h3><p>这会额外调用模型，不会启动测评任务。</p><dl><dt>并发档位</dt><dd>{levels}</dd><dt>最多模型请求</dt><dd>{requestBudget} 次（含非流式回退）</dd><dt>每次最大输出</dt><dd>{maxTokens} tokens</dd><dt>最多总输出</dt><dd>{requestBudget * maxTokens} tokens</dd></dl><p className="notice">可能产生模型调用费用。原任务状态未查清时不能重复启动。</p>
+        <h3 id="probe-budget-heading">确认吞吐探测</h3><p>这会额外调用模型，不会启动测评任务。</p><dl><dt>并发档位</dt><dd>{levels}</dd><dt>最多模型请求</dt><dd>{requestBudget} 次（含非流式回退）</dd><dt>每次最大输出</dt><dd>{maxTokens} tokens</dd><dt>最多总输出</dt><dd>{requestBudget * maxTokens} tokens</dd></dl><p className="notice">可能产生模型调用费用。原任务状态未查清时不能重复启动。</p>
         <div className="inline"><button disabled={busy} onClick={() => setProbeReview(false)}>返回修改</button><button className="primary" disabled={busy || probeBlocked || probeLookup || probeLookupFailed} onClick={() => void action(async () => {
           const body = { target_id: target, resource_id: resource, resource_kind: resourceKind, concurrency: probeLevels, prompt_tokens: promptTokens, max_tokens: maxTokens }; const serialized = JSON.stringify(body);
           if (probeIntent.current?.body !== serialized || (probe && ["completed", "failed", "cancelled"].includes(probe.state))) probeIntent.current = { body: serialized, key: crypto.randomUUID() };
@@ -321,7 +319,7 @@ export function TaskPlanning() {
             catch { setProbeLookupFailed(true); }
             throw error;
           }
-        })}>确认预算并启动</button></div>
+        })}>启动探测</button></div>
       </dialog>
       <details className="probe-import"><summary>导入已有吞吐曲线</summary><div className="probe-import-content"><label>曲线 JSON<textarea aria-label="曲线 JSON" rows={5} placeholder="在此粘贴吞吐曲线 JSON" spellCheck={false} value={curveText} onChange={e => setCurveText(e.target.value)} /></label>
       <button disabled={busy || !target || !resource || !curveText} onClick={() => void action(async () => { const saved = await apiPost<{ id: string }>("/planning/throughput-profiles", { target_id: target, resource_id: resource, resource_kind: resourceKind, curve: JSON.parse(curveText) }); await refresh(); setCurve(saved.id); })}>导入吞吐曲线</button></div></details>
@@ -348,11 +346,9 @@ export function TaskPlanning() {
     }}>采纳参数建议</button></section>}
     {staleEstimate && !report && <p role="status">输入已变化，旧估算及建议已失效，请重新估算。</p>}
     <p className="planning-blocker" role="status">{blocker}</p>
-    <label className="planning-confirm"><input type="checkbox" checked={runConfirmed} onChange={e => setRunConfirmed(e.target.checked)} />确认所选数据集及范围，提交真实测评，可能产生模型调用费用</label>
-    <label className="planning-confirm"><input type="checkbox" checked={ignoreBudget} onChange={e => { setIgnoreBudget(e.target.checked); setMessage(""); }} />忽略本次任务预算限制</label>
-    {ignoreBudget && <p className="notice" role="status">本次测评及其智能分析不受平台预算金额和预算范围限制，可能产生额外模型费用；标准参数、资源检查和任务超时仍然生效。</p>}
-    <button className="primary" disabled={busy || !ready || !runConfirmed || !preflight?.result?.execution_ready} onClick={() => void action(async () => {
-      const submission = { target_id: target, resource_id: resource, resource_kind: resourceKind, resource_ids: resourceIds, tasks: payload.tasks, dataset_concurrency: parallel, ignore_budget: ignoreBudget };
+    <p className="notice">提交将按所选数据集及范围执行真实测评，可能产生模型调用费用。本次测评及其智能分析不受平台预算金额和范围限制；标准参数校验、资源预检和任务超时仍然生效。</p>
+    <button className="primary" disabled={busy || !ready || !preflight?.result?.execution_ready} onClick={() => void action(async () => {
+      const submission = { target_id: target, resource_id: resource, resource_kind: resourceKind, resource_ids: resourceIds, tasks: payload.tasks, dataset_concurrency: parallel, ignore_budget: true };
       const body = JSON.stringify(submission);
       if (pending.current?.body !== body) pending.current = { body, key: crypto.randomUUID() };
       const saved = await apiPost<{ run_id: string }>("/evaluation-tasks", submission, pending.current.key);

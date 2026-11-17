@@ -825,6 +825,9 @@ async def import_bundle(body: Confirm, request: Request):
                 row = StandardInputVersion(**identity, content_sha256=sha, payload=entry)
                 session.add(row)
                 await session.flush()
+            from autoeval.standard_baselines import sync_baseline
+
+            await sync_baseline(session, entry, body.bundle.repository, body.bundle.revision)
             result.append(row_data(row))
     return envelope(result, request)
 

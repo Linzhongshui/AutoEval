@@ -134,3 +134,9 @@ deliverables/            已核对的截图、录屏与验收摘要
 | 验收与展示 | [GPQA 20 题验收及录屏](docs/live-e2e-gpqa20-2026-11-16.md)、[AutomationBench 平台截图](deliverables/automationbench-langfuse-platform.png)、[免登录轨迹截图](deliverables/automationbench-langfuse-public-trace.png) |
 
 早期版本限制、按日期追加的开发记录和页面预览已移至[整理前 README 历史快照](docs/readme-history-2026-11-17.md)。历史快照只用于追溯，不能代替当前运行说明及分项验收。
+
+### 标准库基线自动同步
+
+标准输入确认导入时，`baseline.json` 自动写入不可变基线表，与输入版本共用事务；重复导入复用同版本记录，内容冲突拒绝。保留来源模型、标准仓提交、原始文件 SHA-256、原始基线说明及继承关系。自动同步标记为 `standard-repository-auto-sync`，不代表人工审核或 Release 批准。
+
+标准库的参考值不会自动作为同条件差值或门禁阈值，也不会自动写入官方榜单。模型继承、脚手架或范围不一致时仍属于参考数据。2026-11-17 已在服务器回填 31 条历史版本基线，重复回填数量不变；本轮未调用模型。

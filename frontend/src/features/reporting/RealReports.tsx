@@ -16,8 +16,7 @@ export function RealReports({ reportId, open }: { reportId?: string; open: (id: 
   const [analysis, setAnalysis] = useState("");
   const [rows, setRows] = useState<Report[]>([]);
   const [offset, setOffset] = useState(0);
-  const [pageSize,setPageSize] = useState(5);
-  const [next, setNext] = useState<number | null>(null);
+  const [pageSize, setPageSize] = useState(15);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [refresh, setRefresh] = useState(0);
@@ -26,14 +25,18 @@ export function RealReports({ reportId, open }: { reportId?: string; open: (id: 
     if (reportId) return;
     const controller = new AbortController();
     setRows([]);
-    setNext(null);
     setMessage("");
     setLoading(true);
-    apiGetPage<Report[]>(`/reports?limit=${pageSize}&offset=${offset}`, controller.signal)
-      .then((page) => {
-        setRows(page.data);
-        setNext(page.next_offset);
-      })
+    (async () => {
+      const records: Report[] = []; let position: number | null = 0;
+      while (position !== null) {
+        const page: { data: Report[]; next_offset: number | null } = await apiGetPage<Report[]>(`/reports?limit=200&offset=${position}`, controller.signal);
+        records.push(...page.data);
+        if (page.next_offset !== null && page.next_offset <= position) throw Error("报告分页异常");
+        position = page.next_offset;
+      }
+      if (!controller.signal.aborted) setRows(records);
+    })()
       .catch(() => {
         if (!controller.signal.aborted) setMessage("报告目录加载失败。");
       })
@@ -41,7 +44,9 @@ export function RealReports({ reportId, open }: { reportId?: string; open: (id: 
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [offset, refresh, reportId, pageSize]);
+  }, [refresh, reportId]);
+
+  useEffect(() => { setOffset(0); }, [query, model, analysis]);
 
   if (reportId) {
     return (
@@ -59,14 +64,14 @@ export function RealReports({ reportId, open }: { reportId?: string; open: (id: 
   const filteredRows = rows.filter((row) => (!model || row.remote_model === model) && (!analysis || row.analysis_status === analysis) && `${row.id} ${row.run_id} ${row.remote_model}`.toLowerCase().includes(query.toLowerCase()));
   return (
     <div className="stack" data-testid="real-report-catalog">
-      <section className="card report-filters filters" aria-label="当前页报告筛选">
+      <section className="card report-filters filters" aria-label="报告筛选">
         <label className="select-field"><span>模型</span><select value={model} onChange={(e) => setModel(e.target.value)}><option value="">全部模型</option>{[...new Set(rows.map((row) => row.remote_model))].map((value) => <option key={value}>{value}</option>)}</select></label>
         <label className="select-field"><span>分析状态</span><select value={analysis} onChange={(e) => setAnalysis(e.target.value)}><option value="">全部分析状态</option>{[...new Set(rows.map((row) => row.analysis_status))].map((value) => <option key={value} value={value}>{analysisLabel(value)}</option>)}</select></label>
         <input aria-label="搜索报告或任务" placeholder="搜索报告或任务" value={query} onChange={(e) => setQuery(e.target.value)} />
         <button onClick={() => setRefresh((value) => value + 1)}>刷新</button>
       </section>
       <section className="card table-card">
-        <div className="report-list-heading"><h2>全部报告 <span className="badge">{rows.length}</span></h2><span className="muted">每次测评独立保留报告 · 当前页统计与筛选</span></div>
+        <div className="report-list-heading"><h2>全部报告 <span className="badge">{filteredRows.length}</span></h2><span className="muted">每次测评独立保留报告 · 统计与筛选覆盖全部报告</span></div>
         {(message || loading) && <p role="status">{message || "报告加载中…"}</p>}
         <div className="table-wrap">
           <table className="reports-table">
@@ -82,7 +87,7 @@ export function RealReports({ reportId, open }: { reportId?: string; open: (id: 
               </tr>
             </thead>
             <tbody>
-              {filteredRows.map((row) => (
+              {filteredRows.slice(offset, offset + pageSize).map((row) => (
                 <tr key={row.id}>
                   <td>
                     <b>{row.id.slice(0, 8)}</b>
@@ -120,12 +125,12 @@ export function RealReports({ reportId, open }: { reportId?: string; open: (id: 
             </tbody>
           </table>
           {!loading && !filteredRows.length && !message && (
-            <div className="empty">当前页没有符合条件的报告。</div>
+            <div className="empty">没有符合条件的报告。</div>
           )}
         </div>
       </section>
 
-      <ListPagination label="报告" offset={offset} nextOffset={next} pageSize={pageSize} onOffsetChange={setOffset} onPageSizeChange={setPageSize} disabled={loading} />
+      <ListPagination total={loading || message ? undefined : filteredRows.length} label="报告" offset={offset} nextOffset={offset + pageSize < filteredRows.length ? offset + pageSize : null} pageSize={pageSize} onOffsetChange={setOffset} onPageSizeChange={setPageSize} disabled={loading} />
     </div>
   );
 }

@@ -1884,3 +1884,5 @@ td small .badge,
   border-top: 1px solid var(--border);
 }
 
+
+.pagination > .pagination-page-item { display: inline-flex; align-items: center; gap: 8px; margin: 0; }

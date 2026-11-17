@@ -68,6 +68,23 @@ async def read_container_progress(adapter, job):
         ],
     )
     value = json.loads(raw)
+    if value.get("stage") == "tool_running" and not value.get("source"):
+        script = """import json,sys
+from pathlib import Path
+from datetime import datetime,timezone
+root=Path(sys.argv[1]);done=set()
+spec=json.loads((root/'spec.json').read_text())
+if spec.get('compilation',{}).get('config',{}).get('subcommand')!='harbor_agent':
+ print((root/'progress.json').read_text());raise SystemExit(0)
+for p in (root/'output').rglob('result.json'):
+ if p.is_symlink() or not p.resolve().is_relative_to(root.resolve()) or p.stat().st_size>2097152:continue
+ try:d=json.loads(p.read_text())
+ except (ValueError,OSError,UnicodeError):continue
+ if isinstance(d,dict) and 'agent_execution' in d and 'verifier_result' in d and d.get('finished_at'):done.add(str(p.parent))
+print(json.dumps({'job_id':root.name,'source':'harbor_result_files','finish_count':len(done),'observed_at':datetime.now(timezone.utc).isoformat(),'snapshot_kind':'live'}))
+"""
+        extra = await asyncio.to_thread(adapter.command, ["exec", adapter.container_id, "python3", "-c", script, root + "/" + key])
+        value = json.loads(extra)
     if value and value.get("job_id") != key:
         raise ValueError("Progress belongs to another job")
     return value
@@ -149,7 +166,7 @@ class PlanningRemoteContainer(DockerExecutor):
         key = str(uuid.UUID(job.submission_key))
         script = (
             "import pathlib,sys,json;p=pathlib.Path(sys.argv[1]);"
-            "assert not p.is_symlink();raw=p.read_bytes();"
+            "assert not p.is_symlink();p=p if p.is_file() else p.with_name('output.log');assert not p.is_symlink();raw=p.read_bytes() if p.is_file() else b'';"
             "print(json.dumps({'content':raw[-2097152:].decode('utf-8',errors='replace'),"
             "'truncated':len(raw)>2097152}))"
         )

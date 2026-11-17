@@ -132,7 +132,7 @@ def test_budget_mode_blocks_legacy_paid_entrypoints(tmp_path):
     from autoeval.api import create_app
     from autoeval.config import Settings
 
-    client = TestClient(create_app(Settings(billing_execution_config=tmp_path / "private.json")))
+    client = TestClient(create_app(Settings(billing_execution_config=tmp_path / "private.json", enforce_task_budget=True)))
     for path in ("/runs", "/aisbench-monitored/runs", "/planning/probes"):
         response = client.post("/api/autoeval/v1" + path, json={})
         assert response.status_code == 409
@@ -165,3 +165,14 @@ async def test_unexpected_failure_latches_proxy_closed(tmp_path):
         assert app.state.accounting_failed is True
         assert (await client.post(endpoint, headers=headers, json={})).status_code == 503
     await app.state.engine.dispose()
+
+def test_default_budget_policy_does_not_block_probe_validation(tmp_path):
+    from fastapi.testclient import TestClient
+
+    from autoeval.api import create_app
+    from autoeval.config import Settings
+
+    client = TestClient(create_app(Settings(billing_execution_config=tmp_path / "missing-private.json")))
+    response = client.post('/api/autoeval/v1/planning/probes', json={})
+    assert response.status_code == 422
+    assert 'Active budget' not in response.text

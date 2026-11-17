@@ -79,7 +79,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.middleware('http')
     async def budget_entrypoints(request: Request, call_next):
-        if (settings.billing_execution_config and request.method == 'POST'
+        if (settings.enforce_task_budget and settings.billing_execution_config and request.method == 'POST'
                 and request.url.path.rstrip('/') in {
                     '/api/autoeval/v1/runs', '/api/autoeval/v1/aisbench-monitored/runs',
                     '/api/autoeval/v1/planning/probes'}):

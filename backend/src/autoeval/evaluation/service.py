@@ -268,7 +268,11 @@ def fits(demand, used, resource):
         "disk": resource["disk_gb"] * 0.8,
         "networks": resource.get("network_available") or 0,
     }
-    return all(demand[k] + used.get(k, 0) <= limits[k] for k in limits)
+    return all(
+        (k == "networks" and demand[k] == 0)
+        or demand[k] + used.get(k, 0) <= limits[k]
+        for k in limits
+    )
 
 
 async def acquire(session, owner, resource, demand):
@@ -303,6 +307,8 @@ async def release(session, owner):
 async def create_run(session, settings, body, execution_plan_id, key):
     from autoeval.planning.models import PlanningArtifact, PlanningJob
 
+    if not getattr(settings, "enforce_task_budget", False):
+        body = body.model_copy(update={"ignore_budget": True})
     if not execution_plan_id:
         body = body.model_copy(update={"recommend": False, "throughput_profile_id": None})
     request_hash = digest(
@@ -462,6 +468,7 @@ async def create_run(session, settings, body, execution_plan_id, key):
             MonitorBinding(
                 run_id=run.id,
                 attempt=index,
+                latest={"source": "executor_lifecycle", "tool_status": "pending", "task_name": str(child_id), "observed_at": datetime.now(UTC).isoformat(), "snapshot_kind": "live", "collection_status": "waiting_tool", "stale": False, "finish_count": None, "total_count": len(item["samples"]), "progress_description": "监控已启用，等待远程作业启动"},
                 identity={
                     "task_name": str(child_id),
                     "dataset": item["dataset"],

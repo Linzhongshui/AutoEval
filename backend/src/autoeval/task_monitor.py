@@ -109,6 +109,8 @@ def normalize(task, identity, source, observed_at, *, snapshot_kind="live"):
         "local_monitor",
         "harbor_monitor",
         "aisbench_native_predictions",
+        "executor_lifecycle",
+        "harbor_result_files",
     } or snapshot_kind not in {
         "live",
         "final",
@@ -221,6 +223,7 @@ def freshness(projection, now=None):
         raise ValueError("Monitor observation requires timezone")
     result["stale"] = (
         result.get("snapshot_kind") != "final"
+        and result.get("collection_status") != "waiting_tool"
         and ((now or datetime.now(UTC)) - stamp).total_seconds() > 10
     )
     return result
@@ -327,6 +330,13 @@ async def latest(run_id: uuid.UUID, request: Request):
                     "total_count": len(expected),
                     "progress_description": "已归档执行记录；不代表历史实时监控已采集",
                 }
+        dataset_bindings = list(await session.scalars(select(MonitorBinding).where(
+            MonitorBinding.run_id == run_id).order_by(MonitorBinding.attempt)))
+        projection["platform_state"] = run.state
+        projection["datasets"] = [
+            {**freshness(row.latest), "dataset": row.identity.get("dataset"), "attempt": row.attempt}
+            for row in dataset_bindings if row.latest
+        ]
         artifact = await session.scalar(
             select(UnifiedArtifact).where(
                 UnifiedArtifact.run_id == run_id,

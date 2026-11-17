@@ -8,6 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    enforce_task_budget: bool = False
     billing_execution_config: Path | None = None
     langfuse_host: str | None = None
     langfuse_browser_url: str | None = None

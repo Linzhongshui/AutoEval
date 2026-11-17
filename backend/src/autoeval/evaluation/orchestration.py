@@ -122,6 +122,9 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                 child.state = "unresolved"
                 continue
             if observation.state not in TERMINAL:
+                from autoeval.planning_observations import publish_lifecycle
+
+                await publish_lifecycle(sessions, settings, run_id, child, observation.state)
                 if observation.state == "running":
                     progress_reader = getattr(adapter, "progress", None)
                     if progress_reader:
@@ -137,6 +140,16 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                         except (OSError, ValueError, RuntimeError):
                             pass  # Observation failure never resubmits the model task.
                 continue
+            from autoeval.planning_observations import publish_lifecycle
+
+            final_reader = getattr(adapter, "progress", None)
+            if final_reader:
+                try:
+                    from autoeval.planning_observations import publish
+                    await publish(sessions, settings, run_id, child.id, await final_reader(job))
+                except (OSError, ValueError, RuntimeError):
+                    pass
+            await publish_lifecycle(sessions, settings, run_id, child, observation.state, final=True)
             summary = None
             state = observation.state
             log_reader = getattr(adapter, "collect_log", None)
@@ -281,6 +294,9 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
 
                 route = execution_route(settings, run_id, inputs['target_id'], child.payload['dataset'], ignore_budget=ignore_budget)
                 compilation = route_compilation(child.payload['compilation'], route) if route else child.payload['compilation']
+                from autoeval.evaluation.resource_allocation import execution_compilation
+
+                compilation = execution_compilation(compilation)
                 execution_secret = route['api_key'] if route else secret
                 await adapter.submit(
                     {

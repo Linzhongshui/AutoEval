@@ -14,3 +14,13 @@ def allocate_resource(candidates, supported):
 
 def resource_for_task(snapshot, task_id):
     return snapshot.get("task_resources", {}).get(task_id, snapshot)
+
+
+def execution_compilation(compilation):
+    """Keep platform allocation metadata out of the strict remote runtime contract."""
+    import copy
+
+    value = copy.deepcopy(compilation)
+    for field in ("resource_ids", "manifest_ids"):
+        value.get("runtime_config", {}).pop(field, None)
+    return value

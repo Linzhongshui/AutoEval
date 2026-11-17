@@ -1553,6 +1553,8 @@ export interface components {
             trace_url: string | null;
             /** Trace Error */
             trace_error?: string | null;
+            /** Trace Content Mode */
+            trace_content_mode?: ("structural" | "full") | null;
             /** Id */
             id: string;
             /** Dataset Key */

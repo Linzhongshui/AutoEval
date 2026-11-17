@@ -23,6 +23,7 @@ type Attempt = {
   error_code: string | null;
   trace_status?: string;
   trace_url?: string | null;
+  trace_content_mode?: "structural" | "full" | null;
   evidence_available: boolean;
   evidence_sha256: string | null;
   created_at: string;
@@ -157,7 +158,7 @@ export function CaseHistory({ initialRun = "" }: { initialRun?: string }) {
                       <button className="case-evidence-button" type="button" disabled={!row.evidence_available} aria-label={`查看第${row.attempt_no}次证据`} onClick={() => openEvidence(row)}><FileCheck2 size={14} aria-hidden="true" />查看证据</button>
                       {row.trace_url && <a className="case-trace-button" href={row.trace_url} target="_blank" rel="noopener noreferrer" title="在新标签页查看本次执行的 Agent 轨迹">查看 Trace<ArrowUpRight size={14} aria-hidden="true" /></a>}
                     </div>
-                    <small className="case-evidence-note">{row.trace_url ? "轨迹已导入" : {pending: "Trace 等待导入", failed: "Trace 导入失败", missing: "缺少轨迹", disabled: "Langfuse 未配置", unsupported: "暂不支持 Trace"}[row.trace_status ?? "unsupported"]}<span aria-hidden="true"> · </span>{row.evidence_available ? "证据已校验" : "证据尚未归档"}</small>
+                    <small className="case-evidence-note">{row.trace_url ? row.trace_content_mode === "full" ? "正文轨迹已导入" : "轨迹已导入" : {pending: "Trace 等待导入", failed: "Trace 导入失败", missing: "缺少轨迹", disabled: "Langfuse 未配置", unsupported: "暂不支持 Trace"}[row.trace_status ?? "unsupported"]}<span aria-hidden="true"> · </span>{row.evidence_available ? "证据已校验" : "证据尚未归档"}</small>
                   </td>
                 </tr>
               );

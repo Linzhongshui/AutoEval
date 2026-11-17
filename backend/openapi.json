@@ -4729,6 +4729,21 @@
             ],
             "title": "Trace Error"
           },
+          "trace_content_mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "structural",
+                  "full"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Content Mode"
+          },
           "id": {
             "type": "string",
             "title": "Id"

@@ -72,3 +72,13 @@ ATIF 未提供逐步时间戳；Langfuse 展示的约 0.04 秒不是模型或工
 真实 Chrome 再次验证 **3 passed**：匿名平台跳转直达、已登录平台跳转直达、未公开的独立夹具 Trace 仍要求登录。匿名场景确认不存在 Langfuse session-token cookie；前端类型检查、构建、Ruff 和 Nginx 配置检查通过。此变更没有重跑测评或改变成绩。撤销分享及网关配置说明见接入文档。
 
 匿名访问截图：[公开 Trace 页面](../deliverables/automationbench-langfuse-public-trace.png)。公开链接可被能到达服务器且持有该链接的人访问；本次仅分享这一条脱敏演示轨迹。
+
+## 正文模式补验（同日）
+
+按用户后续要求启用 full。新增 `0033_langfuse_content_mode`，迁移前完成业务库备份，旧记录默认保持 structural，新归档默认 full；已有任务不会因配置改变而自动重新导入。正文 Trace 使用独立稳定命名空间，保持旧公开摘要不变。
+
+本次从相同原生产物生成私有正文 Trace `b48a5cdee574516489fa28c8e911b89c`，确认导入后更新该 attempt 的平台链接并追加模式切换审计。仍为 105 个唯一节点：38 generation、66 tool、1 root。35 条非空模型回复、66 个工具参数和 66 个工具输出与 ATIF 一致，38 条 reasoning_content 与对应节点 Attributes 一致；其余 3 条回复原本为空字符串，Langfuse 表示为 null，未补造文本。
+
+模式固定、正文保留与跨模式身份隔离回归通过，后端全量 315 passed / 123 skipped，Ruff、前端类型检查 / 构建通过。私有正文的未登录回跳、已登录直达和匿名权限隔离浏览器检查 **3 passed**。本次没有新增模型请求，原任务 failed 历史及成绩未改动。数值与摘要验证见 [正文内容核对](../deliverables/automationbench-full-content-verification.json)，正文截图保留本地 `.screenshots/`，不进入公开交付截图。
+
+新默认模式通过真实 Outbox / Temporal / Langfuse worker 补验：simulation run `66cfc03a-c7ca-4520-9af0-c128db705b41` 的两个有效尝试自动导入成功，另两个为 missing / failed，4 条记录均冻结 content_mode=full；原样重复归档未产生额外 attempt。此项为固定产物联调，模型请求为 0，见 [worker 核对记录](../deliverables/automationbench-full-mode-worker-verification.json)。真实正文评分 `reward.accuracy=1.0` 的 ClickHouse FINAL 记录数仍为 1。API、planning、planning-execution、Langfuse worker 的 full 相关补丁镜像为 `sha256:3adb33cad49d620f20c3725b77863bf34d30b600488371e4a7a2c18b6342a981`，不代表其他历史 worker 已统一升级为最新主分支。

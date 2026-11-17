@@ -48,6 +48,7 @@ def test_platform_trace_popup(authenticated):
             links.first.wait_for(timeout=30000)
             assert links.count() >= 1
             href = links.first.get_attribute("href")
+            full_content = page.get_by_text("正文轨迹已导入", exact=False).count() > 0
             evidence_button = page.get_by_role("button", name="查看第1次证据", exact=True).first
             evidence_box, trace_box = evidence_button.bounding_box(), links.first.bounding_box()
             assert evidence_box and trace_box
@@ -75,7 +76,9 @@ def test_platform_trace_popup(authenticated):
                 assert not any("session-token" in cookie["name"] for cookie in context.cookies())
             trace.screenshot(
                 path=(
-                    "../deliverables/automationbench-langfuse-public-trace.png"
+                    "../.screenshots/automationbench-langfuse-full-trace.png"
+                    if full_content
+                    else "../deliverables/automationbench-langfuse-public-trace.png"
                     if public_trace and not authenticated
                     else "../deliverables/automationbench-langfuse-trace.png"
                 ),

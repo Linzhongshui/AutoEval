@@ -126,6 +126,7 @@ class CaseExecutionItem(BaseModel):
     trace_id: str | None
     trace_url: str | None
     trace_error: str | None = None
+    trace_content_mode: Literal["structural", "full"] | None = None
     id: str
     dataset_key: str
     sample_id: str

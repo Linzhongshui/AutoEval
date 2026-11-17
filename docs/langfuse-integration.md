@@ -14,6 +14,7 @@ AE_LANGFUSE_BROWSER_URL=http://browser-accessible-host:18930
 AE_LANGFUSE_PROJECT_ID=your-project-id
 AE_LANGFUSE_PUBLIC_KEY=your-public-key
 AE_LANGFUSE_SECRET_KEY=your-secret-key
+AE_LANGFUSE_CONTENT_MODE=full
 ```
 
 HOST 为 worker 可达地址，BROWSER_URL 为用户浏览器可达地址；跨主机部署需配置受控网络入口。生产或远程入口使用 HTTPS。项目 ID 必须与 API keys 所属项目一致。
@@ -24,7 +25,11 @@ HOST 为 worker 可达地址，BROWSER_URL 为用户浏览器可达地址；跨�
 
 仅新归档的 Harbor 结果创建导入任务。原生 trial 的 trajectory、result 和 verifier reward 文件按白名单收集并校验摘要。每个文件上限 8 MiB、每个 trial 10 MiB；超限或缺失轨迹显示缺少轨迹，不补造 trace。现有统一结果传输仍受原有整体大小限制。
 
-导入使用 fork 的 scan、plan、export 和 scores Python 接口，无需解析日志或修改 fork。平台 attempt 为 trace 身份增加命名空间，重试保持不变。默认使用 structural 脱敏模式。
+导入使用指定 fork 的 scan、plan、export 和 scores Python 接口，无需解析终端日志。新归档默认使用 `full` 正文模式，可通过 `AE_LANGFUSE_CONTENT_MODE=structural` 切回摘要模式。`0033_langfuse_content_mode` 迁移将已有记录保留为 structural；模式随每个导入记录持久化，后续配置变化不影响历史或重试。平台 attempt 与模式共同确定稳定身份，full 使用独立 Trace ID，避免覆盖已公开的 structural 内容。
+
+正文模式保留输入、回复、工具参数和工具输出；`reasoning_content` 位于对应 llm 节点的 Attributes（`attributes.atif.reasoning`）。fork 对单个超长字符串仍有 65536 字符截断限制；逐次 generation 的 Input 保留 `atif_approximation` 标记，不声称等同原始完整 HTTP 请求。缺少逐步时间戳时也不将导入时间当成实测耗时。
+
+2026-11-17 按用户要求，仅使用已有归档将样本 attempt `dfc4cdf5-9169-43d1-9369-548afbe9579e` 另导出为正文 Trace `b48a5cdee574516489fa28c8e911b89c`，平台按钮已指向此记录。新正文版保持私有；原公开摘要 `cfc0e6ea48fd58abbf8bc638c4e0cb36` 不变。模式切换成功后在平台 audit_event 保留前后 Trace 身份及原始产物摘要，没有重新调用模型或改写成绩。正文截图仅存本地忽略目录，不加入公开分享或版本库。
 
 `GET /api/autoeval/v1/runs/{run_id}/traces` 查看状态；`POST /api/autoeval/v1/runs/{run_id}/traces/retry` 只重新排队失败项。Case 历史页面显示状态、失败重试和新标签页 Trace 跳转。未配置项目的新记录显示 disabled；历史记录不自动补导入。AISBench 显示暂不支持。
 

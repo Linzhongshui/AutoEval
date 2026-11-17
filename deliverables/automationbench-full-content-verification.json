@@ -1,0 +1,36 @@
+{
+  "trace_id": "b48a5cdee574516489fa28c8e911b89c",
+  "content_mode": "full",
+  "observations": 105,
+  "unique_ids": 105,
+  "expected_counts": {
+    "generation": 38,
+    "tool": 66
+  },
+  "matched_native_content": {
+    "generation_output": 35,
+    "tool_input": 66,
+    "tool_output": 66
+  },
+  "sample_metadata_keys": [
+    "job_name",
+    "run_id",
+    "scope.name",
+    "resourceAttributes.langfuse.environment",
+    "resourceAttributes.service.name",
+    "resourceAttributes.service.instance.id",
+    "resourceAttributes.telemetry.sdk.version",
+    "resourceAttributes.telemetry.sdk.name",
+    "resourceAttributes.telemetry.sdk.language",
+    "attributes.langfuse.experiment.item.root_observation_id",
+    "attributes.atif.timing_votes",
+    "attributes.atif.timing_missing"
+  ],
+  "reasoning_expected": 38,
+  "reasoning_matched": 38,
+  "empty_generation_outputs": 3,
+  "empty_output_representation": "Langfuse null for original empty strings",
+  "content_verified": true,
+  "public": false,
+  "new_model_requests": 0
+}

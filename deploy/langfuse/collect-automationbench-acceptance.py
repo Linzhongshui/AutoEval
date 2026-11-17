@@ -45,7 +45,9 @@ async def main():
                 }
                 if row.status == "succeeded":
                     with tempfile.TemporaryDirectory() as directory:
-                        native, plan = build_plan(artifact, Path(directory), str(row.attempt_id))
+                        native, plan = build_plan(
+                            artifact, Path(directory), str(row.attempt_id), row.content_mode
+                        )
                     expected = {format(span.span_id, "016x") for span in plan}
                     observations = []
                     async with httpx.AsyncClient(

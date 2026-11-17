@@ -47,6 +47,49 @@ def test_plan_identity_and_score(tmp_path):
     assert any(s.role == "generation" for s in first)
 
 
+def test_full_content_is_preserved_with_separate_stable_identity(tmp_path):
+    data = artifact()
+    trajectory = json.loads(data["files"]["agent/trajectory.json"])
+    trajectory["steps"][1]["reasoning_content"] = "fixture reasoning"
+    data["files"]["agent/trajectory.json"] = json.dumps(trajectory)
+    _, structural = build_plan(data, tmp_path / "structural", "same-attempt")
+    _, full = build_plan(data, tmp_path / "full", "same-attempt", mode="full")
+    _, repeated = build_plan(data, tmp_path / "repeat", "same-attempt", mode="full")
+    generation = next(span for span in full if span.role == "generation")
+    assert generation.attributes["langfuse.observation.output"] == "answer"
+    assert generation.attributes["atif.reasoning"] == "fixture reasoning"
+    assert structural[0].trace_id != full[0].trace_id == repeated[0].trace_id
+    assert isinstance(
+        next(s for s in structural if s.role == "generation").attributes[
+            "langfuse.observation.output"
+        ],
+        dict,
+    )
+    with pytest.raises(ValueError, match="content mode"):
+        build_plan(data, tmp_path / "invalid", "same-attempt", mode="invalid")
+
+
+@pytest.mark.asyncio
+async def test_new_import_freezes_full_mode_before_configuration_changes(monkeypatch):
+    from autoeval.langfuse_integration import archive_trace
+
+    settings = Settings(
+        langfuse_host="https://internal.example",
+        langfuse_browser_url="https://browser.example",
+        langfuse_project_id="project",
+        langfuse_public_key="public",
+        langfuse_secret_key="secret",
+        _env_file=None,
+    )
+    assert settings.langfuse_content_mode == "full"
+    saved = []
+    session = SimpleNamespace(add=saved.append)
+    monkeypatch.setattr("autoeval.langfuse_integration.write_manifest", lambda *args: None)
+    await archive_trace(session, settings, uuid.uuid4(), uuid.uuid4(), artifact())
+    settings.langfuse_content_mode = "structural"
+    assert saved[0].content_mode == "full"
+
+
 def test_artifact_path_rejected(tmp_path):
     data = artifact()
     data["files"]["../secret"] = "bad"

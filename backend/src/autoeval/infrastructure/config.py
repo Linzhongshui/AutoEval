@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     langfuse_project_id: str | None = None
     langfuse_public_key: SecretStr = SecretStr("")
     langfuse_secret_key: SecretStr = SecretStr("")
+    langfuse_content_mode: Literal["structural", "full"] = "full"
     archived_manifest_ids: list[uuid.UUID] = []
     planning_container_config: str | None = None
     model_config = SettingsConfigDict(env_prefix="AE_", env_file=".env", extra="ignore")

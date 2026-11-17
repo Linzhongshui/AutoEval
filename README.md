@@ -87,6 +87,8 @@ Langfuse 采用指定 fork [llauren48/harbor-otel-stack](https://github.com/llau
 
 仍需连接可访问服务器的 VPN。项目 API keys 仅保存在后端；普通私有 Trace 首次需要 Langfuse 登录，登录后返回原记录。当前仅一条指定的 structural 演示 Trace 开启免登录分享，其他轨迹和后续导入不自动公开。
 
+新归档默认使用 `full` 展示正文，历史记录保留其冻结模式。该样本的私有正文版与公开摘要版使用不同 Trace ID；平台按钮当前指向正文版，首次需登录 Langfuse。
+
 配置、worker、公开分享及撤销步骤见 [Langfuse 接入说明](docs/langfuse-integration.md)；真实任务失败历史、评分修复和验收边界见[真机验收记录](docs/automationbench-langfuse-acceptance-2026-11-17.md)。
 
 ## 开发与检查

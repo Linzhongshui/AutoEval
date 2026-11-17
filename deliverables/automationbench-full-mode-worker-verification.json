@@ -1,0 +1,39 @@
+{
+  "run_id": "66cfc03a-c7ca-4520-9af0-c128db705b41",
+  "origin": "simulation",
+  "model_requests": 0,
+  "records": [
+    {
+      "attempt_id": "c67b5c2b-af2c-424f-a201-e5a39c1111ae",
+      "trace_status": "missing",
+      "trace_id": null,
+      "trace_url": null,
+      "trace_error": null,
+      "trace_content_mode": "full"
+    },
+    {
+      "attempt_id": "0f74c86b-9a82-41c1-bf77-2508348da7e3",
+      "trace_status": "failed",
+      "trace_id": null,
+      "trace_url": null,
+      "trace_error": "TRACE_IMPORT_FAILED",
+      "trace_content_mode": "full"
+    },
+    {
+      "attempt_id": "8891be67-c01a-420c-902d-9f5d1009da33",
+      "trace_status": "succeeded",
+      "trace_id": "ff64bbb51f165732a018413378981b95",
+      "trace_url": "https://179.214.2.3:8443/project/autoeval-harbor/traces/ff64bbb51f165732a018413378981b95",
+      "trace_error": null,
+      "trace_content_mode": "full"
+    },
+    {
+      "attempt_id": "816b3814-177a-474f-b604-c4756e49f550",
+      "trace_status": "succeeded",
+      "trace_id": "f207026a11d35c1e8a023bd27dce34af",
+      "trace_url": "https://179.214.2.3:8443/project/autoeval-harbor/traces/f207026a11d35c1e8a023bd27dce34af",
+      "trace_error": null,
+      "trace_content_mode": "full"
+    }
+  ]
+}

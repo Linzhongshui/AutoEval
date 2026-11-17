@@ -38,6 +38,9 @@ class TraceImport(Record, Base):
     trace_id: Mapped[str | None] = mapped_column(String(32))
     error_code: Mapped[str | None] = mapped_column(String(64))
     retry_no: Mapped[int] = mapped_column(default=0)
+    content_mode: Mapped[str] = mapped_column(
+        String(16), default="structural", server_default="structural"
+    )
     __table_args__ = (UniqueConstraint("attempt_id", "langfuse_project"),)
 
 
@@ -75,6 +78,7 @@ async def archive_trace(session, settings, run_id, attempt_id, artifact):
         sha256=digest,
         status=status,
         retry_no=0,
+        content_mode=settings.langfuse_content_mode,
     )
     session.add(row)
     if status == "pending":
@@ -95,7 +99,12 @@ def import_configured(settings):
 
 def trace_view(row, settings):
     if row is None:
-        return {"trace_status": "unsupported", "trace_id": None, "trace_url": None}
+        return {
+            "trace_status": "unsupported",
+            "trace_id": None,
+            "trace_url": None,
+            "trace_content_mode": None,
+        }
     url = None
     if row.status == "succeeded" and settings.langfuse_browser_url:
         url = (
@@ -110,13 +119,19 @@ def trace_view(row, settings):
         "trace_id": row.trace_id if url else None,
         "trace_url": url,
         "trace_error": row.error_code,
+        "trace_content_mode": getattr(row, "content_mode", "structural"),
     }
 
 
-def build_plan(artifact, directory, identity):
+def build_plan(artifact, directory, identity, mode="structural"):
     from harborstack.convert.plan import build_span_plan
     from harborstack.convert.scan import load_trial
 
+    if mode not in {"structural", "full"}:
+        raise ValueError("Unsupported trace content mode")
+    # Preserve existing structural IDs; full exports get a distinct stable identity.
+    if mode == "full":
+        identity += ":full"
     name = artifact.get("trial_name", "")
     if not name or Path(name).name != name or name in {".", ".."}:
         raise ValueError("Invalid trial name")
@@ -131,7 +146,7 @@ def build_plan(artifact, directory, identity):
     # Namespace native sessions by platform attempt; stable across retries/restores.
     rec.session_id = identity + ":" + rec.session_id
     rec.run_id = identity
-    return rec, build_span_plan(rec, mode="structural", run_name=identity, dataset_id=rec.task_id)
+    return rec, build_span_plan(rec, mode=mode, run_name=identity, dataset_id=rec.task_id)
 
 
 async def import_one(row, settings, artifact):
@@ -141,7 +156,9 @@ async def import_one(row, settings, artifact):
     if not settings.langfuse_host or not settings.langfuse_browser_url:
         raise ValueError("Langfuse not configured")
     with tempfile.TemporaryDirectory() as tmp:
-        rec, plan = build_plan(artifact, Path(tmp), str(row.attempt_id))
+        rec, plan = build_plan(
+            artifact, Path(tmp), str(row.attempt_id), getattr(row, "content_mode", "structural")
+        )
         trace_id = format(plan[0].trace_id, "032x")
         host = settings.langfuse_host.rstrip("/")
         public = settings.langfuse_public_key.get_secret_value()

@@ -2035,3 +2035,9 @@ textarea { font: inherit; }
 .planning-table td small { display: block; margin-top: 6px; font-size: 11px; overflow-wrap: anywhere; }
 .planning-card > .notice { display: block; font-size: 12px; line-height: 1.7; }
 .planning-card > .notice > p { margin: 6px 0; overflow-wrap: anywhere; }
+
+/* Align sibling selectors independently of the resource hint below configuration. */
+.planning-table td[data-label="执行配置"],
+.planning-table td[data-label="样本范围"] { vertical-align: top; }
+.planning-table td[data-label="执行配置"] > select,
+.planning-table td[data-label="样本范围"] > select { display: block; margin: 0; height: 40px; box-sizing: border-box; }

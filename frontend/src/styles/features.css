@@ -2027,3 +2027,11 @@ textarea { font: inherit; }
 .planning-select-options > button:hover, .planning-select-options > button[aria-pressed="true"] { background: #f2eeff; color: var(--primary); }
 .planning-select-options small { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; overflow-wrap: anywhere; }
 .planning-select-add { display: flex; align-items: center; gap: 8px; width: 100%; margin-top: 6px; padding: 10px; color: var(--primary); background: #faf8ff; border: 0; border-top: 1px solid var(--border); }
+
+.planning-table th:nth-child(2) { min-width: 140px; }
+.planning-table td[data-label="执行配置"] { min-width: 250px; max-width: 420px; }
+.planning-table select { width: 100%; min-width: 0; text-overflow: ellipsis; height: 40px; font-size: 12px; }
+.planning-table td { padding: 12px 10px; vertical-align: middle; }
+.planning-table td small { display: block; margin-top: 6px; font-size: 11px; overflow-wrap: anywhere; }
+.planning-card > .notice { display: block; font-size: 12px; line-height: 1.7; }
+.planning-card > .notice > p { margin: 6px 0; overflow-wrap: anywhere; }

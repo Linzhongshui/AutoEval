@@ -6690,6 +6690,20 @@
             ],
             "title": "Resource Kind"
           },
+          "resource_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 16,
+            "title": "Resource Ids"
+          },
+          "ignore_budget": {
+            "type": "boolean",
+            "title": "Ignore Budget",
+            "default": false
+          },
           "target_id": {
             "type": "string",
             "format": "uuid",
@@ -7444,6 +7458,20 @@
               "customer_ssh"
             ],
             "title": "Resource Kind"
+          },
+          "resource_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 16,
+            "title": "Resource Ids"
+          },
+          "ignore_budget": {
+            "type": "boolean",
+            "title": "Ignore Budget",
+            "default": false
           },
           "target_id": {
             "type": "string",

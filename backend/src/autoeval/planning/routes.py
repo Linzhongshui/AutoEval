@@ -79,6 +79,18 @@ class TaskInput(Strict):
 
 
 class PlanInput(ResourceRef):
+    resource_ids: list[uuid.UUID] = Field(default_factory=list, max_length=16)
+    ignore_budget: bool = Field(default=False, strict=True)
+
+    @model_serializer(mode="wrap")
+    def serialize(self, handler):
+        value = handler(self)
+        if not self.resource_ids:
+            value.pop("resource_ids", None)
+        if not self.ignore_budget:
+            value.pop("ignore_budget", None)
+        return value
+
     target_id: uuid.UUID
     throughput_profile_id: uuid.UUID | None = None
     tasks: list[TaskInput] = Field(min_length=1, max_length=4)
@@ -89,6 +101,8 @@ class PlanInput(ResourceRef):
 
     @model_validator(mode="after")
     def unique(self):
+        if self.resource_ids and (self.resource_id not in self.resource_ids or len(set(self.resource_ids)) != len(self.resource_ids)):
+            raise ValueError("Resource pool must be unique and contain the primary resource")
         if len({t.task_id for t in self.tasks}) != len(self.tasks) or len(
             {t.dataset for t in self.tasks}
         ) != len(self.tasks):
@@ -201,6 +215,7 @@ async def options(request: Request, offset: int = 0, limit: int = 100, include_t
         compilations = list(
             await session.scalars(
                 select(StandardInputCompilation)
+                .where(StandardInputCompilation.id.notin_(request.app.state.settings.archived_compilation_ids))
                 .order_by(StandardInputCompilation.created_at.desc(), StandardInputCompilation.id)
                 .offset(offset)
                 .limit(limit + 1)

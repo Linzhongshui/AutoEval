@@ -7,7 +7,9 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 
-def execution_route(settings, run_id, target_id, dataset, section="evaluation"):
+def execution_route(settings, run_id, target_id, dataset, section="evaluation", *, ignore_budget=False):
+    if ignore_budget:
+        return None
     path = getattr(settings, "billing_execution_config", None)
     if not path:
         return None
@@ -49,3 +51,8 @@ def route_compilation(compilation, route):
     if any(key in params for key in ("host_ip", "host_port", "model_overrides")):
         raise ValueError("Alternate model routing must be removed for budgeted execution")
     return result
+
+
+def budget_ignored(snapshot):
+    return ((snapshot.get('model_budget') or {}).get('mode') == 'ignored'
+            and (snapshot.get('inputs') or {}).get('ignore_budget') is True)

@@ -18,6 +18,7 @@ from autoeval.contracts import JobRef
 from autoeval.datasets import canonical_manifest, read_manifest, write_manifest
 from autoeval.db import create_database
 from autoeval.evaluation.models import DatasetExecution
+from autoeval.evaluation.resource_allocation import resource_for_task
 from autoeval.evaluation.service import acquire, artifact, demand_for, release
 from autoeval.infrastructure.domain import DATASET_ACTIVE, DATASET_TERMINAL, RUN_TERMINAL
 from autoeval.models import EvaluationRun, RunEvent, RunSnapshot
@@ -56,8 +57,13 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
         if not snapshot or snapshot.sha256 != digest(snapshot.canonical_body):
             raise ValueError("Frozen snapshot integrity mismatch")
         frozen = snapshot.canonical_body
+        from autoeval.billing_transport import budget_ignored
+        ignore_budget = budget_ignored(frozen)
         inputs = frozen["inputs"]
         adapter = await transport(session, settings, inputs)
+        adapters = {}
+        for item in inputs["tasks"]:
+            adapters[item["task_id"]] = await transport(session, settings, {**inputs, "resource_id": item["assigned_resource_id"], "resource_kind": item["assigned_resource_kind"]}) if item.get("assigned_resource_id") else adapter
         target = await session.get(TargetBinding, inputs["target_id"])
         secret = FileSecretStore(settings.secret_store_path).get(target.credential_ref)
     while True:
@@ -65,11 +71,14 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
         async with sessions() as session:
             run = await session.get(EvaluationRun, run_id)
             budget_config = getattr(settings, 'billing_execution_config', None)
-            if budget_config and run.cancel_requested_at is None:
+            if (budget_config or ignore_budget) and run.cancel_requested_at is None:
                 import json
                 from pathlib import Path
 
-                deadline = datetime.fromisoformat(json.loads(Path(budget_config).read_text())['deadline'])
+                deadline = datetime.fromisoformat(
+                    frozen['model_budget']['execution_deadline'] if ignore_budget
+                    else (frozen.get('model_budget') or {}).get('deadline')
+                    or json.loads(Path(budget_config).read_text())['deadline'])
                 if datetime.now(UTC) >= deadline:
                     run.cancel_requested_at = datetime.now(UTC)
                     await advance_run(session, run, 'cancelling', {'reason': 'budget_execution_deadline'})
@@ -83,6 +92,7 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
         by_id = {c.task_id: c for c in children}
         children = [by_id[t["task_id"]] for t in inputs["tasks"]]
         for child in children:
+            adapter = adapters[child.task_id]
             if child.state == "pending" and cancelled:
                 await update_child(
                     sessions, child.id, state="cancelled", finished_at=datetime.now(UTC)
@@ -92,7 +102,7 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
             if child.state not in DATASET_ACTIVE:
                 continue
             from autoeval.billing_transport import execution_route
-            child_route = execution_route(settings, run_id, inputs['target_id'], child.payload['dataset'])
+            child_route = execution_route(settings, run_id, inputs['target_id'], child.payload['dataset'], ignore_budget=ignore_budget)
             child_secret = child_route['api_key'] if child_route else secret
             job = JobRef(external_job_id=str(child.id), submission_key=str(child.id))
             observation = (
@@ -248,15 +258,16 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
             return
         active = sum(c.state in DATASET_ACTIVE for c in children)
         for child in children:
+            adapter = adapters[child.task_id]
             if cancelled or active >= inputs["dataset_concurrency"]:
                 break
             if child.state != "pending":
                 continue
             async with sessions() as session, session.begin():
                 if not await acquire(
-                    session, child.id, frozen["resource"], demand_for(child.payload)
+                    session, child.id, resource_for_task(frozen["resource"], child.task_id), demand_for(child.payload)
                 ):
-                    break
+                    continue
                 stored = await session.get(DatasetExecution, child.id, with_for_update=True)
                 stored.state = "submitting"
                 stored.started_at = datetime.now(UTC)
@@ -268,7 +279,7 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                 contract = case_contract(child.payload)
                 from autoeval.billing_transport import execution_route, route_compilation
 
-                route = execution_route(settings, run_id, inputs['target_id'], child.payload['dataset'])
+                route = execution_route(settings, run_id, inputs['target_id'], child.payload['dataset'], ignore_budget=ignore_budget)
                 compilation = route_compilation(child.payload['compilation'], route) if route else child.payload['compilation']
                 execution_secret = route['api_key'] if route else secret
                 await adapter.submit(

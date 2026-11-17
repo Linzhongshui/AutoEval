@@ -16,6 +16,7 @@ from sqlalchemy import select, text
 
 from autoeval.datasets import DatasetManifest, canonical_manifest, read_manifest, write_manifest
 from autoeval.evaluation.models import CapacityLease, DatasetExecution
+from autoeval.evaluation.resource_allocation import resource_for_task
 from autoeval.infrastructure.domain import RUN_TERMINAL
 from autoeval.models import EvaluationRun, Outbox, RunEvent, RunSnapshot
 from autoeval.planning_engine import PLANNER_REVISION, apply_concurrency, selected_samples
@@ -62,6 +63,8 @@ async def resolve_inputs(session, settings, body):
     target = await target_data(session, body.target_id)
     tasks = []
     for spec in body.tasks:
+        if spec.compilation_id in getattr(settings, "archived_compilation_ids", []):
+            raise HTTPException(409, "该执行配置已归档，请选择新版配置")
         if spec.manifest_id in settings.archived_manifest_ids:
             raise HTTPException(409, "该样本清单已归档，请重新选择可用清单")
         compilation = await session.get(StandardInputCompilation, spec.compilation_id)
@@ -85,6 +88,10 @@ async def resolve_inputs(session, settings, body):
         if not profile:
             raise HTTPException(422, "Versioned tool/scorer profile required for selected manifest")
         compiled = copy.deepcopy(compilation.payload)
+        resource_ids = compiled.get("runtime_config", {}).get("resource_ids")
+        from autoeval.evaluation.resource_allocation import allocate_resource
+
+        assigned_resource = allocate_resource(body.resource_ids or [body.resource_id], resource_ids)
         if (
             not compiled.get("input_ready")
             or compiled.get("adaptor_revision") != "955089ab32ef696c231d628f5ad0d9da28f430c4"
@@ -166,6 +173,7 @@ async def resolve_inputs(session, settings, body):
         tasks.append(
             {
                 **spec.model_dump(mode="json"),
+                **({"assigned_resource_id": assigned_resource, "assigned_resource_kind": body.resource_kind} if body.resource_ids else {}),
                 "compilation": compiled,
                 "compilation_sha256": compilation.sha256,
                 "standard_baseline_source": {
@@ -226,6 +234,7 @@ async def current_preflight(session, inputs, *, require_selection=True):
             r
             for r in rows
             if all(r.payload.get(k) == inputs[k] for k in ("resource_id", "resource_kind"))
+            and r.payload.get("resource_ids", []) == inputs.get("resource_ids", [])
             and (
                 not require_selection
                 or (
@@ -342,7 +351,7 @@ async def create_run(session, settings, body, execution_plan_id, key):
                 )
     for item in inputs["tasks"]:
         if item["dataset"] not in fresh.payload["supported_datasets"] or not fits(
-            demand_for(item), {}, fresh.payload
+            demand_for(item), {}, resource_for_task(fresh.payload, item["task_id"])
         ):
             raise HTTPException(
                 409, "Selected dataset/concurrency exceeds execution resource capability"
@@ -400,7 +409,14 @@ async def create_run(session, settings, body, execution_plan_id, key):
             }
         )
     budget_config_path = getattr(settings, 'billing_execution_config', None)
-    if budget_config_path:
+    if body.ignore_budget:
+        acknowledged_at = datetime.now(UTC)
+        frozen['model_budget'] = {
+            'mode': 'ignored', 'acknowledged_by': run.created_by,
+            'acknowledged_at': acknowledged_at.isoformat(),
+            'execution_deadline': (acknowledged_at + timedelta(hours=24)).isoformat(),
+        }
+    elif budget_config_path:
         import json
         from pathlib import Path
 
@@ -412,15 +428,15 @@ async def create_run(session, settings, body, execution_plan_id, key):
         if expected and ({t['dataset']: len(t.get('samples', [])) for t in inputs['tasks']} != expected
                          or any(t.get('concurrency') != 24 or t.get('subset_scope') != 'full'
                                 for t in inputs['tasks'])):
-            raise HTTPException(422, 'Budget is restricted to the approved full evaluation scope')
+            raise HTTPException(422, '当前预算仅适用于已授权的全量测评；其他范围可勾选“忽略本次任务预算限制”')
         if datetime.now(UTC) >= datetime.fromisoformat(budget_config['deadline']):
-            raise HTTPException(409, 'Evaluation budget deadline expired')
+            raise HTTPException(409, '当前预算已过期，请配置新预算或勾选“忽略本次任务预算限制”')
         account = await session.scalar(select(BudgetAccount).where(
             BudgetAccount.id == uuid.UUID(budget_config['budget_id'])).with_for_update())
         if account is None or account.state != 'active' or not account.policy.get('enforcement_ready'):
-            raise HTTPException(409, 'Evaluation budget enforcement is not active')
+            raise HTTPException(409, '当前预算限制未就绪，请检查配置或勾选“忽略本次任务预算限制”')
         if account.policy.get('run_id') not in (None, str(run.id)):
-            raise HTTPException(409, 'Independent budget is already assigned to another task')
+            raise HTTPException(409, '该独立预算已绑定其他任务，请配置新预算或勾选“忽略本次任务预算限制”')
         for task in inputs['tasks']:
             route_compilation(task['compilation'], execution_route(
                 settings, run.id, body.target_id, task['dataset']))

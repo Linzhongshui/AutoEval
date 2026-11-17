@@ -2254,6 +2254,13 @@ export interface components {
              * @enum {string}
              */
             resource_kind: "docker_local" | "customer_ssh";
+            /** Resource Ids */
+            resource_ids?: string[];
+            /**
+             * Ignore Budget
+             * @default false
+             */
+            ignore_budget: boolean;
             /**
              * Target Id
              * Format: uuid
@@ -2572,6 +2579,13 @@ export interface components {
              * @enum {string}
              */
             resource_kind: "docker_local" | "customer_ssh";
+            /** Resource Ids */
+            resource_ids?: string[];
+            /**
+             * Ignore Budget
+             * @default false
+             */
+            ignore_budget: boolean;
             /**
              * Target Id
              * Format: uuid

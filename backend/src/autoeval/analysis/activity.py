@@ -221,9 +221,10 @@ async def execute_report_analysis(analysis_id: str, retry_count: int = 0):
         credential = await asyncio.to_thread(
             FileSecretStore(settings.secret_store_path).get, target.credential_ref
         )
-        from autoeval.billing_transport import execution_route
+        from autoeval.billing_transport import budget_ignored, execution_route
 
-        budget_route = execution_route(settings, job.run_id, target.id, 'analysis', 'analysis')
+        budget_route = execution_route(settings, job.run_id, target.id, 'analysis', 'analysis',
+                                       ignore_budget=budget_ignored(snapshot.canonical_body))
         if budget_route and getattr(settings, 'analysis_runner', 'native') == 'native':
             raise ValueError('Budgeted analysis requires compatible runner')
         activity.heartbeat(analysis_id)

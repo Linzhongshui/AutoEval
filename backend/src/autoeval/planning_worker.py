@@ -52,7 +52,17 @@ async def execute_job(sessions, settings, identifier):
             {key: item[key] for key in ("task_id", "dataset", "compilation", "tool")}
             for item in inputs["tasks"]
         ]
-        snapshot = await adapter.preflight(checks)
+        if inputs.get("resource_ids"):
+            task_resources = {}
+            for item in inputs["tasks"]:
+                async with sessions() as session:
+                    assigned = {**inputs, "resource_id": item["assigned_resource_id"], "resource_kind": item["assigned_resource_kind"]}
+                    selected_adapter = await transport(session, settings, assigned)
+                task_resources[item["task_id"]] = await selected_adapter.preflight([next(c for c in checks if c["task_id"] == item["task_id"])])
+            first = next(iter(task_resources.values()))
+            snapshot = {**first, "task_resources": task_resources, "dataset_checks": [c for r in task_resources.values() for c in r["dataset_checks"]], "supported_datasets": sorted({d for r in task_resources.values() for d in r["supported_datasets"]}), "execution_ready": all(r["execution_ready"] for r in task_resources.values()), "blocking_reasons": sorted({b for r in task_resources.values() for b in r["blocking_reasons"]})}
+        else:
+            snapshot = await adapter.preflight(checks)
         async with sessions() as session, session.begin():
             saved = await artifact(session, settings, "resource", {**inputs, **snapshot})
             result = {"resource_snapshot_id": str(saved.id), **saved.payload}

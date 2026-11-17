@@ -4,7 +4,7 @@ import uuid
 
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, Header, HTTPException, Request
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_serializer, model_validator
 from sqlalchemy import String, cast, func, or_, select
 
 from autoeval.evaluation.models import EvaluationReport
@@ -26,12 +26,25 @@ class TaskSelection(TaskInput):
 
 
 class SubmitTask(ResourceRef):
+    resource_ids: list[uuid.UUID] = Field(default_factory=list, max_length=16)
+    ignore_budget: bool = Field(default=False, strict=True)
+
+    @model_serializer(mode='wrap')
+    def serialize(self, handler):
+        value = handler(self)
+        if not self.resource_ids:
+            value.pop("resource_ids", None)
+        if not self.ignore_budget:
+            value.pop('ignore_budget', None)
+        return value
     target_id: uuid.UUID
     tasks: list[TaskSelection] = Field(min_length=1, max_length=4)
     dataset_concurrency: int = Field(default=1, ge=1, le=3)
 
     @model_validator(mode="after")
     def unique_selection(self):
+        if self.resource_ids and (self.resource_id not in self.resource_ids or len(set(self.resource_ids)) != len(self.resource_ids)):
+            raise ValueError("Resource pool must be unique and contain the primary resource")
         if len({t.task_id for t in self.tasks}) != len(self.tasks) or len(
             {t.dataset for t in self.tasks}
         ) != len(self.tasks):
@@ -275,6 +288,10 @@ async def task_budget(run_id: uuid.UUID, request: Request):
         frozen = snapshot.canonical_body.get('model_budget') if snapshot else None
         if not frozen:
             return envelope({'state': 'not_configured'}, request)
+        if frozen.get('mode') == 'ignored':
+            return envelope({'state': 'ignored', 'limits_applied': False,
+                             'acknowledged_at': frozen['acknowledged_at'],
+                             'execution_deadline': frozen['execution_deadline']}, request)
         account = await db.get(BudgetAccount, uuid.UUID(frozen['budget_id']))
         if account is None:
             raise HTTPException(409, 'Frozen budget account missing')

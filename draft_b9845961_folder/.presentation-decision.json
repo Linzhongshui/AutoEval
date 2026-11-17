@@ -1,0 +1,1 @@
+{"audience":"需要访问 AutoEval Demo 部署环境的团队成员","reader_task":"通过 SSH 本地端口转发打开平台登录页，并确认访问前置条件与安全边界","genre_contract":"router.knowledge","adapter":null,"presentation_mode":"normal","visual_plan":{"reason":"以最短操作步骤、参数表和命令块降低执行成本；公告截图含凭据，不附图片或额外视觉组件","blocks":[]}}

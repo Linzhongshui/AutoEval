@@ -64,6 +64,11 @@ def _conditions_match(baseline, snapshot, signature):
 
 def compare_baseline(summary, snapshot, baselines):
     """Compare only GPQA Lite accuracy in percent; never synthesize a zero baseline."""
+    tasks = (snapshot.get("inputs") or {}).get("tasks") or []
+    if len(tasks) == 1:
+        frozen = compare_frozen_standard(summary, tasks[0])
+        if frozen is not None:
+            return frozen
     parameters = snapshot["parameters"]
     signature = {
         "dataset_key": snapshot.get("dataset_key", "GPQA"),
@@ -97,4 +102,43 @@ def compare_baseline(summary, snapshot, baselines):
     if type(measured) in (int, float) and math.isfinite(measured):
         result["measured_value"] = measured
         result["difference"] = measured - matched.value
+    return result
+
+def compare_frozen_standard(summary, task):
+    """Use only the baseline bytes frozen with this task's standard input."""
+    source = task.get('standard_baseline_source') or {}
+    attachment = source.get('file')
+    if not attachment:
+        return None
+    import hashlib
+    import json
+
+    raw = attachment['raw']
+    if hashlib.sha256(raw.encode()).hexdigest() != attachment['sha256']:
+        raise ValueError('Frozen baseline hash mismatch')
+    body = json.loads(raw)
+    dataset = task.get('dataset')
+    expected = {'GPQA': ('GPQA_Diamond', 'accuracy'),
+                'AutomationBench': ('AutomationBench', 'pass_rate')}.get(dataset)
+    if not expected or (source.get('benchmark'), body.get('metric')) != expected:
+        return _result('incomparable')
+    value = body.get('median')
+    if body.get('unit') != 'percent' or type(value) not in (int, float) or not 0 <= value <= 100:
+        return _result('incomparable')
+    result = dict(_result('reference'), baseline_value=value, baseline_unit='percent',
+                  baseline_direction='higher_is_better', baseline_version=source['revision'],
+                  baseline_key=attachment['path'], source_sha256=attachment['sha256'],
+                  source_model=source['source_model'], source_repository=source['repository'],
+                  source_notes=body.get('notes'), source_details=body.get('source'),
+                  tolerance=body.get('tolerance'), range=body.get('range'), verdict=None)
+    measured = summary.get('accuracy')
+    if (summary.get('subset_scope') == 'full' and summary.get('scoring_status') == 'succeeded'
+            and summary.get('validity') == 'complete' and type(measured) in (int, float)
+            and math.isfinite(measured) and 0 <= measured <= 100):
+        result.update(status='matched', measured_value=measured, difference=measured-value)
+        bounds = body.get('range')
+        if (isinstance(bounds, list) and len(bounds) == 2
+                and all(type(x) in (int, float) and math.isfinite(x) for x in bounds)
+                and bounds[0] <= bounds[1]):
+            result['verdict'] = 'within_range' if bounds[0] <= measured <= bounds[1] else 'outside_range'
     return result

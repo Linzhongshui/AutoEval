@@ -168,6 +168,13 @@ async def resolve_inputs(session, settings, body):
                 **spec.model_dump(mode="json"),
                 "compilation": compiled,
                 "compilation_sha256": compilation.sha256,
+                "standard_baseline_source": {
+                    "source_model": source_input.source_model,
+                    "revision": source_input.revision,
+                    "repository": source_input.repository,
+                    "benchmark": source_input.benchmark,
+                    "file": copy.deepcopy(source_input.payload.get("files", {}).get("baseline.json")),
+                },
                 "manifest_sha256": manifest.sha256,
                 "profile_sha256": profile.sha256,
                 "tool": profile.contract,

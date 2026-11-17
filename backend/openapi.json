@@ -1121,7 +1121,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PageEnvelope_PlanningOptions_"
+                  "$ref": "#/components/schemas/ObjectPageEnvelope_PlanningOptions_"
                 }
               }
             }
@@ -2210,6 +2210,49 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Envelope_Accepted_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/autoeval/v1/evaluation-tasks/{run_id}/budget": {
+      "get": {
+        "tags": [
+          "evaluation tasks"
+        ],
+        "summary": "Task Budget",
+        "operationId": "task_budget_api_autoeval_v1_evaluation_tasks__run_id__budget_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_dict_"
                 }
               }
             }
@@ -6345,7 +6388,7 @@
             "type": "string",
             "maxLength": 128,
             "minLength": 1,
-            "pattern": "^[a-zA-Z0-9_.-]+$",
+            "pattern": "^[A-Za-z0-9_.\\-/]+$",
             "title": "Model Id"
           },
           "name": {
@@ -6416,6 +6459,35 @@
         ],
         "title": "MonitoredInput"
       },
+      "ObjectPageEnvelope_PlanningOptions_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/PlanningOptions"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          },
+          "next_offset": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Offset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "request_id",
+          "next_offset"
+        ],
+        "title": "ObjectPageEnvelope[PlanningOptions]"
+      },
       "PageEnvelope_ConfigListItem_": {
         "properties": {
           "data": {
@@ -6481,39 +6553,6 @@
           "request_id"
         ],
         "title": "PageEnvelope[PlannedRunItem]"
-      },
-      "PageEnvelope_PlanningOptions_": {
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/PlanningOptions"
-            },
-            "type": "array",
-            "title": "Data"
-          },
-          "next_offset": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Next Offset"
-          },
-          "request_id": {
-            "type": "string",
-            "title": "Request Id"
-          }
-        },
-        "type": "object",
-        "required": [
-          "data",
-          "next_offset",
-          "request_id"
-        ],
-        "title": "PageEnvelope[PlanningOptions]"
       },
       "PageEnvelope_ReportView_": {
         "properties": {

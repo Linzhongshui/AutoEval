@@ -59,3 +59,7 @@ class LeaderboardEnvelope[T](BaseModel):
     data: list[T]
     excluded_unverified_reports: int
     request_id: str
+
+
+class ObjectPageEnvelope[T](Envelope[T]):
+    next_offset: int | None

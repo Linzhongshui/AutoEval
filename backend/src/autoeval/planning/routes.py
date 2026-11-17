@@ -21,7 +21,14 @@ from autoeval.evaluation.service import (
 )
 from autoeval.planning.models import PlanningArtifact, PlanningJob
 from autoeval.planning_engine import DATASETS, apply_concurrency
-from autoeval.responses import Accepted, Envelope, PageEnvelope, SubmittedRun, envelope
+from autoeval.responses import (
+    Accepted,
+    Envelope,
+    ObjectPageEnvelope,
+    PageEnvelope,
+    SubmittedRun,
+    envelope,
+)
 from autoeval.standard_inputs import (
     StandardInputCompilation,
     StandardInputVersion,
@@ -184,7 +191,7 @@ class AppliedPlan(BaseModel):
 
 router = APIRouter(prefix="/api/autoeval/v1/planning", tags=["task planning"])
 
-@router.get("/options", response_model=PageEnvelope[PlanningOptions])
+@router.get("/options", response_model=ObjectPageEnvelope[PlanningOptions])
 async def options(request: Request, offset: int = 0, limit: int = 100, include_test: bool = False):
     from autoeval.profiles import EvaluationProfile
 

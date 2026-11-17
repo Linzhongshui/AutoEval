@@ -835,7 +835,7 @@ async def import_bundle(body: Confirm, request: Request):
 def input_readiness(payload, compilation=None):
     """Repository completeness is independent of target and runtime readiness."""
     missing = []
-    startup = payload["files"].get("benchmark_config.json")
+    startup = (payload.get("files") or {}).get("benchmark_config.json")
     if not startup:
         missing.append("repository_benchmark_config_missing")
     else:
@@ -855,7 +855,7 @@ def input_readiness(payload, compilation=None):
 
 
 def row_data(row):
-    return {
+    data = {
         "id": str(row.id),
         "repository": row.repository,
         "revision": row.revision,
@@ -868,6 +868,13 @@ def row_data(row):
         "execution_enabled": False,
         "approval_status": "not_required",
     }
+    # Legacy/operator inputs may predate presentation metadata. Never mutate their payload.
+    if not isinstance(data.get('mapping'), dict):
+        mapping = BENCHMARKS.get(row.benchmark)
+        data['mapping'] = dict(zip(('dataset', 'variant', 'subcommand'), mapping)) if mapping else {}
+    data.setdefault('files', {})
+    data.setdefault('locked_fields', {})
+    return data
 
 
 @router.get("/filters")

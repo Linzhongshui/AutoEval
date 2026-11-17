@@ -1,0 +1,67 @@
+{
+  "budget_id": "df0ad126-5200-48f4-9858-3f8fddabdbe2",
+  "state": "active",
+  "enforcement_ready": true,
+  "reserved": "0",
+  "spent_upper_bound": "0",
+  "actual_budget_requests": 0,
+  "limits_cny": {
+    "total": "250",
+    "evaluation": "240",
+    "analysis": "10"
+  },
+  "deadline": "2026-11-18T08:23:38.946551+00:00",
+  "scope": {
+    "GPQA": 198,
+    "AutomationBench": 600
+  },
+  "legacy_paid_entrypoint": 409,
+  "api_ready": true,
+  "source_sha256": {
+    "api.py": "ec44b2a480c412461a3da6189b7f7a986c8832e7e3759f441e7c5f7029e20597",
+    "billing.py": "bba71e110826593a40d39fc2a1f3cfba8294a1b035e0b7aeab63a8e4b4f680d3",
+    "billing_gateway.py": "b2def32fd93b89d024dbddbf8153cf83a290b109d5c5b428281397a60777493f",
+    "billing_ledger.py": "0891f4343f1714576a823599fec3a1979f156a048e585f93581213f410cdc054",
+    "billing_limits.py": "d765bd7b4427b6552dd20e26ccb97d3aabc0bce2fab8f23300805e1bf9e1cb05",
+    "billing_stream.py": "2a6f6b4cdda6d3cadaeb2bbf223bca789014c698e55783f31ee8368bab4190c2",
+    "billing_transport.py": "63a67bb46bdbcebddd205c162d134b29d33546b12768800dc6218a5c07920390",
+    "evaluation/service.py": "1f357b51dd70e8da67c9a3c31bc70adad69e4e108788509806b672e2461325ac",
+    "evaluation/orchestration.py": "8ddd5118bdf9d7f42d24a14e0a69d7a0941a7f81863acdda7d4f0f75f6e11ca7",
+    "evaluation_tasks.py": "ad45a8498f972565683b66482c29b6b11c4969c1df60a0b2807c05484f49f0a8",
+    "analysis/activity.py": "c547dc794cbe7c740f2ec30d8e39e6ed8b926988280933add97381e81207aa42",
+    "analysis_runtime.py": "7633e273930cce4386828a6bd0f3d015eadca3fa762e1f5210221c6269dabcdf",
+    "infrastructure/config.py": "c75ec09e536625035a5c4b6f57c0a83220df3c5ec750febec1b010ccb043948b",
+    "planning_runtime.py": "c3bd85cf3904041640d2d90fe2d60d151f99b767c76d8d14d35bc89330bfc340"
+  },
+  "images": {
+    "autoeval-platform-api-1": "sha256:dc62f157110d70c3e96a57cab4eddc0adff439a70b7bd42e9be71b9d1a05d339",
+    "autoeval-platform-planning-execution-1": "sha256:dc62f157110d70c3e96a57cab4eddc0adff439a70b7bd42e9be71b9d1a05d339",
+    "autoeval-platform-result-1": "sha256:dc62f157110d70c3e96a57cab4eddc0adff439a70b7bd42e9be71b9d1a05d339",
+    "autoeval-budget-gateway-20261117": "sha256:dc62f157110d70c3e96a57cab4eddc0adff439a70b7bd42e9be71b9d1a05d339"
+  },
+  "workers_routed": {
+    "autoeval-platform-api-1": true,
+    "autoeval-platform-planning-execution-1": true,
+    "autoeval-platform-result-1": true
+  },
+  "gateway_ready": true,
+  "unauthenticated_gateway": 401,
+  "public_ports_added": 0,
+  "verified_at": "2026-11-17T09:10:16.588553+00:00",
+  "local_tests": {
+    "passed": 54,
+    "skipped": 2
+  },
+  "postgres_tests": {
+    "concurrency": "24+24; 25th blocked",
+    "overspend": "prevented",
+    "duplicates": "idempotent",
+    "unknown_usage": "retained and blocked",
+    "restart": "48 retained and blocked"
+  },
+  "upstream_validation": "mock HTTP + real PostgreSQL; no paid inference",
+  "analysis_runtime": "pinned independent file, invalid output bound rejected before network",
+  "runtime_forwarding_rules": 3,
+  "firewall_rule_persistence": "runtime only; recheck after firewalld reload",
+  "actual_model_calls_this_verification": 0
+}

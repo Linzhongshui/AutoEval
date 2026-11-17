@@ -221,6 +221,11 @@ async def execute_report_analysis(analysis_id: str, retry_count: int = 0):
         credential = await asyncio.to_thread(
             FileSecretStore(settings.secret_store_path).get, target.credential_ref
         )
+        from autoeval.billing_transport import execution_route
+
+        budget_route = execution_route(settings, job.run_id, target.id, 'analysis', 'analysis')
+        if budget_route and getattr(settings, 'analysis_runner', 'native') == 'native':
+            raise ValueError('Budgeted analysis requires compatible runner')
         activity.heartbeat(analysis_id)
         native = await asyncio.to_thread(
             invoke
@@ -231,10 +236,11 @@ async def execute_report_analysis(analysis_id: str, retry_count: int = 0):
             {
                 "operation": "analyze_report",
                 "prompt": analysis_prompt(evidence_input),
-                "base_url": target.base_url.rstrip("/"),
+                "base_url": budget_route["base_url"] if budget_route else target.base_url.rstrip("/"),
+                "budget_proxy": bool(budget_route),
                 "model": target.remote_model,
                 "max_tokens": settings.analysis_max_output_tokens,
-                "api_key": credential,
+                "api_key": budget_route["api_key"] if budget_route else credential,
                 "allowed_hosts": settings.allowed_model_hosts,
             },
         )

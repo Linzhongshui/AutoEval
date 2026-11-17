@@ -438,6 +438,19 @@ def execute(folder, spec):
             "Config.dump = _safe_dump\n"
         )
         environment = dict(os.environ)
+        from urllib.parse import urlsplit
+        endpoint = config['params'].get('url') or config['params'].get('api_base') or ''
+        if endpoint.startswith('http://'):
+            hostname = urlsplit(endpoint).hostname
+            import ipaddress
+            if not hostname or not ipaddress.ip_address(hostname).is_private:
+                raise ValueError('Plain HTTP is limited to the private budget proxy')
+            bypass = ','.join(filter(None, [environment.get('NO_PROXY', ''), hostname]))
+            environment['NO_PROXY'] = environment['no_proxy'] = bypass
+            if config.get('subcommand') == 'harbor_agent':
+                agent_env = config['params'].setdefault('agent_env', {})
+                agent_env['NO_PROXY'] = agent_env['no_proxy'] = bypass
+                config_path.write_text(json.dumps(config))
         environment["PYTHONPATH"] = (
             str(compatibility) + os.pathsep + environment.get("PYTHONPATH", "")
         )

@@ -19,11 +19,11 @@ const terminal = (state: string) => isTerminal(state);
 const time = formatTime;
 
 export function EvaluationRuns({ runId = "", initialTarget = "", allowSubmit = false }: { runId?: string; initialTarget?: string; allowSubmit?: boolean }) {
-  const configs = useOptions<Config>("/test-configs");
-  const targets = useOptions<Target>("/target-bindings");
-  const docker = useOptions<Resource>("/resources");
-  const ssh = useOptions<Resource>("/ssh-resources");
-  const monitored = useOptions<Resource>("/aisbench-monitored/resources");
+  const configs = useOptions<Config>("/test-configs", allowSubmit);
+  const targets = useOptions<Target>("/target-bindings", allowSubmit);
+  const docker = useOptions<Resource>("/resources", allowSubmit);
+  const ssh = useOptions<Resource>("/ssh-resources", allowSubmit);
+  const monitored = useOptions<Resource>("/aisbench-monitored/resources", allowSubmit);
   const [resourceKind, setResourceKind] = useState("docker_local");
   const resources = resourceKind === "aisbench_monitor" ? monitored : resourceKind === "customer_ssh" ? ssh : docker;
   const [target, setTarget] = useState<Target | null>(null);

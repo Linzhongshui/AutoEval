@@ -34,14 +34,25 @@ export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> 
   return (await apiGetPage<T>(path, signal)).data;
 }
 
-export async function apiGetPage<T>(path: string, signal?: AbortSignal): Promise<{ data: T; next_offset: number | null; total?: number | null; statistics?: TaskStatistics }> {
-  const response = await fetch(`/api/autoeval/v1${path}`, {
-    signal,
-    headers: { Accept: "application/json" },
-  });
-  if (!response.ok) throw await readError(response);
-  const body = await response.json();
-  return { data: body.data as T, next_offset: body.next_offset ?? null, total: body.total ?? null, statistics: body.statistics };
+type Page<T> = { data: T; next_offset: number | null; total?: number | null; statistics?: TaskStatistics };
+// Share only in-flight reads. Completed responses are never cached, so polling and
+// reads after a mutation remain fresh. Caller-owned abort signals stay isolated.
+const pendingReads = new Map<string, Promise<Page<unknown>>>();
+export async function apiGetPage<T>(path: string, signal?: AbortSignal): Promise<Page<T>> {
+  const existing = !signal && pendingReads.get(path);
+  if (existing) return existing as Promise<Page<T>>;
+  const request = (async (): Promise<Page<T>> => {
+    const response = await fetch(`/api/autoeval/v1${path}`, {
+      signal, headers: { Accept: "application/json" },
+    });
+    if (!response.ok) throw await readError(response);
+    const body = await response.json();
+    return { data: body.data as T, next_offset: body.next_offset ?? null, total: body.total ?? null, statistics: body.statistics };
+  })();
+  if (signal) return request;
+  pendingReads.set(path, request);
+  try { return await request; }
+  finally { if (pendingReads.get(path) === request) pendingReads.delete(path); }
 }
 
 export async function apiPost<T>(path: string, payload?: unknown, key?: string, signal?: AbortSignal): Promise<T> {

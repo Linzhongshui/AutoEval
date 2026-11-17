@@ -9,7 +9,18 @@ from autoeval.targets import validate_url
 
 
 def analyze(payload, *, transport=None):
-    base = validate_url(payload["base_url"], payload["allowed_hosts"])
+    if payload.get('budget_proxy'):
+        import ipaddress
+        from urllib.parse import urlsplit
+        parsed = urlsplit(payload['base_url'])
+        address = ipaddress.ip_address(parsed.hostname)
+        if (parsed.scheme != 'http' or not address.is_private or parsed.username
+                or parsed.password or parsed.query or parsed.fragment
+                or not parsed.path.startswith('/runs/') or not parsed.path.endswith('/v1')):
+            raise ValueError('Invalid private budget proxy')
+        base = payload['base_url'].rstrip('/')
+    else:
+        base = validate_url(payload["base_url"], payload["allowed_hosts"])
     maximum = payload["max_tokens"]
     if type(maximum) is not int or not 1 <= maximum <= 4096:
         raise ValueError("Analysis output budget exceeded")
@@ -17,7 +28,8 @@ def analyze(payload, *, transport=None):
     if not isinstance(prompt, str) or not prompt or len(prompt.encode()) > 12 * 1024 * 1024:
         raise ValueError("Invalid analysis prompt")
     # No retries or redirects, including transport failures with an unknown outcome.
-    with httpx.Client(timeout=180, follow_redirects=False, transport=transport) as client:
+    with httpx.Client(timeout=180, follow_redirects=False, transport=transport,
+                      trust_env=not payload.get('budget_proxy', False)) as client:
         response = client.post(
             base + "/chat/completions",
             headers={"Authorization": "Bearer " + payload["api_key"]},

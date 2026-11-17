@@ -35,7 +35,7 @@ type InputVersion = {
   standard_config_status?: string; service_status?: string; environment_status?: string;
   startup_missing: boolean; locked_fields: Record<string, unknown>;
   field_changes?: { field: string; before: unknown; after: unknown; change: string }[];
-  mapping: { dataset: string; variant: string }; changed_files?: string[]; removed_files?: string[];
+  mapping?: { dataset?: string; variant?: string }; changed_files?: string[]; removed_files?: string[];
   files: Record<string, { path: string; raw: string; sha256: string }>;
   latest_compilation?: { input_ready: boolean; template_version: string; blocking_reasons?: string[] } | null;
   compilations?: Compilation[];
@@ -123,11 +123,11 @@ function InputDetail({ entry }: { entry: InputVersion }) {
     apiGet<InputVersion>(`/standard-inputs/${entry.id}`, controller.signal).then((row) => { if (!controller.signal.aborted) setDetail(row); }).catch(() => { if (!controller.signal.aborted) setMessage("历史编译记录加载失败"); });
     return () => controller.abort();
   }, [entry.id]);
-  const config = detail.files["standard_config.json"] ? JSON.parse(detail.files["standard_config.json"].raw) : {};
+  const config = detail.files?.["standard_config.json"] ? JSON.parse(detail.files?.["standard_config.json"].raw) : {};
   return <div className="stack standard-detail"><div className="standard-detail-meta"><strong>{detail.source_model}</strong><span>版本：{tagLabel(tags, detail.revision)}</span><span>执行入口未接入</span></div>
     <div className="workflow-grid"><aside className="workflow-datasets"><h3>测评基准</h3><div className="notice">{detail.benchmark}</div><p className="muted">标准参数只读</p></aside><section className="card stack"><h3>{detail.benchmark}</h3><AdapterFields value={config} readonly /></section></div>
-    <details><summary>来源与校验信息</summary><p>提交：{detail.revision}</p><p>内容 SHA-256：{detail.sha256}</p><p>平台映射：{detail.mapping.dataset} / {detail.mapping.variant}</p></details>
-    {Object.entries(detail.files).map(([name, file]) => <details key={name}><summary>{name}{name === "baseline.json" ? "（来源附件，未设为正式基线）" : ""}</summary><a href={`https://github.com/SJTUyh/AutoEval-Standard/blob/${detail.revision}/${file.path}`} target="_blank" rel="noreferrer">查看来源文件</a><small>SHA-256：{file.sha256}</small><pre className="snapshot">{file.raw}</pre></details>)}
+    <details><summary>来源与校验信息</summary><p>提交：{detail.revision}</p><p>内容 SHA-256：{detail.sha256}</p><p>平台映射：{detail.mapping?.dataset || "未提供映射"} / {detail.mapping?.variant || "—"}</p></details>
+    {Object.entries(detail.files || {}).map(([name, file]) => <details key={name}><summary>{name}{name === "baseline.json" ? "（来源附件，未设为正式基线）" : ""}</summary><a href={`https://github.com/SJTUyh/AutoEval-Standard/blob/${detail.revision}/${file.path}`} target="_blank" rel="noreferrer">查看来源文件</a><small>SHA-256：{file.sha256}</small><pre className="snapshot">{file.raw}</pre></details>)}
     <ManagementDrawer title="补全启动参数与模型映射"><CompileForm entry={detail} /></ManagementDrawer>
     {message && <p role="alert">{message}</p>}
     <details><summary>历史编译快照（最近 20 条）</summary>{detail.compilations?.length ? detail.compilations.map((item) => <div key={item.sha256}><p>{item.template_version} · {item.input_ready ? "输入齐备" : "待补全"} · {item.model_id || "未映射模型"}</p><pre className="snapshot">{JSON.stringify(item, (key, value) => key === "approval_status" || key === "approved_by" ? undefined : value, 2)}</pre></div>) : <p>暂无编译记录；保存后重新打开详情可查看。</p>}</details>
@@ -171,6 +171,6 @@ export function StandardInputs() {
       <label>模型<select aria-label="筛选标准模型" value={modelFilter} onChange={e => { setModelFilter(e.target.value); setOffset(0); }}><option value="">全部模型</option>{options.models.map(m => <option key={m} value={m}>{m}</option>)}</select></label>
       <label>数据集<select aria-label="筛选标准数据集" value={datasetFilter} onChange={e => { setDatasetFilter(e.target.value); setOffset(0); }}><option value="">全部数据集</option>{options.datasets.map(d => <option key={d} value={d}>{d}</option>)}</select></label>
     </div>
-    <div className="table-wrap"><table><thead><tr><th>来源模型</th><th>基准 / 变体</th><th>版本 / 提交</th><th>状态</th><th>操作</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td>{row.source_model}</td><td>{row.benchmark}<small>平台内部映射：{row.mapping.dataset} / {row.mapping.variant}</small></td><td title={row.revision}>{tagLabel(tags, row.revision)}<small>{row.revision.slice(0, 12)}</small></td><td>{row.standard_config_status === "complete" ? "标准配置齐备" : "标准仓缺少启动配置"}<small>服务：{row.service_status === "bound" ? "已绑定" : "未绑定"}</small><small>执行入口未接入</small></td><td><ManagementDrawer title="查看输入详情"><InputDetail entry={row} /></ManagementDrawer></td></tr>)}</tbody></table></div>{!rows.length && <p className="empty">暂无标准仓输入版本</p>}<OffsetPagination label="标准输入" offset={offset} nextOffset={next} onChange={setOffset} disabled={busy} />
+    <div className="table-wrap"><table><thead><tr><th>来源模型</th><th>基准 / 变体</th><th>版本 / 提交</th><th>状态</th><th>操作</th></tr></thead><tbody>{rows.map((row) => <tr key={row.id}><td>{row.source_model}</td><td>{row.benchmark}<small>平台内部映射：{row.mapping?.dataset || "未提供映射"} / {row.mapping?.variant || "—"}</small></td><td title={row.revision}>{tagLabel(tags, row.revision)}<small>{row.revision.slice(0, 12)}</small></td><td>{row.standard_config_status === "complete" ? "标准配置齐备" : "标准仓缺少启动配置"}<small>服务：{row.service_status === "bound" ? "已绑定" : "未绑定"}</small><small>执行入口未接入</small></td><td><ManagementDrawer title="查看输入详情"><InputDetail entry={row} /></ManagementDrawer></td></tr>)}</tbody></table></div>{!rows.length && <p className="empty">暂无标准仓输入版本</p>}<OffsetPagination label="标准输入" offset={offset} nextOffset={next} onChange={setOffset} disabled={busy} />
   </section>;
 }

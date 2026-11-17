@@ -761,6 +761,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/autoeval/v1/evaluation-tasks/{run_id}/budget": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Task Budget */
+        get: operations["task_budget_api_autoeval_v1_evaluation_tasks__run_id__budget_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/autoeval/v1/test-configs/{config_id}/execution-spec": {
         parameters: {
             query?: never;
@@ -2164,6 +2181,14 @@ export interface components {
             /** Max Model Requests */
             max_model_requests: number;
         };
+        /** ObjectPageEnvelope[PlanningOptions] */
+        ObjectPageEnvelope_PlanningOptions_: {
+            data: components["schemas"]["PlanningOptions"];
+            /** Request Id */
+            request_id: string;
+            /** Next Offset */
+            next_offset: number | null;
+        };
         /** PageEnvelope[ConfigListItem] */
         PageEnvelope_ConfigListItem_: {
             /** Data */
@@ -2177,15 +2202,6 @@ export interface components {
         PageEnvelope_PlannedRunItem_: {
             /** Data */
             data: components["schemas"]["PlannedRunItem"][];
-            /** Next Offset */
-            next_offset: number | null;
-            /** Request Id */
-            request_id: string;
-        };
-        /** PageEnvelope[PlanningOptions] */
-        PageEnvelope_PlanningOptions_: {
-            /** Data */
-            data: components["schemas"]["PlanningOptions"][];
             /** Next Offset */
             next_offset: number | null;
             /** Request Id */
@@ -3497,7 +3513,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PageEnvelope_PlanningOptions_"];
+                    "application/json": components["schemas"]["ObjectPageEnvelope_PlanningOptions_"];
                 };
             };
             /** @description Validation Error */
@@ -4214,6 +4230,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_Accepted_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    task_budget_api_autoeval_v1_evaluation_tasks__run_id__budget_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_dict_"];
                 };
             };
             /** @description Validation Error */

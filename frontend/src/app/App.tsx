@@ -1,4 +1,4 @@
-import { apiGet, apiGetPage } from "../shared/api";
+import { apiGetPage } from "../shared/api";
 import { BackendConnection } from "../shared/ui/BackendConnection";
 import { ManagementDrawer } from "../shared/ui/ManagementDrawer";
 import { DataWorkbench, PublishedLeaderboard } from "../features/reporting/DataWorkbench";
@@ -73,16 +73,9 @@ function Notice({ children }: { children: ReactNode }) {
 }
 
 export function App() {
-  const [profiles, setProfiles] = useProfiles();
-  const [workbenchEnabled, setWorkbenchEnabled] = useState(false);
-  useEffect(() => {
-    const controller = new AbortController();
-    void apiGet<{ data_workbench_enabled?: boolean }>("/system/capabilities", controller.signal)
-      .then(value => setWorkbenchEnabled(value.data_workbench_enabled === true))
-      .catch(() => setWorkbenchEnabled(false));
-    return () => controller.abort();
-  }, []);
   const [page, setPage] = useState(location.hash.slice(1) || "console");
+  const [profiles, setProfiles] = useProfiles(page === "config" || page.startsWith("config/"));
+  const [workbenchEnabled, setWorkbenchEnabled] = useState(false);
   const [toast, setToast] = useState("");
   const evaluationPage = page === "tasks" || page.startsWith("run/") || page.startsWith("evaluate?");
   const go = (path: string) => {
@@ -158,7 +151,7 @@ export function App() {
         </div>
       </aside>
       <main className="main">
-        <BackendConnection />
+        <BackendConnection onWorkbenchEnabled={setWorkbenchEnabled} />
         <div className="breadcrumb">
           {page.startsWith("report/") ? (
             <button onClick={() => go("reports")}>报告管理</button>
@@ -264,7 +257,7 @@ function Overview({ go }: { go: (path: string) => void }) {
           </p>
           <div className="inline">
             <button className="primary" onClick={() => go("console")}>
-              <Play size={17} />发起探索测评
+              <Play size={17} />发起测评
             </button>
             <button onClick={() => go("reports")}>
               查看测评报告<ChevronRight size={16} />

@@ -64,6 +64,16 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
         heartbeat()
         async with sessions() as session:
             run = await session.get(EvaluationRun, run_id)
+            budget_config = getattr(settings, 'billing_execution_config', None)
+            if budget_config and run.cancel_requested_at is None:
+                import json
+                from pathlib import Path
+
+                deadline = datetime.fromisoformat(json.loads(Path(budget_config).read_text())['deadline'])
+                if datetime.now(UTC) >= deadline:
+                    run.cancel_requested_at = datetime.now(UTC)
+                    await advance_run(session, run, 'cancelling', {'reason': 'budget_execution_deadline'})
+                    await session.commit()
             cancelled = run.cancel_requested_at is not None
             children = list(
                 await session.scalars(
@@ -81,6 +91,9 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                 child.finished_at = datetime.now(UTC)
             if child.state not in DATASET_ACTIVE:
                 continue
+            from autoeval.billing_transport import execution_route
+            child_route = execution_route(settings, run_id, inputs['target_id'], child.payload['dataset'])
+            child_secret = child_route['api_key'] if child_route else secret
             job = JobRef(external_job_id=str(child.id), submission_key=str(child.id))
             observation = (
                 await adapter.cancel(job, "cancel:" + str(child.id))
@@ -130,7 +143,7 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                     )
                     if existing_log is None:
                         observed_log = await log_reader(job)
-                        content = observed_log["content"].replace(secret, "[REDACTED]")
+                        content = observed_log["content"].replace(secret, "[REDACTED]").replace(child_secret, "[REDACTED]")
                         file = {
                             "path": "job.log",
                             "content": content,
@@ -164,7 +177,7 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                 result = await adapter.collect(job)
                 from autoeval.planning_observations import archive_native, publish
 
-                await archive_native(sessions, settings, run_id, child, result["result"], secret)
+                await archive_native(sessions, settings, run_id, child, result["result"], child_secret)
                 reader = getattr(adapter, "progress", None)
                 if reader:
                     await publish(sessions, settings, run_id, child.id, await reader(job))
@@ -253,12 +266,17 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                 from autoeval.planning_observations import case_contract
 
                 contract = case_contract(child.payload)
+                from autoeval.billing_transport import execution_route, route_compilation
+
+                route = execution_route(settings, run_id, inputs['target_id'], child.payload['dataset'])
+                compilation = route_compilation(child.payload['compilation'], route) if route else child.payload['compilation']
+                execution_secret = route['api_key'] if route else secret
                 await adapter.submit(
                     {
                         "kind": "adaptor",
-                        "compilation": child.payload["compilation"],
+                        "compilation": compilation,
                         "tool": child.payload["tool"],
-                        "credential": secret,
+                        "credential": execution_secret,
                         **({"case_contract": contract} if contract else {}),
                     },
                     str(child.id),

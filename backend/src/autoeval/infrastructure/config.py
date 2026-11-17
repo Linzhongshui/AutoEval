@@ -8,6 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    billing_execution_config: Path | None = None
     langfuse_host: str | None = None
     langfuse_browser_url: str | None = None
     langfuse_project_id: str | None = None

@@ -262,3 +262,32 @@ async def cleanup_task(run_id: uuid.UUID, request: Request):
         request.app.state.sessions, request.app.state.settings, run_id
     )
     return envelope(data, request)
+
+@router.get('/{run_id}/budget', response_model=Envelope[dict])
+async def task_budget(run_id: uuid.UUID, request: Request):
+    from autoeval.billing import BudgetAccount, BudgetRequest
+
+    async with request.app.state.sessions() as db:
+        run = await db.get(EvaluationRun, run_id)
+        if run is None or run.trigger_scope not in SCOPES:
+            raise HTTPException(404, 'Evaluation task not found')
+        snapshot = await db.scalar(select(RunSnapshot).where(RunSnapshot.run_id == run_id))
+        frozen = snapshot.canonical_body.get('model_budget') if snapshot else None
+        if not frozen:
+            return envelope({'state': 'not_configured'}, request)
+        account = await db.get(BudgetAccount, uuid.UUID(frozen['budget_id']))
+        if account is None:
+            raise HTTPException(409, 'Frozen budget account missing')
+        unresolved = await db.scalar(select(func.count()).select_from(BudgetRequest).where(
+            BudgetRequest.budget_id == account.id, BudgetRequest.state == 'unresolved'))
+        return envelope({
+            'budget_id': str(account.id), 'currency': account.currency,
+            'total_limit': str(account.total_limit),
+            'evaluation_limit': str(account.evaluation_limit),
+            'analysis_limit': str(account.analysis_limit),
+            'reserved': str(account.reserved), 'spent_upper_bound': str(account.spent),
+            'remaining': str(account.total_limit - account.reserved - account.spent),
+            'state': account.state, 'deadline': frozen['deadline'],
+            'unresolved_requests': unresolved,
+            'cost_basis': 'conservative_official_upper_bound_not_provider_invoice',
+        }, request)

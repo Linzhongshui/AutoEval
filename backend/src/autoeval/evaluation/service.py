@@ -399,6 +399,34 @@ async def create_run(session, settings, body, execution_plan_id, key):
                 },
             }
         )
+    budget_config_path = getattr(settings, 'billing_execution_config', None)
+    if budget_config_path:
+        import json
+        from pathlib import Path
+
+        budget_config = json.loads(Path(budget_config_path).read_text())
+        from autoeval.billing import BudgetAccount
+        from autoeval.billing_transport import execution_route, route_compilation
+
+        expected = budget_config.get('expected_scope')
+        if expected and ({t['dataset']: len(t.get('samples', [])) for t in inputs['tasks']} != expected
+                         or any(t.get('concurrency') != 24 or t.get('subset_scope') != 'full'
+                                for t in inputs['tasks'])):
+            raise HTTPException(422, 'Budget is restricted to the approved full evaluation scope')
+        if datetime.now(UTC) >= datetime.fromisoformat(budget_config['deadline']):
+            raise HTTPException(409, 'Evaluation budget deadline expired')
+        account = await session.scalar(select(BudgetAccount).where(
+            BudgetAccount.id == uuid.UUID(budget_config['budget_id'])).with_for_update())
+        if account is None or account.state != 'active' or not account.policy.get('enforcement_ready'):
+            raise HTTPException(409, 'Evaluation budget enforcement is not active')
+        if account.policy.get('run_id') not in (None, str(run.id)):
+            raise HTTPException(409, 'Independent budget is already assigned to another task')
+        for task in inputs['tasks']:
+            route_compilation(task['compilation'], execution_route(
+                settings, run.id, body.target_id, task['dataset']))
+        account.policy = {**account.policy, 'run_id': str(run.id)}
+        frozen['model_budget'] = {k: budget_config[k] for k in
+                                  ('budget_id', 'deadline', 'limits_cny')}
     session.add(
         RunSnapshot(
             run_id=run.id,

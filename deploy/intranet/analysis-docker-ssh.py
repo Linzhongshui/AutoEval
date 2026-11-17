@@ -46,7 +46,19 @@ def main():
         raise SystemExit(2)
     control = SSHExecutor(asyncio.run(connection(settings, binding["ssh_resource_id"])))
     with control.connect() as client:
-        stdin, stdout, stderr = client.exec_command(shlex.join(["docker", *args]), timeout=185)
+        command_args = args
+        if args[0] == 'exec' and binding.get('runtime_script'):
+            script = binding['runtime_script']
+            sha = binding['runtime_sha256']
+            if not script.startswith('/opt/autoeval-budget-validation/') or len(sha) != 64:
+                raise ValueError('Invalid pinned analysis runtime')
+            code = (
+                "import hashlib,runpy;from pathlib import Path;"
+                f"p=Path({script!r});assert hashlib.sha256(p.read_bytes()).hexdigest()=={sha!r};"
+                "runpy.run_path(str(p),run_name='__main__')"
+            )
+            command_args = ['exec', '-i', container, 'python', '-c', code]
+        stdin, stdout, stderr = client.exec_command(shlex.join(["docker", *command_args]), timeout=185)
         if args[0] == "exec":
             stdin.write(sys.stdin.buffer.read(16 * 1024 * 1024 + 1))
         stdin.channel.shutdown_write()

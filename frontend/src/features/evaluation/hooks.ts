@@ -5,7 +5,7 @@ import { eligibleConfig } from "./logic";
 import type { Config, Target } from "./types";
 
 /** Paged registry options; a failed page keeps the error visible for retry. */
-export function useOptions<T>(path: string) {
+export function useOptions<T>(path: string, enabled = true) {
   const [offset, setOffset] = useState(0);
   const [rows, setRows] = useState<T[]>([]);
   const [next, setNext] = useState<number | null>(null);
@@ -13,6 +13,7 @@ export function useOptions<T>(path: string) {
   const [error, setError] = useState("");
   const [refresh, setRefresh] = useState(0);
   useEffect(() => {
+    if (!enabled) { setLoading(false); return; }
     const controller = new AbortController();
     setLoading(true);
     setError("");
@@ -32,7 +33,7 @@ export function useOptions<T>(path: string) {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [path, offset, refresh]);
+  }, [path, offset, refresh, enabled]);
   return {
     rows,
     offset,

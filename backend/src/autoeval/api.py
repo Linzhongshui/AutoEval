@@ -1,6 +1,7 @@
 import asyncio
 import logging
 from contextlib import asynccontextmanager
+from time import perf_counter
 from uuid import uuid4
 
 import boto3
@@ -76,11 +77,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(audit_router)
     app.include_router(reports_router)
 
+    @app.middleware('http')
+    async def budget_entrypoints(request: Request, call_next):
+        if (settings.billing_execution_config and request.method == 'POST'
+                and request.url.path.rstrip('/') in {
+                    '/api/autoeval/v1/runs', '/api/autoeval/v1/aisbench-monitored/runs',
+                    '/api/autoeval/v1/planning/probes'}):
+            return JSONResponse({'detail': 'Active budget requires the unified evaluation-tasks flow; direct execution and paid probes are disabled'}, status_code=409)
+        return await call_next(request)
+
     @app.middleware("http")
     async def correlation(request: Request, call_next):
+        started = perf_counter()
         request.state.request_id = str(uuid4())
         response = await call_next(request)
         response.headers["X-Request-ID"] = request.state.request_id
+        response.headers["Server-Timing"] = f"app;dur={(perf_counter() - started) * 1000:.1f}"
         # One line per request; credentials, prompts and model payloads never appear here.
         request_log.info(
             "request_id=%s method=%s path=%s status=%s",

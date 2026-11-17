@@ -1,10 +1,12 @@
-# AutoEval Demo
+# AutoEval Platform
 
 <p align="center">
   <img src="./frontend/public/brand/autoeval-logo.svg" alt="AutoEval 智能测评平台" width="300" />
 </p>
 
 AutoEval 是面向单团队、单工作空间的模型测评平台。通过统一入口提交测评，跟踪执行状态，归档样本证据与报告，并从 Harbor 样本记录跳转查看 Langfuse Agent 轨迹。
+
+代码仓库：[llauren48/AutoEval-Platform](https://github.com/llauren48/AutoEval-Platform)。仓库名称为 `AutoEval-Platform`，页面与产品名称统一为 `AutoEval`。
 
 技术栈：React / TypeScript / Vite、FastAPI、Temporal、PostgreSQL、S3 兼容对象存储。当前用于受控开发与演示，正式身份、生产运维和 Release 门禁尚未完成验收。
 

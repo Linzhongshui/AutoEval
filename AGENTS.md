@@ -1,4 +1,4 @@
-# AutoEval Demo 开发指南
+# AutoEval Platform 开发指南
 
 ## 协作与项目定位
 

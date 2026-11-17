@@ -1,0 +1,44 @@
+[
+  {
+    "provider": "deepseek",
+    "remote_model": "deepseek-flash",
+    "source_url": "https://api-docs.deepseek.com/zh-cn/quick_start/pricing/",
+    "source_sha256": "c85eeb649ff392593ad0048babcbf63d73b3e6f05cbb2626808927618c01cb7b",
+    "fetched_at": "2026-11-17T07:45:14.319515+00:00",
+    "rates": {
+      "unit_tokens": 1000000,
+      "peak": {
+        "input_miss": "2",
+        "input_hit": "0.04",
+        "output": "8"
+      },
+      "off_peak": {
+        "input_miss": "1",
+        "input_hit": "0.02",
+        "output": "4"
+      },
+      "reservation_tier": "peak",
+      "timezone": "Asia/Shanghai",
+      "schedule": "工作日非中国法定节假日 09:00-12:00、14:00-18:00 高峰；其余空闲",
+      "pricing_note": "预留始终按高峰价；未核对计费时段前不声称实际扣费。",
+      "model_version": "DeepSeek-V4.1-Flash-1017"
+    }
+  },
+  {
+    "provider": "bigmodel",
+    "remote_model": "glm-5.3",
+    "source_url": "https://docs.bigmodel.cn/cn/guide/start/pricing",
+    "source_sha256": "e48fb68f39d0cc5579f46780dd53ac604d6e04ae6e80c40a148f36f8743f5cdc",
+    "fetched_at": "2026-11-17T07:45:14.968826+00:00",
+    "rates": {
+      "unit_tokens": 1000000,
+      "standard": {
+        "input_miss": "8",
+        "input_hit": "2",
+        "output": "28"
+      },
+      "cache_storage": "temporarily_free",
+      "billing_note": "自定义网关仅按官方价估算，非网关实际账单"
+    }
+  }
+]

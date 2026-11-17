@@ -1,5 +1,6 @@
 import { PlanningSelect } from "./PlanningSelect";
 import { ServiceBindings } from "../resources/ServiceBindings";
+import { ResourceMultiSelect } from "./ResourceMultiSelect";
 import { ModelServices } from "../resources/ModelServices";
 import { ProbeProgress } from "../evaluation/ProbeProgress";
 import { useEffect, useRef, useState } from "react";
@@ -68,6 +69,7 @@ export function TaskPlanning() {
   const [addingService, setAddingService] = useState(false);
   const [resourceKind, setResourceKind] = useState("docker_local");
   const [resource, setResource] = useState("");
+  const [resourceIds, setResourceIds] = useState<string[]>([]);
   const [options, setOptions] = useState<Options>({ compilations: [], manifests: [], curves: [] });
   const [selection, setSelection] = useState<Record<string, { compilation: string; manifest: string }>>({});
   const [enabled, setEnabled] = useState<string[]>([]);
@@ -88,6 +90,7 @@ export function TaskPlanning() {
   const [closeAcknowledged, setCloseAcknowledged] = useState(false);
   const probeDialog = useRef<HTMLDialogElement>(null);
   const [runConfirmed, setRunConfirmed] = useState(false);
+  const [ignoreBudget, setIgnoreBudget] = useState(false);
   const [curveText, setCurveText] = useState("");
   const [levels, setLevels] = useState("1,2,4,8");
   const [promptTokens, setPromptTokens] = useState(512);
@@ -130,18 +133,30 @@ export function TaskPlanning() {
   };
   useEffect(() => { void refresh().catch(() => setMessage("测评选项加载失败，请重试。")); }, []);
   const payload = { target_id: target, resource_id: resource, resource_kind: resourceKind,
+    resource_ids: resourceIds,
     throughput_profile_id: curve || null, dataset_concurrency: parallel, recommend: false,
     tasks: enabled.filter(d => datasets.includes(d) && selection[d]?.compilation && selection[d]?.manifest).map(d => ({
       task_id: d.replaceAll("-", "_"), dataset: d, concurrency: concurrency[d] ?? null, compilation_id: selection[d].compilation, manifest_id: selection[d].manifest,
     })) };
   const fingerprint = JSON.stringify(payload);
   useEffect(() => { setParallel(v => Math.min(v, Math.max(1, enabled.length))); }, [enabled.length]);
-  const preflightFingerprint = JSON.stringify({ target_id: target, resource_id: resource, resource_kind: resourceKind, tasks: payload.tasks });
+  const preflightFingerprint = JSON.stringify({ target_id: target, resource_id: resource, resource_kind: resourceKind, resource_ids: resourceIds, tasks: payload.tasks });
   useEffect(() => {
-    generation.current++; if (job) setStaleEstimate(true); setJob(null); setAdviceJob(null); setRunConfirmed(false);
+    generation.current++; if (job) setStaleEstimate(true); setJob(null); setAdviceJob(null); setRunConfirmed(false); setIgnoreBudget(false);
   }, [fingerprint]);
   useEffect(() => { setPreflight(null); }, [preflightFingerprint]);
   useEffect(() => { setPreflight(null); setProbeReview(false); setCurve(""); }, [target, resource, resourceKind]);
+  useEffect(() => {
+    setSelection(current => {
+      const next = { ...current }; let changed = false;
+      for (const [dataset, selected] of Object.entries(current)) {
+        const config = options.compilations.find(c => c.id === selected.compilation);
+        const ids = config?.runtime_config?.resource_ids;
+        if (Array.isArray(ids) && !resourceIds.some(id => ids.includes(id))) { next[dataset] = { compilation: "", manifest: "" }; changed = true; }
+      }
+      return changed ? next : current;
+    });
+  }, [resource, resourceIds, options.compilations]);
   // Poll active planning jobs sequentially; stops naturally when nothing is active.
   usePolling(
     async () => {
@@ -218,9 +233,10 @@ export function TaskPlanning() {
     <p className="planning-intro">支持 GPQA、MMMU-Pro、DeepSWE、AutomationBench 的全量或已绑定 Lite 清单。Agent 工作流通过 AISBench Harbor 执行，需绑定配置与清单并通过环境检查。</p>
     <div className="planning-fields">
       <div className="planning-service-field"><div className="planning-service-heading"><label htmlFor="planning-service">模型服务</label><ManagementDrawer title="管理服务" onDismiss={targets.retry}><ModelServices /></ManagementDrawer></div><PlanningSelect id="planning-service" label="规划模型服务" value={target} options={targets.rows.map(t => ({ id: t.id, label: t.service_name || t.remote_model, detail: `${t.remote_model} · ${t.base_url} · ${t.id.slice(0, 8)}` }))} onChange={id => { setTarget(id); setSelection({}); }} onAdd={() => setAddingService(true)} /><ManagementDrawer title="新增模型服务" hideTrigger open={addingService} onOpenChange={setAddingService} onDismiss={targets.retry}><ServiceBindings /></ManagementDrawer></div>
-      <div className="planning-environment-field"><span>执行环境</span><PlanningSelect label="执行环境" value={resourceKind} options={[{ id: "docker_local", label: "Docker" }, { id: "customer_ssh", label: "客户 SSH" }]} onChange={id => { setResourceKind(id); setResource(""); }} /></div>
-      <label><span>执行资源</span><select aria-label="规划执行资源" value={resource} onChange={e => setResource(e.target.value)}><option value="">请选择</option>{resources.rows.map(r => <option key={r.id} value={r.id}>{r.binding_key}</option>)}</select></label>
+      <div className="planning-environment-field"><span>执行环境</span><PlanningSelect label="执行环境" value={resourceKind} options={[{ id: "docker_local", label: "Docker" }, { id: "customer_ssh", label: "客户 SSH" }]} onChange={id => { setResourceKind(id); setResource(""); setResourceIds([]); }} /></div>
+      <ResourceMultiSelect options={resources.rows} value={resourceIds} onChange={ids => { setResourceIds(ids); setResource(ids[0] || ""); }} />
     </div>
+    <p className="muted">展开下拉框勾选多个执行资源；平台按配置绑定自动分配，每个数据集分别预检。</p>
     {(targets.error || resources.error) && <p role="alert">{targets.error || resources.error}</p>}
     <div className="planning-actions">
       <button disabled={busy || !ready || checking} onClick={() => void action(async () => { const revision = generation.current; const result = await apiPost<Job>("/planning/resources/preflight", payload); if (revision === generation.current) setPreflight(result); })}>{checking ? "正在检查…" : preflight ? "重新检查" : "环境检查"}</button>
@@ -235,9 +251,19 @@ export function TaskPlanning() {
     <h2>2. 数据集与样本范围</h2>
     <div className="table-wrap"><table className="planning-table"><thead><tr><th>启用</th><th>数据集</th><th>执行配置</th><th>样本范围</th><th>状态</th></tr></thead><tbody>{datasets.map(d => {
       const active = enabled.includes(d);
-      const configs = options.compilations.filter(c => c.target_id === target && c.input_ready && c.dataset === d);
-      return <tr key={d}><td><input type="checkbox" aria-label={`启用 ${d}`} checked={active} onChange={e => { setEnabled(rows => e.target.checked ? [...rows, d] : rows.filter(row => row !== d)); setSelection(rows => ({ ...rows, [d]: { compilation: "", manifest: "" } })); }} /></td><td>{d}</td><td data-label="执行配置"><select disabled={!active || !target} aria-label={`${d} 执行配置`} value={selection[d]?.compilation || ""} onChange={e => setSelection(rows => ({ ...rows, [d]: { ...rows[d], compilation: e.target.value } }))}><option value="">{!target ? "先选择模型服务" : !configs.length ? "暂无可用配置" : "请选择执行配置"}</option>{configs.map(c => <option key={c.id} value={c.id}>{c.label || c.sha256.slice(0, 12)} / {String(c.config.params.batch_size ?? c.config.params.n_concurrent_trials ?? 1)} 并发</option>)}</select></td><td data-label="样本范围"><select disabled={!active || !selection[d]?.compilation} aria-label={`${d} 样本范围`} value={selection[d]?.manifest || ""} onChange={e => setSelection(rows => ({ ...rows, [d]: { ...rows[d], manifest: e.target.value } }))}><option value="">请选择已绑定清单</option>{options.manifests.filter(m => m.dataset === d).map(m => <option key={m.id} value={m.id}>{m.scope === "full" ? "全量" : "Lite"} · {m.sample_count} 个样本 · {m.id.slice(0, 8)}</option>)}</select></td><td><span className="planning-row-state">{!active ? "未启用" : !configs.length ? "需配置" : selection[d]?.compilation && selection[d]?.manifest ? "已配置" : "待补全"}</span></td></tr>;
+      const chosenConfig = options.compilations.find(c => c.id === selection[d]?.compilation);
+      const allowed = chosenConfig?.runtime_config?.resource_ids;
+      const assignedId = resourceIds.find(id => !Array.isArray(allowed) || allowed.includes(id));
+      const assignedName = resources.rows.find(r => r.id === assignedId)?.binding_key;
+      const configs = options.compilations.filter(c => c.target_id === target && c.input_ready && c.dataset === d && (!Array.isArray(c.runtime_config?.resource_ids) || resourceIds.some(id => (c.runtime_config!.resource_ids as string[]).includes(id))));
+      return <tr key={d}><td><input type="checkbox" aria-label={`启用 ${d}`} checked={active} onChange={e => { setEnabled(rows => e.target.checked ? [...rows, d] : rows.filter(row => row !== d)); setSelection(rows => ({ ...rows, [d]: { compilation: "", manifest: "" } })); }} /></td><td>{d}</td><td data-label="执行配置"><select disabled={!active || !target} aria-label={`${d} 执行配置`} value={selection[d]?.compilation || ""} onChange={e => setSelection(rows => ({ ...rows, [d]: { ...rows[d], compilation: e.target.value } }))}><option value="">{!target ? "先选择模型服务" : !configs.length ? "暂无可用配置" : "请选择执行配置"}</option>{configs.map(c => <option key={c.id} value={c.id}>{c.label || c.sha256.slice(0, 12)} / {String(c.config.params.batch_size ?? c.config.params.n_concurrent_trials ?? 1)} 并发</option>)}</select>{active && chosenConfig && assignedName && <small className="muted">自动分配：{assignedName}</small>}</td><td data-label="样本范围"><select disabled={!active || !selection[d]?.compilation} aria-label={`${d} 样本范围`} value={selection[d]?.manifest || ""} onChange={e => setSelection(rows => ({ ...rows, [d]: { ...rows[d], manifest: e.target.value } }))}><option value="">请选择已绑定清单</option>{options.manifests.filter(m => m.dataset === d).map(m => <option key={m.id} value={m.id}>{m.scope === "full" ? "全量" : "Lite"} · {m.sample_count} 个样本 · {m.id.slice(0, 8)}</option>)}</select></td><td><span className="planning-row-state">{!active ? "未启用" : !configs.length ? "需配置" : selection[d]?.compilation && selection[d]?.manifest ? "已配置" : "待补全"}</span></td></tr>;
     })}</tbody></table></div>
+    {enabled.map(dataset => {
+      const bound = options.compilations.filter(c => c.target_id === target && c.input_ready && c.dataset === dataset);
+      if (!bound.length || bound.some(c => !Array.isArray(c.runtime_config?.resource_ids) || resourceIds.some(id => (c.runtime_config!.resource_ids as string[]).includes(id)))) return null;
+      const names = [...new Set(bound.flatMap(c => (c.runtime_config?.resource_ids as string[]).map(id => [...ssh.rows, ...docker.rows].find(r => r.id === id)?.binding_key || id)))];
+      return <p className="notice" key={dataset}>{dataset} 配置需使用执行资源：{names.join("、")}。请切换资源后选择配置。</p>;
+    })}
     <details className="planning-management"><summary>管理配置与清单 · 缺少配置时在此维护</summary>
     <div className="inline"><ManagementDrawer title="配置标准输入"><StandardInputs /></ManagementDrawer><ManagementDrawer title="管理样本清单"><DatasetManifests /></ManagementDrawer><ManagementDrawer title="登记执行规则"><ExecutionBindings /></ManagementDrawer><button onClick={() => void action(refresh)}>刷新配置与清单</button></div>
     </details>
@@ -292,7 +318,7 @@ export function TaskPlanning() {
     <h2>任务摘要</h2>
     <dl className="planning-checklist">
       <div><dt>模型服务</dt><dd>{targets.rows.find(t => t.id === target)?.remote_model || "待选择"}</dd></div>
-      <div><dt>执行资源</dt><dd>{resources.rows.find(r => r.id === resource)?.binding_key || "待选择"}</dd></div>
+      <div><dt>执行资源</dt><dd>{resources.rows.filter(r => resourceIds.includes(r.id)).map(r => r.binding_key).join("、") || "待选择"}</dd></div>
       <div><dt>测评范围</dt><dd>{enabled.length} 个数据集 · {sampleCount} 个样本</dd></div>
       <div><dt>环境检查</dt><dd><span className={`preflight-status ${preflight ? preflightTone : "idle"}`}>{preflightLabel}</span></dd></div>
     </dl>
@@ -310,8 +336,10 @@ export function TaskPlanning() {
     {staleEstimate && !report && <p role="status">输入已变化，旧估算及建议已失效，请重新估算。</p>}
     <p className="planning-blocker" role="status">{blocker}</p>
     <label className="planning-confirm"><input type="checkbox" checked={runConfirmed} onChange={e => setRunConfirmed(e.target.checked)} />确认所选数据集及范围，提交真实测评，可能产生模型调用费用</label>
+    <label className="planning-confirm"><input type="checkbox" checked={ignoreBudget} onChange={e => { setIgnoreBudget(e.target.checked); setMessage(""); }} />忽略本次任务预算限制</label>
+    {ignoreBudget && <p className="notice" role="status">本次测评及其智能分析不受平台预算金额和预算范围限制，可能产生额外模型费用；标准参数、资源检查和任务超时仍然生效。</p>}
     <button className="primary" disabled={busy || !ready || !runConfirmed || !preflight?.result?.execution_ready} onClick={() => void action(async () => {
-      const submission = { target_id: target, resource_id: resource, resource_kind: resourceKind, tasks: payload.tasks, dataset_concurrency: parallel };
+      const submission = { target_id: target, resource_id: resource, resource_kind: resourceKind, resource_ids: resourceIds, tasks: payload.tasks, dataset_concurrency: parallel, ignore_budget: ignoreBudget };
       const body = JSON.stringify(submission);
       if (pending.current?.body !== body) pending.current = { body, key: crypto.randomUUID() };
       const saved = await apiPost<{ run_id: string }>("/evaluation-tasks", submission, pending.current.key);

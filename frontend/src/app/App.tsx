@@ -21,7 +21,7 @@ import {
   GraduationCap,
   Home,
   Info,
-  Layers,
+  PanelsTopLeft,
   Play,
   SlidersHorizontal,
   Database,
@@ -33,8 +33,8 @@ import type { ReactNode } from "react";
 import "../styles/index.css";
 
 const menus = [
-  { id: "home", label: "首页", icon: Layers },
-  { id: "console", label: "控制台", icon: Home },
+  { id: "home", label: "首页", icon: Home },
+  { id: "console", label: "控制台", icon: PanelsTopLeft },
   { id: "config", label: "测评配置", icon: SlidersHorizontal },
   { id: "tasks", label: "任务管理", icon: ClipboardList },
   { id: "reports", label: "报告管理", icon: ChartNoAxesColumnIncreasing },

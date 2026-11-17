@@ -1,3 +1,5 @@
+import { PlanningSelect } from "./PlanningSelect";
+import { ServiceBindings } from "../resources/ServiceBindings";
 import { ModelServices } from "../resources/ModelServices";
 import { ProbeProgress } from "../evaluation/ProbeProgress";
 import { useEffect, useRef, useState } from "react";
@@ -63,6 +65,7 @@ export function TaskPlanning() {
   const docker = useOptions<Resource>("/resources");
   const ssh = useOptions<Resource>("/ssh-resources");
   const [target, setTarget] = useState("");
+  const [addingService, setAddingService] = useState(false);
   const [resourceKind, setResourceKind] = useState("docker_local");
   const [resource, setResource] = useState("");
   const [options, setOptions] = useState<Options>({ compilations: [], manifests: [], curves: [] });
@@ -214,8 +217,8 @@ export function TaskPlanning() {
     <h2>1. 模型与执行资源</h2>
     <p className="planning-intro">支持 GPQA、MMMU-Pro、DeepSWE、AutomationBench 的全量或已绑定 Lite 清单。Agent 工作流通过 AISBench Harbor 执行，需绑定配置与清单并通过环境检查。</p>
     <div className="planning-fields">
-      <div className="planning-service-field"><div className="planning-service-heading"><label htmlFor="planning-service">模型服务</label><ManagementDrawer title="管理服务" onDismiss={targets.retry}><ModelServices /></ManagementDrawer></div><select id="planning-service" aria-label="规划模型服务" value={target} onChange={e => { setTarget(e.target.value); setSelection({}); }}><option value="">请选择</option>{targets.rows.map(t => <option key={t.id} value={t.id}>{t.service_name || t.remote_model} · {t.remote_model} · {t.id.slice(0, 8)}</option>)}</select></div>
-      <label><span>执行环境</span><select value={resourceKind} onChange={e => { setResourceKind(e.target.value); setResource(""); }}><option value="docker_local">Docker</option><option value="customer_ssh">客户 SSH</option></select></label>
+      <div className="planning-service-field"><div className="planning-service-heading"><label htmlFor="planning-service">模型服务</label><ManagementDrawer title="管理服务" onDismiss={targets.retry}><ModelServices /></ManagementDrawer></div><PlanningSelect id="planning-service" label="规划模型服务" value={target} options={targets.rows.map(t => ({ id: t.id, label: t.service_name || t.remote_model, detail: `${t.remote_model} · ${t.base_url} · ${t.id.slice(0, 8)}` }))} onChange={id => { setTarget(id); setSelection({}); }} onAdd={() => setAddingService(true)} /><ManagementDrawer title="新增模型服务" hideTrigger open={addingService} onOpenChange={setAddingService} onDismiss={targets.retry}><ServiceBindings /></ManagementDrawer></div>
+      <div className="planning-environment-field"><span>执行环境</span><PlanningSelect label="执行环境" value={resourceKind} options={[{ id: "docker_local", label: "Docker" }, { id: "customer_ssh", label: "客户 SSH" }]} onChange={id => { setResourceKind(id); setResource(""); }} /></div>
       <label><span>执行资源</span><select aria-label="规划执行资源" value={resource} onChange={e => setResource(e.target.value)}><option value="">请选择</option>{resources.rows.map(r => <option key={r.id} value={r.id}>{r.binding_key}</option>)}</select></label>
     </div>
     {(targets.error || resources.error) && <p role="alert">{targets.error || resources.error}</p>}

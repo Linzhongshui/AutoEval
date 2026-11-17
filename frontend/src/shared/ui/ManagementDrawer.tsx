@@ -2,8 +2,10 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
-export function ManagementDrawer({ title, children, onDismiss }: { title: string; children: ReactNode; onDismiss?: () => void }) {
-  const [open, setOpen] = useState(false);
+export function ManagementDrawer({ title, children, onDismiss, open: controlledOpen, onOpenChange, hideTrigger = false }: { title: string; children: ReactNode; onDismiss?: () => void; open?: boolean; onOpenChange?: (open: boolean) => void; hideTrigger?: boolean }) {
+  const [localOpen, setLocalOpen] = useState(false);
+  const open = controlledOpen ?? localOpen;
+  const setOpen = (value: boolean) => { setLocalOpen(value); onOpenChange?.(value); };
   const dialog = useRef<HTMLDialogElement>(null);
   const heading = useId();
   useEffect(() => {
@@ -15,7 +17,7 @@ export function ManagementDrawer({ title, children, onDismiss }: { title: string
   }, [open]);
   const close = () => { setOpen(false); onDismiss?.(); };
   return <>
-    <button type="button" className="link" onClick={() => setOpen(true)}>{title}</button>
+    {!hideTrigger && <button type="button" className="link" onClick={() => setOpen(true)}>{title}</button>}
     {open && createPortal(
       <dialog ref={dialog} className="management-drawer" aria-labelledby={heading}
         onCancel={close}>

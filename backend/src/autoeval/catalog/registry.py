@@ -18,7 +18,7 @@ from autoeval.catalog.models import (
 
 class ModelCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    model_id: str = Field(min_length=1, max_length=128, pattern=r"^[a-zA-Z0-9_.-]+$")
+    model_id: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_.\-/]+$")
     name: str = Field(min_length=1, max_length=256)
     version: str = Field(min_length=1, max_length=128)
 

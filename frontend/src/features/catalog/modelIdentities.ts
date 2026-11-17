@@ -105,6 +105,10 @@ export const modelIdentities: Record<string, { vendor: string; huggingface_id: s
 export function isTestModel(id: string): boolean {
   return /^(?:navigation-[a-f0-9]{32}|model-browser-[a-f0-9]{10})$/.test(id);
 }
+// Manually registered debugging rows stay in storage but are not offered as bindable models.
+export function isDebugModel(id: string, name = ""): boolean {
+  return /(?:^|[-_/])(?:local-debug|analysis-chat)(?:$|[-_/])/i.test(id) || /\(manual analysis\)\s*$/i.test(name);
+}
 export function isModelScopeId(id: string): boolean {
   return /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(id) && !isTestModel(id);
 }

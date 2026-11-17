@@ -5,7 +5,15 @@ import pytest
 from fastapi.testclient import TestClient
 
 from autoeval.api import create_app
+from autoeval.catalog.registry import ModelCreate
 from autoeval.config import Settings
+
+
+def test_model_registration_accepts_namespaced_identifier():
+    body = ModelCreate(
+        model_id="deepseek-ai/DeepSeek-V4.1-Flash", name="DeepSeek V4.1 Flash", version="v1"
+    )
+    assert body.model_id == "deepseek-ai/DeepSeek-V4.1-Flash"
 
 
 @pytest.mark.skipif(not os.environ.get("AE_TEST_DATABASE_URL"), reason="Real PostgreSQL required")

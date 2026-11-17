@@ -1,12 +1,15 @@
-import { isModelScopeId, isTestModel } from "../catalog/modelIdentities";
+import { isDebugModel, isModelScopeId, isTestModel } from "../catalog/modelIdentities";
 import { SearchableSelect } from "../../shared/ui/SearchableSelect";
 import { useEffect, useState } from "react";
 import { apiGetOptions } from "../../shared/api";
 import { REGISTRY_PAGE_SIZE } from "../../shared/constants";
 
-type Model = { id: string; model_id: string };
+type Model = { id: string; model_id: string; name: string };
 type Version = { id: string; version: string };
 type Target = { id: string; remote_model: string; base_url: string };
+type Entry = { entry: { model_name: string; conditions?: Record<string, unknown> } };
+type StandardInput = { source_model: string };
+type Choice = { value: string; label: string };
 async function api<T>(path: string, body?: unknown): Promise<T> {
   const response = await fetch(`/api/autoeval/v1${path}`, body === undefined ? {} : {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
@@ -17,12 +20,14 @@ async function api<T>(path: string, body?: unknown): Promise<T> {
 }
 export function ServiceBindings() {
   const [models, setModels] = useState<Model[]>([]);
+  const [choices, setChoices] = useState<Choice[]>([]);
   const [versions, setVersions] = useState<Version[]>([]);
   const [targets, setTargets] = useState<Target[]>([]);
   const [modelOffset] = useState(0);
   const [, setModelNext] = useState<number | null>(null);
   const [targetOffset] = useState(0);
   const [, setTargetNext] = useState<number | null>(null);
+  const [modelValue, setModelValue] = useState("");
   const [versionId, setVersionId] = useState("");
   const [, setTargetId] = useState("");
   const [baseUrl, setBaseUrl] = useState("https://api.deepseek.com");
@@ -31,12 +36,30 @@ export function ServiceBindings() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const refresh = async (modelPage = modelOffset, targetPage = targetOffset) => {
-    const [m, t] = await Promise.all([
+    const [m, t, entries, standards] = await Promise.all([
       apiGetOptions<Model[]>(`/models?offset=${modelPage}&limit=${REGISTRY_PAGE_SIZE}`),
       apiGetOptions<Target[]>(`/target-bindings?offset=${targetPage}&limit=${REGISTRY_PAGE_SIZE}`),
+      apiGetOptions<Entry[]>("/data-workbench/entries").catch(() => null),
+      apiGetOptions<StandardInput[]>("/standard-inputs?revision=all").catch(() => null),
     ]);
-    setModels(m.data.filter((model) => !isTestModel(model.model_id) && isModelScopeId(model.model_id))); setModelNext(m.next_offset);
+    const registered = m.data.filter((model) => !isTestModel(model.model_id) && !isDebugModel(model.model_id, model.name));
+    const known = new Set(m.data.map((model) => model.model_id));
+    const pending = new Set<string>();
+    for (const row of entries?.data ?? []) {
+      const mapped = row.entry.conditions?.modelscope_model_id;
+      const id = typeof mapped === "string" && isModelScopeId(mapped) ? mapped : row.entry.model_name;
+      if (id && !known.has(id) && !isTestModel(id) && !isDebugModel(id)) pending.add(id);
+    }
+    for (const row of standards?.data ?? []) {
+      const id = row.source_model;
+      if (id && !known.has(id) && !isTestModel(id) && !isDebugModel(id)) pending.add(id);
+    }
+    setModels(registered); setModelNext(m.next_offset);
     setTargets(t.data); setTargetNext(t.next_offset);
+    setChoices([
+      ...registered.map((model) => ({ value: model.id, label: model.model_id })),
+      ...[...pending].map((id) => ({ value: id, label: id })),
+    ].sort((a, b) => a.label.localeCompare(b.label)));
   };
   useEffect(() => { refresh().catch(() => setMessage("服务绑定暂不可用")); }, [modelOffset, targetOffset]);
   const perform = async (fn: () => Promise<void>) => {
@@ -47,13 +70,30 @@ export function ServiceBindings() {
   return <section className="card resource-management-form resource-fields-grid" aria-label="模型服务绑定">
     <h3>模型服务与连接检测</h3>
     <p>连接检测只查询模型列表，不发送生成请求。成功不代表测评已启用。</p>
-    <p>仅显示已登记的 ModelScope 标识；请先在“模型与默认配置”中登记模型及版本，再绑定服务。</p>
-    <label>ModelScope 标识<SearchableSelect aria-label="服务绑定模型" defaultValue="" onChange={async e => {
-      setVersionId(""); setVersions([]);
-      if (!e.target.value) return;
-      try { setVersions(await api<Version[]>(`/models/${e.target.value}/versions`)); }
-      catch { setMessage("读取模型版本失败"); }
-    }}><option value="">请选择</option>{models.map(m => <option key={m.id} value={m.id}>{m.model_id}</option>)}</SearchableSelect></label>
+    <p>列出数据工作台模型列表中的模型；未登记的模型会在选择后自动登记为 v1 版本，再绑定服务。</p>
+    <label>模型标识<SearchableSelect aria-label="服务绑定模型" value={modelValue} onChange={async e => {
+      const choice = e.target.value;
+      setModelValue(choice); setVersionId(""); setVersions([]);
+      if (!choice) return;
+      if (models.some((model) => model.id === choice)) {
+        try { setVersions(await api<Version[]>(`/models/${choice}/versions`)); }
+        catch { setMessage("读取模型版本失败"); }
+        return;
+      }
+      setBusy(true); setMessage(`正在登记模型 ${choice}…`);
+      try {
+        const created = await api<{ id: string; version_id: string }>("/models", {
+          model_id: choice, name: choice.split("/").pop() || choice, version: "v1",
+        });
+        setChoices((current) => current.map((item) => item.value === choice ? { value: created.id, label: choice } : item));
+        setModelValue(created.id);
+        setVersions([{ id: created.version_id, version: "v1" }]);
+        setVersionId(created.version_id);
+        await refresh();
+        setMessage(`已自动登记模型 ${choice}（版本 v1），尚未绑定服务。`);
+      } catch (error) { setMessage(error instanceof Error ? error.message : "模型登记失败"); }
+      finally { setBusy(false); }
+    }}><option value="">请选择</option>{choices.map(choice => <option key={choice.value} value={choice.value}>{choice.label}</option>)}</SearchableSelect></label>
     <label>模型版本<SearchableSelect aria-label="服务绑定模型版本" disabled={busy || !versions.length} value={versionId} onChange={e => setVersionId(e.target.value)}>
       <option value="">{versions.length ? "请选择模型版本" : "请先选择模型；无版本时需先登记"}</option>{versions.map(v => <option key={v.id} value={v.id}>{v.version}</option>)}
     </SearchableSelect></label>

@@ -1669,6 +1669,22 @@
 .case-toolbar > label > select { height: 37px; margin: 0; }
 .case-toolbar > button { height: 37px; flex: 0 0 auto; padding: 0 18px; }
 .case-cell-note { display: block; margin-top: 4px; color: #b42318; font-size: 11px; }
+.case-history-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding-top: 8px; }
+.case-history-heading h3 { margin: 0 0 5px; font-size: 16px; }
+.case-history-heading p { margin: 0; font-size: 12px; }
+.case-trace-hint { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
+.case-history-message { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px 16px; margin: 0; font-size: 12px; }
+.case-attempt-table td:first-child { min-width: 190px; max-width: 265px; overflow-wrap: anywhere; }
+.case-attempt-table td { vertical-align: top; }
+.case-attempt-table .case-evidence-cell { min-width: 216px; }
+.case-evidence-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.case-evidence-actions .case-evidence-button, .case-evidence-actions .case-trace-button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 34px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 7px; background: white; color: #444b65; font-size: 12px; font-weight: 500; line-height: 20px; text-decoration: none; white-space: nowrap; }
+.case-evidence-actions .case-trace-button { border-color: #ddd5ff; background: #f2efff; color: #5138bf; }
+.case-evidence-actions .case-trace-button:hover { border-color: var(--primary); background: #e9e3ff; }
+.case-evidence-actions .case-evidence-button:hover:not(:disabled) { border-color: #a9afc1; background: #f7f8fc; }
+.case-evidence-actions :is(button, a):focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.case-evidence-actions button:disabled { opacity: .5; cursor: not-allowed; }
+.case-evidence-note { display: block; margin-top: 7px; color: var(--muted); font-size: 11px; }
 @media (max-width: 600px) {
   .monitor-list > li > button { grid-template-columns: 64px minmax(0, 1fr); }
   .monitor-list > li > button .mono { grid-column: 2; }

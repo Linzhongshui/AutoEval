@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -50,6 +51,57 @@ def installed_tool_versions():
     }
 
 
+def check_tool_environment(config):
+    """Run the pinned adaptor's dependency checks without inference or real credentials."""
+    value = json.loads(json.dumps(config))
+    with tempfile.TemporaryDirectory(prefix="autoeval-preflight-") as directory:
+        value["params"]["work_dir"] = directory
+        value["params"]["api_key"] = "non-generating-preflight-placeholder"
+        path = Path(directory) / "config.json"
+        path.write_text(json.dumps(value), encoding="utf-8")
+        path.chmod(0o600)
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "autoeval_adaptor.cli",
+                "--config",
+                str(path),
+                "--preflight-only",
+            ],
+            capture_output=True,
+            check=False,
+            timeout=10,
+        )
+        return result.returncode == 0
+
+
+def check_task_selection(config):
+    params = config["params"]
+    selection = {
+        key: params[key]
+        for key in ("task_names", "exclude_task_names", "n_tasks")
+        if params.get(key) is not None
+    }
+    selection["path"] = params["path"]
+    code = (
+        "import asyncio,json,sys; from pathlib import Path; "
+        "from harbor.models.job.config import DatasetConfig; "
+        "d=json.loads(sys.argv[1]);d['path']=Path(d['path']); "
+        "tasks=asyncio.run(DatasetConfig(**d).get_task_configs(disable_verification=False)); "
+        "assert tasks, 'No tasks selected'"
+    )
+    return (
+        subprocess.run(
+            [params.get("python_executable") or sys.executable, "-c", code, json.dumps(selection)],
+            capture_output=True,
+            check=False,
+            timeout=5,
+        ).returncode
+        == 0
+    )
+
+
 def inspect_dataset(task, *, networks, validated):
     config = task["compilation"]["config"]
     params = config["params"]
@@ -66,13 +118,21 @@ def inspect_dataset(task, *, networks, validated):
         reasons.append("dataset_path_missing")
     elif not Path(data_path).is_dir():
         reasons.append("dataset_path_unavailable")
-    if task["dataset"] == "DeepSWE" and not networks:
+    if task["dataset"] in {"DeepSWE", "AutomationBench"} and not networks:
         reasons.append("harbor_network_unavailable")
     try:
         tool_revision = verify_tool(task)
     except (KeyError, OSError, ValueError, subprocess.SubprocessError):
         tool_revision = None
         reasons.append("tool_identity_mismatch")
+    if not reasons and config.get("subcommand") == "harbor_agent":
+        try:
+            if not check_tool_environment(config):
+                reasons.append("tool_environment_preflight_failed")
+            elif not check_task_selection(config):
+                reasons.append("task_selection_preflight_failed")
+        except (OSError, ValueError, subprocess.SubprocessError):
+            reasons.append("tool_environment_preflight_unavailable")
     return {
         "task_id": task["task_id"],
         "dataset": task["dataset"],

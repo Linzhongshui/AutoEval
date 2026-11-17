@@ -68,6 +68,20 @@ def test_execution_transport_does_not_require_planner(monkeypatch):
     assert not any(name.startswith("deps/") for name in transport.files)
 
 
+def test_remote_runtime_can_share_absolute_host_mount(monkeypatch):
+    monkeypatch.setattr("autoeval.planning_runtime.installed_revision", lambda _: None)
+    connection = SimpleNamespace(workdir="/test", owner_id="test")
+    adapter = PlanningRemoteContainer(
+        connection, "c" * 64, "sha256:" + "d" * 64, runtime_root="/acceptance/shared-runtime"
+    )
+    assert adapter.remote_dir.startswith("/acceptance/shared-runtime/")
+    for invalid in ("relative", "/", "/acceptance/../outside"):
+        with pytest.raises(ValueError, match="absolute directory"):
+            PlanningRemoteContainer(
+                connection, "c" * 64, "sha256:" + "d" * 64, runtime_root=invalid
+            )
+
+
 def test_api_starts_without_planner_package():
     script = """
 import importlib.abc, sys

@@ -177,21 +177,14 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                         {"run_id": str(run_id), "task_id": child.task_id, "result": unified},
                     )
                 try:
-                    aliases = {s["tool_case_id"]: s["sample_id"] for s in child.payload["samples"]}
-                    allowed_ids = {s["sample_id"] for s in child.payload["samples"]}
-                    from autoeval.result_identity import allowed_result_datasets
+                    from autoeval.result_identity import normalize_result_identities
 
-                    allowed_datasets = allowed_result_datasets(
-                        child.payload["dataset"], child.payload["compilation"]["config"]
+                    unified = normalize_result_identities(
+                        unified,
+                        child.payload["dataset"],
+                        child.payload["compilation"]["config"],
+                        child.payload["samples"],
                     )
-                    for case in unified.get("cases", []):
-                        if case.get("dataset") not in allowed_datasets:
-                            raise ValueError("Unexpected result dataset")
-                        case["dataset"] = child.payload["dataset"]
-                        if case.get("case_id") in aliases:
-                            case["case_id"] = aliases[case["case_id"]]
-                        elif case.get("case_id") not in allowed_ids:
-                            raise ValueError("Unexpected result sample")
                     raw = canonical_manifest(unified)
                     summary = await archive_output(
                         sessions,

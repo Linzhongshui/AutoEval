@@ -17,7 +17,7 @@ from temporalio import activity
 from autoeval.datasets import canonical_manifest, read_manifest, write_manifest
 from autoeval.models import Base, EvaluationRun, Outbox, Record
 
-REVISION = "6ca5ef9b8fedc78e8106d202a5c6a84e6f24f940"
+REVISION = "a62c1be62888e2cb5c89f92aa2dc00731f4f5ed1"
 FILES = {
     "agent/trajectory.json",
     "result.json",
@@ -64,7 +64,7 @@ async def archive_trace(session, settings, run_id, attempt_id, artifact):
     await asyncio.to_thread(write_manifest, settings, key, raw)
     files = (artifact or {}).get("files", {})
     status = "pending" if "agent/trajectory.json" in files else "missing"
-    if status == "pending" and not settings.langfuse_project_id:
+    if status == "pending" and not import_configured(settings):
         status = "disabled"
     row = TraceImport(
         id=uuid.uuid4(),
@@ -79,6 +79,18 @@ async def archive_trace(session, settings, run_id, attempt_id, artifact):
     session.add(row)
     if status == "pending":
         intent(session, row)
+
+
+def import_configured(settings):
+    return all(
+        (
+            settings.langfuse_project_id,
+            settings.langfuse_host,
+            settings.langfuse_browser_url,
+            settings.langfuse_public_key.get_secret_value(),
+            settings.langfuse_secret_key.get_secret_value(),
+        )
+    )
 
 
 def trace_view(row, settings):
@@ -138,16 +150,32 @@ async def import_one(row, settings, artifact):
         async with httpx.AsyncClient(
             timeout=15, headers={"Authorization": "Basic " + auth}
         ) as client:
+            expected_ids = {format(spec.span_id, "016x") for spec in plan}
 
-            async def exists():
-                response = await client.get(
-                    host + "/api/public/v2/observations", params={"traceId": trace_id, "limit": 1}
-                )
-                response.raise_for_status()
-                return bool(response.json().get("data"))
+            async def observation_ids():
+                found, cursors = set(), set()
+                cursor = None
+                while True:
+                    params = {"traceId": trace_id, "limit": 1000}
+                    if cursor:
+                        params["cursor"] = cursor
+                    response = await client.get(host + "/api/public/v2/observations", params=params)
+                    response.raise_for_status()
+                    payload = response.json()
+                    found.update(item["id"] for item in payload.get("data", []))
+                    cursor = (payload.get("meta") or {}).get("nextCursor")
+                    if not cursor:
+                        return found
+                    if cursor in cursors:
+                        raise RuntimeError("Observation pagination did not advance")
+                    cursors.add(cursor)
 
-            # A failed lookup must never be interpreted as absence.
-            if not await exists():
+            # A failed lookup must never be interpreted as absence. A partial trace
+            # must not be marked successful or blindly resent (v4 may duplicate spans).
+            existing = await observation_ids()
+            if existing and not expected_ids <= existing:
+                raise RuntimeError("Partial trace ingestion; automatic resend refused")
+            if not existing:
 
                 def send():
                     exporter = Exporter(host, public, secret)
@@ -159,7 +187,7 @@ async def import_one(row, settings, artifact):
 
                 await asyncio.to_thread(send)
             for _ in range(10):
-                if await exists():
+                if expected_ids <= await observation_ids():
                     break
                 await asyncio.sleep(2)
             else:

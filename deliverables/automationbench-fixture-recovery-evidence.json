@@ -1,0 +1,30 @@
+{
+  "records": [
+    {
+      "run_id": "85255f8c-cf93-4e47-8774-6cee82f3e67c",
+      "attempt_id": "ac05c5b8-76e5-44b3-9f88-a119e00b04c5",
+      "sample_id": "fixture-auth",
+      "attempt_no": 1,
+      "case_state": "succeeded",
+      "artifact_sha256": "ffb0023d54d82496cf71cdb2a070adf218ada695073187927b747136b5ca48ac",
+      "files": {
+        "agent/trajectory.json": "16f08c8d574c4165c796a302a261dba688c7dc5c8a232c4ff4b9a308d738d2c1",
+        "verifier/reward.txt": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b"
+      },
+      "trace_status": "succeeded",
+      "trace_id": "9eb9856bc1fe53b0bf89c37f5ece4953",
+      "trace_url": "https://langfuse.autoeval.local/project/autoeval-harbor/traces/9eb9856bc1fe53b0bf89c37f5ece4953",
+      "trace_error": null,
+      "native_reward": 1.0,
+      "expected_span_roles": {
+        "root": 1,
+        "generation": 2,
+        "tool": 1
+      },
+      "observation_count": 4,
+      "all_spans_present": true,
+      "unique_observation_ids": true,
+      "parent_relationships_match": true
+    }
+  ]
+}

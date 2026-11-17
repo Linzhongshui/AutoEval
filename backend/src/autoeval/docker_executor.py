@@ -14,7 +14,7 @@ from autoeval.resources import inspect_executor
 class DockerExecutor:
     def __init__(self, executable: str, container_id: str, image_id: str):
         self.executable, self.container_id, self.image_id = executable, container_id, image_id
-        self.runtime = Path(__file__).with_name("job_runtime.py")
+        self.runtime = Path(__file__).parent / "infrastructure" / "job_runtime.py"
         self.remote_dir = (
             "/work/autoeval-runtime/" + hashlib.sha256(self.runtime.read_bytes()).hexdigest()
         )

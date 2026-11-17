@@ -28,6 +28,7 @@ BENCHMARKS = {
     "GPQA_Diamond": ("GPQA", "diamond", "llm_accuracy"),
     "MMMU-Pro": ("MMMU-Pro", "options10", "llm_accuracy"),
     "DeepSWE": ("DeepSWE", "v1.1", "harbor_agent"),
+    "AutomationBench": ("AutomationBench", "v1.0.6", "harbor_agent"),
 }
 FILES = {"standard_config.json", "benchmark_config.json", "baseline.json"}
 COMMON = {

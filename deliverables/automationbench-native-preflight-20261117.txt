@@ -1,0 +1,14 @@
+[preflight] ais_bench/harbor_agent
+[preflight] python: 3.13.18 (/acceptance/runtime/bin/python)
+[preflight] ais_bench: 3.1.0 (/benchmark/ais_bench/__init__.py)
+[preflight] harbor: 0.21.0
+  [PASS] AISBench 导入: 版本 3.1.0
+  [PASS] mmengine: 版本 0.10.7
+  [PASS] CLI 参数: 3 个参数均被支持
+  [PASS] 运行模式: -m agent
+  [PASS] 模块 ais_bench.benchmark.tasks.custom_tasks.harbor_agent_task: 导入成功
+  [PASS] 模块 ais_bench.benchmark.runners.harbor_runner: 导入成功
+  [PASS] 模块 ais_bench.benchmark.summarizers.harbor: 导入成功
+  [PASS] Harbor 运行时: 必需模块可导入
+  [PASS] Harbor 参数能力: 参数均可被当前实现识别
+[preflight] 结果: 9 passed, 0 warning(s), 0 error(s)

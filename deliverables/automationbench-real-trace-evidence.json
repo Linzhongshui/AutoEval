@@ -1,0 +1,34 @@
+{
+  "records": [
+    {
+      "run_id": "a6ec7563-4326-45e9-9348-754ebff65e89",
+      "attempt_id": "dfc4cdf5-9169-43d1-9369-548afbe9579e",
+      "sample_id": "automationbench-support-1587-0252fa3e9d",
+      "attempt_no": 1,
+      "case_state": "succeeded",
+      "artifact_sha256": "8536be36c8cff1baacaad215d3fb83bfaa665433d49a9feb6954902835657fda",
+      "files": {
+        "agent/trajectory.json": "2aad216726c24250562dc27f37ccd0a5bf25d0b6e89546f34d4580a9a57b78b7",
+        "result.json": "c86088d0c8a950194671ebd85b41e757a2120de3355ee26ed18eabbc4207e991",
+        "verifier/reward.json": "91c8d2dde82298fdd528059be20fe0b0f83332b8b37f93e87afea4cabe2bf9fd"
+      },
+      "trace_status": "succeeded",
+      "trace_id": "cfc0e6ea48fd58abbf8bc638c4e0cb36",
+      "trace_url": "https://langfuse.autoeval.local/project/autoeval-harbor/traces/cfc0e6ea48fd58abbf8bc638c4e0cb36",
+      "trace_error": null,
+      "native_reward": null,
+      "native_named_metrics": {
+        "accuracy": 1.0
+      },
+      "expected_span_roles": {
+        "root": 1,
+        "generation": 38,
+        "tool": 66
+      },
+      "observation_count": 105,
+      "all_spans_present": true,
+      "unique_observation_ids": true,
+      "parent_relationships_match": true
+    }
+  ]
+}

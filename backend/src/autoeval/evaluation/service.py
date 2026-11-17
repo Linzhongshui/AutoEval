@@ -235,7 +235,7 @@ async def current_preflight(session, inputs, *, require_selection=True):
 def demand_for(item):
     count = item["concurrency"]
     params = item["compilation"]["config"]["params"]
-    if item["dataset"] == "DeepSWE":
+    if item["dataset"] in {"DeepSWE", "AutomationBench"}:
         return {
             "cpu": 0.5 + count * max(2, float(params.get("override_cpus") or 2)),
             "mem": 256 + count * max(8192, int(params.get("override_memory_mb") or 8192)),

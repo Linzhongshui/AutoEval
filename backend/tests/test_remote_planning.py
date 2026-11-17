@@ -9,6 +9,27 @@ from autoeval.planning_transport import runtime_files
 from autoeval.standard_inputs import digest, leaves, validate_config
 
 
+def test_transports_ship_the_standalone_runtime_after_package_refactor():
+    import ast
+    from types import SimpleNamespace
+
+    from autoeval.docker_executor import DockerExecutor
+    from autoeval.ssh_executor import SSHExecutor
+
+    adapters = (
+        DockerExecutor("docker", "container", "image"),
+        SSHExecutor(SimpleNamespace(workdir="/test", owner_id="test")),
+    )
+    for adapter in adapters:
+        source = adapter.runtime.read_text(encoding="utf-8")
+        tree = ast.parse(source)
+        assert any(
+            isinstance(node, ast.FunctionDef) and node.name == "atomic_json" for node in tree.body
+        )
+        assert "runpy.run_module" not in source
+        assert "from autoeval" not in source
+
+
 def test_standalone_contract_matches_platform_without_api_dependencies():
     files = runtime_files()
     namespace = {}

@@ -1,5 +1,7 @@
 # Langfuse 服务器部署与验证（2026-11-16）
 
+
+2026-11-17 入口更新：Langfuse 已改为 `https://179.214.2.3:8443/`，无需 hosts。以下域名入口记录为原部署历史；当前配置见 [接入说明](langfuse-integration.md)。
 ## 实际部署
 
 服务器：179.214.2.3；独立目录 `/home/chenluwen/autoeval-langfuse`。来源为 `llauren48/harbor-otel-stack` 提交 `6ca5ef9b8fedc78e8106d202a5c6a84e6f24f940`。服务器无 Git/现代 Compose，故传输固定提交源代码，使用 fork 的 Langfuse Compose 模板生成独立 compose.json，通过已有 dind 内的 Compose v2.33.0 部署。镜像复用该 Docker 引擎中现有的内容寻址镜像，全部固定为 SHA256 image ID，不更新现有镜像。

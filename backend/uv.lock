@@ -99,7 +99,7 @@ requires-dist = [
     { name = "autoeval-task-planner", git = "https://github.com/SJTUyh/AutoEval-Task-Planner?rev=0ee9abf49a57c5accc62df8900693cdcea88ea9a" },
     { name = "boto3", specifier = ">=1.35,<2" },
     { name = "fastapi", specifier = ">=0.115,<1" },
-    { name = "harborstack", git = "https://github.com/llauren48/harbor-otel-stack?rev=6ca5ef9b8fedc78e8106d202a5c6a84e6f24f940" },
+    { name = "harborstack", git = "https://github.com/llauren48/harbor-otel-stack?rev=a62c1be62888e2cb5c89f92aa2dc00731f4f5ed1" },
     { name = "httpx", specifier = ">=0.28,<1" },
     { name = "paramiko", specifier = ">=4,<5" },
     { name = "pydantic-settings", specifier = ">=2.6,<3" },
@@ -388,7 +388,7 @@ wheels = [
 [[package]]
 name = "harborstack"
 version = "0.1.0"
-source = { git = "https://github.com/llauren48/harbor-otel-stack?rev=6ca5ef9b8fedc78e8106d202a5c6a84e6f24f940#6ca5ef9b8fedc78e8106d202a5c6a84e6f24f940" }
+source = { git = "https://github.com/llauren48/harbor-otel-stack?rev=a62c1be62888e2cb5c89f92aa2dc00731f4f5ed1#a62c1be62888e2cb5c89f92aa2dc00731f4f5ed1" }
 dependencies = [
     { name = "opentelemetry-exporter-otlp-proto-http" },
     { name = "opentelemetry-sdk" },

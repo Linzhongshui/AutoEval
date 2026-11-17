@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-revision=6ca5ef9b8fedc78e8106d202a5c6a84e6f24f940
+revision=a62c1be62888e2cb5c89f92aa2dc00731f4f5ed1
 target="${1:?Usage: setup.sh /absolute/new/harborstack-directory}"
 if [ -e "$target" ]; then echo "Target already exists" >&2; exit 1; fi
 git clone https://github.com/llauren48/harbor-otel-stack "$target"

@@ -1,0 +1,20 @@
+{
+  "records": [
+    {
+      "job_id": "8124d404-5ac9-443e-9f5e-54804fdf6a5d",
+      "requests": 38,
+      "responses": 38,
+      "statuses": [
+        200
+      ],
+      "blocked": 0
+    },
+    {
+      "job_id": "6f54c596-1bca-47ba-bdf9-4cdb581f0467",
+      "requests": 0,
+      "responses": 0,
+      "statuses": [],
+      "blocked": 1
+    }
+  ]
+}

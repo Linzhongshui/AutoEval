@@ -1,11 +1,7 @@
-﻿# Windows PowerShell 5.1+: run as administrator using your normal account.
+﻿# Windows PowerShell 5.1+: run using your normal Windows account.
 [CmdletBinding(SupportsShouldProcess=$true)]
 param()
 $ErrorActionPreference = 'Stop'
-$principal = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
-if (-not $WhatIfPreference -and -not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    throw 'Run PowerShell as administrator using your normal Windows account, then run this script again.'
-}
 $certificateBase64 = 'MIIDUTCCAjmgAwIBAgIUKq+sb2mlzBKLCNq9AT/IaZmHWK0wDQYJKoZIhvcNAQELBQAwIzEhMB8GA1UEAwwYQXV0b0V2YWwtVW5pZmllZC1HYXRld2F5MB4XDTI2MTExNjAzMDY0NloXDTI3MTExNjAzMDY0NlowIzEhMB8GA1UEAwwYQXV0b0V2YWwtVW5pZmllZC1HYXRld2F5MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA2fkbxTH6pnpeset62DhA0/Ba/x0N2AkRoYLEg4R2BpisHZyUigJOCc8Qet3RFBRT6NOM3KQD8tPRHobxTklhiQuUn6sXqpqE68QXK4H9TNekYKpT5/XWC4H5Zgg1tw13BbY7XwalBtyv4kwK1Oi9fIh4rn33bN7kcYJVqPDZ4eghokAEK9TqiiUYfstMj5Y2FYceL6CAhigtjDRzvj+H+5K4O4S4GqMTddSVX32jDJ+Hfkpf0uIgN/c5xjl00bZug1xk19rfrMO2hwt4bTqPySvpcMbpIVTiV3V2bg9e9OgBNqS6dQ7cJsk7czBYpSMj0cl3yXdP87CUxMiBhQ8pFQIDAQABo30wezAdBgNVHQ4EFgQUJe+6ZEfLBzRaqAUiVSkAgqsy5mwwHwYDVR0jBBgwFoAUJe+6ZEfLBzRaqAUiVSkAgqsy5mwwDwYDVR0TAQH/BAUwAwEB/zAoBgNVHREEITAfhwSz1gIDghdsYW5nZnVzZS5hdXRvZXZhbC5sb2NhbDANBgkqhkiG9w0BAQsFAAOCAQEAxbodYOvAX5H+RJc/DDs615EoGJt6daiYJPTZGEnFwyeeklrbXhIyG51JG/hmEPhkbbZRxad0Fume496eT5EDxIQZZq/me1gszxxgPuuUn3csdWM2PzFHDrpNCD6RLzdkOVfYugmbSw9+VBzfGvKVzqLS0p9Dbvsnm39Po7TMzTHhAX3kr+gFfhtm0XkkyOKPb3tuhG327G9kp0stKJMxHVgElL166qU0kjujtv4sjXgnYjugxbKTVSKcGEirdTLdpMVW27qT2Hl7aUfF5W36bIV/zdX/FGXM37bU9/ywi8lCR+mVyPHnMZOWh8OFTdvc93Bf6auRuyxdhS+KRsX/SA=='
 $expectedHash = '85A864DA5B153AC1B3503A903F49E4274B7701373CD503786011FB95AC90B6C7'
 $bytes = [Convert]::FromBase64String($certificateBase64)
@@ -15,16 +11,6 @@ try { $hash = ([BitConverter]::ToString($sha.ComputeHash($bytes))).Replace('-','
 if ($hash -ne $expectedHash -or $certificate.NotAfter -le (Get-Date)) { throw 'Certificate fingerprint or expiration check failed.' }
 $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
 $state = Get-ItemProperty $key
-$hostsPath = Join-Path $env:WINDIR 'System32\drivers\etc\hosts'
-$hostsText = [IO.File]::ReadAllText($hostsPath)
-$hasHost = $false
-foreach ($line in ($hostsText -split '\r?\n')) {
-    $parts = (($line -split '#')[0].Trim() -split '\s+')
-    if ($parts.Length -gt 1 -and $parts[1..($parts.Length-1)] -contains 'langfuse.autoeval.local') {
-        if ($parts[0] -ne '179.214.2.3') { throw 'Conflicting Langfuse hosts entry; resolve it before setup.' }
-        $hasHost = $true
-    }
-}
 $pacPath = $null
 $pac = $null
 if ($state.AutoConfigURL -and $state.AutoConfigURL.StartsWith('file:', [StringComparison]::OrdinalIgnoreCase)) {
@@ -33,11 +19,10 @@ if ($state.AutoConfigURL -and $state.AutoConfigURL.StartsWith('file:', [StringCo
     $regex = [regex]::new('function\s+FindProxyForURL\s*\(\s*url\s*,\s*host\s*\)\s*\{')
     if (-not $regex.IsMatch($pac)) { throw 'Local PAC entrypoint not recognized; no changes made.' }
 }
-if (-not $PSCmdlet.ShouldProcess('Current-user proxy and certificate trust; system hosts', 'Configure AutoEval access')) { return }
+if (-not $PSCmdlet.ShouldProcess('Current-user proxy and certificate trust', 'Configure AutoEval access')) { return }
 $backup = Join-Path $env:LOCALAPPDATA ('AutoEval\first-visit-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff'))
 New-Item -ItemType Directory -Path $backup -Force | Out-Null
 $state | Select-Object ProxyEnable,ProxyServer,ProxyOverride,AutoConfigURL | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $backup 'proxy-settings.json') -Encoding UTF8
-Copy-Item -LiteralPath $hostsPath -Destination (Join-Path $backup 'hosts')
 if ($pacPath) { Copy-Item -LiteralPath $pacPath -Destination (Join-Path $backup 'proxy.pac') }
 $overrides = @($state.ProxyOverride -split ';' | Where-Object { $_ })
 foreach ($target in @('179.214.2.3','langfuse.autoeval.local')) {
@@ -50,9 +35,6 @@ if ($pacPath -and -not $pac.Contains('// AutoEval exact-host bypass')) {
     [IO.File]::WriteAllText($pacPath, $pac, [Text.UTF8Encoding]::new($false))
 } elseif ($state.AutoConfigURL -and -not $pacPath) {
     Write-Warning 'Remote PAC is managed externally. If bypass is ignored, ask the VPN administrator for exact-host DIRECT rules.'
-}
-if (-not $hasHost) {
-    [IO.File]::AppendAllText($hostsPath, "`r`n179.214.2.3 langfuse.autoeval.local # AutoEval`r`n", [Text.Encoding]::ASCII)
 }
 $store = [Security.Cryptography.X509Certificates.X509Store]::new('Root','CurrentUser')
 try {
@@ -68,7 +50,7 @@ Clear-DnsClientCache
 Write-Host "Backup: $backup"
 Write-Host 'VPN and default corporate proxy remain unchanged. Restart Chrome after setup.'
 $failed = $false
-foreach ($url in @('https://179.214.2.3/', 'https://langfuse.autoeval.local/api/public/health')) {
+foreach ($url in @('https://179.214.2.3/', 'https://179.214.2.3:8443/api/public/health')) {
     $request = [Net.HttpWebRequest]::Create($url)
     $request.Timeout = 15000
     $response = $null
@@ -83,6 +65,6 @@ foreach ($url in @('https://179.214.2.3/', 'https://langfuse.autoeval.local/api/
         if (($url.EndsWith('/health') -and $status -ne 200) -or $status -notin @(200,401)) { $failed = $true }
     } finally { if ($response) { $response.Close() } }
 }
-Write-Host 'Demo: https://179.214.2.3/  Langfuse: https://langfuse.autoeval.local/'
+Write-Host 'Demo: https://179.214.2.3/  Langfuse: https://179.214.2.3:8443/'
 Write-Host 'Login credentials are issued separately. This script contains no passwords or private keys.'
 if ($failed) { throw "Setup saved, but connectivity validation failed. Backup: $backup" }

@@ -67,7 +67,7 @@ def load_private_key(value):
 class SSHExecutor:
     def __init__(self, connection: SSHConnection):
         self.connection = connection
-        self.runtime = Path(__file__).with_name("job_runtime.py")
+        self.runtime = Path(__file__).parent / "infrastructure" / "job_runtime.py"
         self.digest = hashlib.sha256(self.runtime.read_bytes()).hexdigest()
         self.root = f"{connection.workdir}/.autoeval/{connection.owner_id}"
         self.remote_runtime = f"{self.root}/runtime/{self.digest}.py"

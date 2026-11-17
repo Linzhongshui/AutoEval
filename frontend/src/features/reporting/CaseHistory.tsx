@@ -1,5 +1,6 @@
 import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
+import { ArrowUpRight, FileCheck2, Workflow } from "lucide-react";
 import { apiGet, apiGetPage, apiPost } from "../../shared/api";
 import { UnifiedOutputSummary } from "./UnifiedOutputSummary";
 
@@ -37,7 +38,6 @@ const STATUS: Record<string, { label: string; tone: string }> = {
   started: { label: "执行中 / 待查证", tone: "running" },
 };
 const caseScore = (metadata?: ToolMetadata | null) => typeof metadata?.score === "number" && Number.isFinite(metadata.score) ? String(metadata.score) : "未提供评分";
-const short = (value: string | null) => (value ? `${value.slice(0, 12)}…` : "—");
 
 export function CaseHistory({ initialRun = "" }: { initialRun?: string }) {
   const evidenceDialog = useRef<HTMLDialogElement>(null);
@@ -74,7 +74,7 @@ export function CaseHistory({ initialRun = "" }: { initialRun?: string }) {
         setRows(page.data); setNext(page.next_offset); setTotal(page.total ?? null);
         setMessage(
           page.data.length
-            ? "筛选已应用到全部记录，评分结论请以报告为准。"
+            ? `已加载 ${page.data.length} 条执行记录`
             : query.state || query.sample
               ? "没有符合筛选条件的执行记录。"
               : "该运行暂无 case 执行记录。"
@@ -113,6 +113,10 @@ export function CaseHistory({ initialRun = "" }: { initialRun?: string }) {
 
   const body = (
     <>
+      <div className="case-history-heading">
+        <div><h3>样本执行记录</h3><p className="muted">每次尝试独立保留执行结果、原始证据和 Agent 轨迹。</p></div>
+        {rows.some(row => row.trace_url) && <span className="case-trace-hint"><Workflow size={15} aria-hidden="true" />在新标签页查看 Agent 轨迹</span>}
+      </div>
       {initialRun && <UnifiedOutputSummary runId={initialRun} compact />}
       {rows.some(row => row.trace_status === "failed") && <button type="button" onClick={async () => {
         try {
@@ -122,7 +126,6 @@ export function CaseHistory({ initialRun = "" }: { initialRun?: string }) {
         } catch { setMessage("Trace 重试失败"); }
       }}>重试失败的 Trace 导入</button>}
       {rows.some(row => row.trace_status === "pending") && <small>Trace 正在等待导入，刷新可查看最新状态</small>}
-      <p className="muted">查询每次执行尝试及已校验的原始证据。重试成功仍保留此前失败；执行状态与评分正确性分开。</p>
       <div className="filters case-toolbar">
         {!initialRun && <label>运行ID <input aria-label="回溯运行ID" value={run} onChange={(event) => setRun(event.target.value)} /></label>}
         <label>样本ID（可选） <input aria-label="回溯样本ID" value={sample} onChange={(event) => setSample(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && run.trim()) setQuery({ run: run.trim(), sample: sample.trim(), state: stateFilter, offset: 0, size: pageSize }); }} /></label>
@@ -130,12 +133,11 @@ export function CaseHistory({ initialRun = "" }: { initialRun?: string }) {
         {!initialRun && <button type="button" disabled={!run.trim()} onClick={() => setQuery({ run: run.trim(), sample: sample.trim(), state: stateFilter, offset: 0, size: pageSize })}>查询case历史</button>}
         {initialRun && <button type="button" onClick={() => setQuery({ run: initialRun, sample: sample.trim(), state: stateFilter, offset: 0, size: pageSize })}>筛选</button>}
       </div>
-      <p className="muted">模型答错属于评分结果；超时、断网等属于执行异常。得分为工具归档的原始分值，未提供评分不补零。此表保留每次尝试，筛选作用于全部已归档记录。</p>
-      <p role="status">{message}</p>
+      <p className="case-history-message muted" role="status">{message}<span>执行状态与评分分别记录，缺少评分不补零。</span></p>
       {rows.length > 0 && (
         <div className="table-wrap" data-testid="case-attempts">
-          <table>
-            <thead><tr><th>数据集 / 样本</th><th>尝试</th><th>执行状态</th><th>得分</th><th>创建时间</th><th>耗时</th><th>Token（入 / 出）</th><th>证据</th></tr></thead>
+          <table className="case-attempt-table">
+            <thead><tr><th>数据集 / 样本</th><th>尝试</th><th>执行状态</th><th>得分</th><th>创建时间</th><th>耗时</th><th>Token（入 / 出）</th><th>证据与轨迹</th></tr></thead>
             <tbody>{rows.map((row) => {
               const status = STATUS[row.state] ?? { label: "待确认", tone: "pending" };
               return (
@@ -150,10 +152,12 @@ export function CaseHistory({ initialRun = "" }: { initialRun?: string }) {
                   <td>{time(row.created_at)}</td>
                   <td>{row.tool_metadata?.duration_sec != null ? `${row.tool_metadata.duration_sec} 秒` : "—"}</td>
                   <td>{row.tool_metadata ? `${row.tool_metadata.input_tokens ?? "—"} / ${row.tool_metadata.output_tokens ?? "—"}` : "—"}</td>
-                  <td>
-                    <button className="link" type="button" disabled={!row.evidence_available} onClick={() => openEvidence(row)}>查看第{row.attempt_no}次证据</button>
-                    {row.trace_url ? <a href={row.trace_url} target="_blank" rel="noopener noreferrer">查看 Trace</a> : <small>{{pending: "Trace 等待导入", failed: "Trace 导入失败", missing: "缺少轨迹", disabled: "Langfuse 未配置", unsupported: "暂不支持 Trace"}[row.trace_status ?? "unsupported"]}</small>}
-                    <small>{row.evidence_available ? short(row.evidence_sha256) : "尚未归档"}</small>
+                  <td className="case-evidence-cell">
+                    <div className="case-evidence-actions">
+                      <button className="case-evidence-button" type="button" disabled={!row.evidence_available} aria-label={`查看第${row.attempt_no}次证据`} onClick={() => openEvidence(row)}><FileCheck2 size={14} aria-hidden="true" />查看证据</button>
+                      {row.trace_url && <a className="case-trace-button" href={row.trace_url} target="_blank" rel="noopener noreferrer" title="在新标签页查看本次执行的 Agent 轨迹">查看 Trace<ArrowUpRight size={14} aria-hidden="true" /></a>}
+                    </div>
+                    <small className="case-evidence-note">{row.trace_url ? "轨迹已导入" : {pending: "Trace 等待导入", failed: "Trace 导入失败", missing: "缺少轨迹", disabled: "Langfuse 未配置", unsupported: "暂不支持 Trace"}[row.trace_status ?? "unsupported"]}<span aria-hidden="true"> · </span>{row.evidence_available ? "证据已校验" : "证据尚未归档"}</small>
                   </td>
                 </tr>
               );

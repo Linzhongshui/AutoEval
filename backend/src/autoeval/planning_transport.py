@@ -7,7 +7,7 @@ import hashlib
 import importlib.metadata
 import json
 import stat
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from autoeval.docker_executor import DockerExecutor
 from autoeval.planning_runtime import validate_spec
@@ -76,7 +76,7 @@ async def read_container_progress(adapter, job):
 class PlanningRemoteContainer(DockerExecutor):
     """Docker lifecycle runs over pinned SSH; no host Planner execution or SFTP ambiguity."""
 
-    def __init__(self, connection, container_id, image_id):
+    def __init__(self, connection, container_id, image_id, runtime_root=None):
         super().__init__("docker", container_id, image_id)
         self.control = SSHExecutor(connection)
         self.files = {"job_runtime.py": self.runtime.read_bytes(), **runtime_files()}
@@ -91,7 +91,11 @@ class PlanningRemoteContainer(DockerExecutor):
                 if name.startswith("autoeval_planner/") or ".dist-info/" in name:
                     self.files["deps/" + name] = distribution.locate_file(item).read_bytes()
         sha = hashlib.sha256(b"".join(self.files[k] for k in sorted(self.files))).hexdigest()
-        self.remote_dir = "/tmp/autoeval-planning-runtime/" + sha
+        root = runtime_root or "/tmp/autoeval-planning-runtime"
+        path = PurePosixPath(root)
+        if not path.is_absolute() or ".." in path.parts or str(path) == "/":
+            raise ValueError("Planning runtime root must be an absolute directory")
+        self.remote_dir = str(path / sha)
 
     def command(self, arguments, payload=None):
         with self.control.connect() as client:
@@ -356,7 +360,10 @@ async def transport(session, settings, inputs):
         if not binding:
             raise ValueError("Selected SSH resource has no pinned planning container")
         return PlanningRemoteContainer(
-            connection_for(row, settings), binding["container_id"], binding["image_id"]
+            connection_for(row, settings),
+            binding["container_id"],
+            binding["image_id"],
+            binding.get("runtime_root"),
         )
     row = await session.get(ResourceBinding, inputs["resource_id"])
     if row is None:

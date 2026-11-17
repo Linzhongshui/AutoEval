@@ -1,0 +1,41 @@
+{
+  "e9af725c-ffe2-40ec-8047-5fd092f133a4": [
+    {
+      "attempt_id": "58875e1a-0984-41c2-b8df-64d756548122",
+      "trace_status": "missing",
+      "trace_id": null,
+      "trace_url": null,
+      "trace_error": null
+    },
+    {
+      "attempt_id": "4ce9340e-1ed3-445f-8db5-5139b31c2875",
+      "trace_status": "failed",
+      "trace_id": null,
+      "trace_url": null,
+      "trace_error": "TRACE_IMPORT_FAILED"
+    },
+    {
+      "attempt_id": "47d24704-0846-47c0-8f00-2c0b7df2b531",
+      "trace_status": "succeeded",
+      "trace_id": "53b97c1e00c6548bbc84df3fecba4a31",
+      "trace_url": "https://langfuse.autoeval.local/project/autoeval-harbor/traces/53b97c1e00c6548bbc84df3fecba4a31",
+      "trace_error": null
+    },
+    {
+      "attempt_id": "73952ea3-7020-4d1e-a5db-8446a4161b0d",
+      "trace_status": "succeeded",
+      "trace_id": "820fe3efa1f850ca87b5be98c29f2a3a",
+      "trace_url": "https://langfuse.autoeval.local/project/autoeval-harbor/traces/820fe3efa1f850ca87b5be98c29f2a3a",
+      "trace_error": null
+    }
+  ],
+  "a6ec7563-4326-45e9-9348-754ebff65e89": [
+    {
+      "attempt_id": "dfc4cdf5-9169-43d1-9369-548afbe9579e",
+      "trace_status": "succeeded",
+      "trace_id": "cfc0e6ea48fd58abbf8bc638c4e0cb36",
+      "trace_url": "https://langfuse.autoeval.local/project/autoeval-harbor/traces/cfc0e6ea48fd58abbf8bc638c4e0cb36",
+      "trace_error": null
+    }
+  ]
+}

@@ -209,7 +209,7 @@ h11==0.16.0 \
     # via
     #   httpcore
     #   uvicorn
-harborstack @ git+https://github.com/llauren48/harbor-otel-stack@6ca5ef9b8fedc78e8106d202a5c6a84e6f24f940
+harborstack @ git+https://github.com/llauren48/harbor-otel-stack@a62c1be62888e2cb5c89f92aa2dc00731f4f5ed1
     # via autoeval-backend
 httpcore==1.0.9 \
     --hash=sha256:2d400746a40668fc9dec9810239072b40b4484b640a8c38fd654a024c7a1bf55 \

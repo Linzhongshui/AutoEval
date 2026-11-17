@@ -854,6 +854,14 @@ def input_readiness(payload, compilation=None):
     }
 
 
+def directory_model_expression():
+    """Prefer the archived directory identity over service aliases."""
+    path = StandardInputVersion.payload["files"]["standard_config.json"]["path"].astext
+    return func.coalesce(
+        func.nullif(func.split_part(path, "/", 1), ""), StandardInputVersion.source_model
+    )
+
+
 def row_data(row):
     data = {
         "id": str(row.id),
@@ -868,26 +876,35 @@ def row_data(row):
         "execution_enabled": False,
         "approval_status": "not_required",
     }
+    path = row.payload.get("files", {}).get("standard_config.json", {}).get("path")
+    data["source_model"] = (
+        path.split("/", 1)[0] if isinstance(path, str) and "/" in path else row.source_model
+    )
     # Legacy/operator inputs may predate presentation metadata. Never mutate their payload.
-    if not isinstance(data.get('mapping'), dict):
+    if not isinstance(data.get("mapping"), dict):
         mapping = BENCHMARKS.get(row.benchmark)
-        data['mapping'] = dict(zip(('dataset', 'variant', 'subcommand'), mapping)) if mapping else {}
-    data.setdefault('files', {})
-    data.setdefault('locked_fields', {})
+        data["mapping"] = (
+            dict(zip(("dataset", "variant", "subcommand"), mapping)) if mapping else {}
+        )
+    data.setdefault("files", {})
+    data.setdefault("locked_fields", {})
     return data
 
 
 @router.get("/filters")
-async def filter_options(request: Request):
+async def filter_options(request: Request, include_operator: bool = False):
     async with request.app.state.sessions() as session:
         rows = (
             await session.execute(
                 select(
                     StandardInputVersion.revision,
-                    StandardInputVersion.source_model,
+                    directory_model_expression().label("source_model"),
                     StandardInputVersion.benchmark,
                 )
                 .where(~StandardInputVersion.source_model.startswith("TEST-"))
+                .where(
+                    True if include_operator else StandardInputVersion.repository == STANDARD_REPO
+                )
                 .order_by(StandardInputVersion.created_at.desc(), StandardInputVersion.id.desc())
             )
         ).all()
@@ -913,11 +930,14 @@ async def versions(
     revision: str = "latest",
     source_model: str | None = None,
     dataset: str | None = None,
+    include_operator: bool = False,
 ):
     if offset < 0 or not 1 <= limit <= 100:
         raise HTTPException(422, "Invalid pagination")
     async with request.app.state.sessions() as session:
         query = select(StandardInputVersion)
+        if not include_operator:
+            query = query.where(StandardInputVersion.repository == STANDARD_REPO)
         if not include_test:
             query = query.where(~StandardInputVersion.source_model.startswith("TEST-"))
         if revision == "latest":
@@ -930,9 +950,7 @@ async def versions(
         elif revision != "all":
             query = query.where(StandardInputVersion.revision == revision)
         if source_model:
-            query = query.where(
-                func.lower(StandardInputVersion.source_model) == source_model.lower()
-            )
+            query = query.where(func.lower(directory_model_expression()) == source_model.lower())
         if dataset:
             query = query.where(func.lower(StandardInputVersion.benchmark) == dataset.lower())
         if model_id:

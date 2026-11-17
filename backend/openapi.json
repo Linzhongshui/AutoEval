@@ -413,12 +413,34 @@
         ],
         "summary": "Filter Options",
         "operationId": "filter_options_api_autoeval_v1_standard_inputs_filters_get",
+        "parameters": [
+          {
+            "name": "include_operator",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Operator"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -520,6 +542,16 @@
                 }
               ],
               "title": "Dataset"
+            }
+          },
+          {
+            "name": "include_operator",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Operator"
             }
           }
         ],

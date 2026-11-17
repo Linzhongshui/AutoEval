@@ -3072,7 +3072,9 @@ export interface operations {
     };
     filter_options_api_autoeval_v1_standard_inputs_filters_get: {
         parameters: {
-            query?: never;
+            query?: {
+                include_operator?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -3088,6 +3090,15 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
     versions_api_autoeval_v1_standard_inputs_get: {
@@ -3100,6 +3111,7 @@ export interface operations {
                 revision?: string;
                 source_model?: string | null;
                 dataset?: string | null;
+                include_operator?: boolean;
             };
             header?: never;
             path?: never;

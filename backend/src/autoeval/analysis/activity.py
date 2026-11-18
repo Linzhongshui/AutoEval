@@ -195,6 +195,28 @@ async def execute_report_analysis(analysis_id: str, retry_count: int = 0):
                 replacement.append({'attempt_id': str(uuid.uuid5(uuid.UUID(ref['id']), repr(identity))),
                                     'sha256': hashlib.sha256(canonical_manifest(b)).hexdigest(), 'body': b})
             attempt_evidence = replacement
+            # Send representative attempts alongside the full aggregate counts.
+            # Keep the attached evidence identities intact and cap prompt size.
+            selected = []
+            counts = {}
+            for entry in attempt_evidence:
+                body = entry["body"]
+                key = (body.get("dataset_key"), body.get("score"))
+                if len(selected) >= 16:
+                    break
+                if counts.get(key, 0) >= 3 or len(canonical_manifest(body)) > 4000:
+                    continue
+                selected.append(entry)
+                counts[key] = counts.get(key, 0) + 1
+            attempt_evidence = selected
+            report_body = {
+                "schema_version": "task-report.v2",
+                "case_evidence_scope": "representative attempts only; use dataset summaries for totals",
+                "datasets": [
+                    {key: section[key] for key in ("dataset_key", "summary", "validity")}
+                    for section in report_body["datasets"]
+                ],
+            }
         baseline = job.baseline_comparison
         if job.baseline_comparison_sha256 is not None and (
             baseline is None

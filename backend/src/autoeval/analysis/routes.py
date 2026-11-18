@@ -1,5 +1,6 @@
 """Independent, immutable report analysis with server-owned evidence citations."""
 
+import asyncio
 import hashlib
 import json
 import re
@@ -40,16 +41,23 @@ def analysis_status_for(job, settings, *, execution_origin="real"):
     return "not_queued" if analysis_is_configured(settings) else "not_enabled"
 
 
-async def current_baseline_comparison(session, report, snapshot):
-    from autoeval.catalog.benchmarks import BenchmarkBaseline, compare_baseline
+async def current_baseline_comparison(session, report, snapshot, settings):
+    from autoeval.catalog.benchmarks import compare_baseline
+    from autoeval.catalog.datasets import read_manifest
+    from autoeval.catalog.models import BenchmarkBaseline
 
     baselines = (await session.scalars(select(BenchmarkBaseline))).all()
-    if 'dataset_results' in report.summary:
-        from autoeval.reporting.task_reports import dataset_context
-        tasks = snapshot.canonical_body['inputs']['tasks']
-        return {'datasets': [{'dataset_key': d['dataset_key'], 'comparison': compare_baseline(
-            d['summary'], dataset_context(snapshot.canonical_body, next(t for t in tasks if t['dataset'] == d['dataset_key'])), baselines)}
-            for d in report.summary['dataset_results']]}
+    body = await asyncio.to_thread(read_manifest, settings, report)
+    if body.get("schema_version") == "task-report.v2":
+        return {
+            "datasets": [
+                {
+                    "dataset_key": section["dataset_key"],
+                    "comparison": compare_baseline(section["summary"], section["context"], baselines),
+                }
+                for section in body["datasets"]
+            ]
+        }
     return compare_baseline(report.summary, snapshot.canonical_body, baselines)
 
 
@@ -464,7 +472,7 @@ async def start_analysis(report_id: uuid.UUID, request: Request):
             )
             if existing is not None:
                 raise HTTPException(409, "Analysis has already been queued")
-            comparison = await current_baseline_comparison(session, report, snapshot)
+            comparison = await current_baseline_comparison(session, report, snapshot, settings)
             job, _ = await enqueue_analysis(
                 session,
                 settings,
@@ -476,6 +484,8 @@ async def start_analysis(report_id: uuid.UUID, request: Request):
             data = analysis_data(job)
     except SQLAlchemyError as exc:
         raise HTTPException(503, "Analysis database unavailable") from exc
+    except (BotoCoreError, ClientError) as exc:
+        raise HTTPException(503, "Report evidence unavailable") from exc
     except ValueError as exc:
         raise HTTPException(409, "Report analysis cannot be queued") from exc
     return {"data": data, "request_id": request.state.request_id}

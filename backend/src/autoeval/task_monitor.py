@@ -330,12 +330,22 @@ async def latest(run_id: uuid.UUID, request: Request):
                     "total_count": len(expected),
                     "progress_description": "已归档执行记录；不代表历史实时监控已采集",
                 }
-        dataset_bindings = list(await session.scalars(select(MonitorBinding).where(
-            MonitorBinding.run_id == run_id).order_by(MonitorBinding.attempt)))
+        dataset_bindings = list(
+            await session.scalars(
+                select(MonitorBinding)
+                .where(MonitorBinding.run_id == run_id)
+                .order_by(MonitorBinding.attempt)
+            )
+        )
         projection["platform_state"] = run.state
         projection["datasets"] = [
-            {**freshness(row.latest), "dataset": row.identity.get("dataset"), "attempt": row.attempt}
-            for row in dataset_bindings if row.latest
+            {
+                **freshness(row.latest),
+                "dataset": row.identity.get("dataset"),
+                "attempt": row.attempt,
+            }
+            for row in dataset_bindings
+            if row.latest
         ]
         artifact = await session.scalar(
             select(UnifiedArtifact).where(
@@ -415,17 +425,41 @@ async def evidence(run_id: uuid.UUID, snapshot_id: uuid.UUID, request: Request):
 
 
 @router.get("/{run_id}/monitor/log")
-async def archived_log(run_id: uuid.UUID, request: Request):
+async def archived_log(run_id: uuid.UUID, request: Request, dataset_key: str | None = None):
     import asyncio
 
     from autoeval.unified_artifacts import UnifiedArtifact
 
     async with request.app.state.sessions() as session:
+        if dataset_key:
+            from autoeval.evaluation.models import DatasetExecution
+
+            child = await session.scalar(
+                select(DatasetExecution).where(
+                    DatasetExecution.run_id == run_id,
+                    DatasetExecution.payload["dataset"].astext == dataset_key,
+                )
+            )
+            if not child:
+                raise HTTPException(404, "Dataset not found in this task")
+            log_filter = UnifiedArtifact.collection_key == "planning-log:" + str(child.id)
+        else:
+            from autoeval.evaluation.models import DatasetExecution
+
+            children = list(
+                await session.scalars(
+                    select(DatasetExecution.id).where(DatasetExecution.run_id == run_id)
+                )
+            )
+            if len(children) > 1:
+                raise HTTPException(409, "Select a dataset to read its log")
+            log_filter = (
+                UnifiedArtifact.collection_key == "cli-native-v1"
+            ) | UnifiedArtifact.collection_key.startswith("planning-log:")
         artifact = await session.scalar(
             select(UnifiedArtifact).where(
                 UnifiedArtifact.run_id == run_id,
-                (UnifiedArtifact.collection_key == "cli-native-v1")
-                | UnifiedArtifact.collection_key.startswith("planning-log:"),
+                log_filter,
             )
         )
         if artifact is None:

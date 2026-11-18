@@ -2,6 +2,8 @@
 
 
 def report_dataset(snapshot):
+    if snapshot.get("dataset_key") in {"AutomationBench", "MMMU-Pro", "DeepSWE"}:
+        return snapshot["dataset_key"]
     samples = snapshot.get("samples") or []
     tasks = (snapshot.get("inputs") or {}).get("tasks") or []
     if not samples and len(tasks) == 1:

@@ -85,12 +85,29 @@ async def test_leaderboard_excludes_unverified_objects_even_with_complete_databa
 
 
 @pytest.mark.parametrize("dataset", ["MMMU-Pro", "AutomationBench"])
-async def test_unimplemented_benchmark_never_relabels_gpqa_scores(dataset):
-    sessions = Mock(side_effect=AssertionError("Should not query GPQA reports"))
+async def test_other_benchmark_never_relabels_gpqa_scores(dataset, monkeypatch):
+    from unittest.mock import MagicMock
+
+    report = SimpleNamespace(
+        id=uuid.uuid4(),
+        validity="complete",
+        summary={"accuracy": 80},
+        created_at=__import__("datetime").datetime.now(),
+    )
+    run = SimpleNamespace(id=uuid.uuid4())
+    snapshot = SimpleNamespace(canonical_body={"samples": [{"sample_id": "gpqa_diamond:0"}]})
+    session = AsyncMock()
+    session.execute = AsyncMock(return_value=SimpleNamespace(all=lambda: [(report, run, snapshot)]))
+    manager = MagicMock()
+    manager.__aenter__.return_value = session
+    sessions = Mock(return_value=manager)
+    monkeypatch.setattr(leaderboards, "report_evidence_status", AsyncMock(return_value="verified"))
+    monkeypatch.setattr(
+        leaderboards, "read_manifest", lambda *args: {"schema_version": "gpqa-report.v1"}
+    )
     request = SimpleNamespace(
-        app=SimpleNamespace(state=SimpleNamespace(sessions=sessions)),
+        app=SimpleNamespace(state=SimpleNamespace(sessions=sessions, settings=None)),
         state=SimpleNamespace(request_id="fixture"),
     )
     result = await leaderboards.leaderboard(request, dataset_key=dataset, metric_name="accuracy")
     assert result["data"] == []
-    sessions.assert_not_called()

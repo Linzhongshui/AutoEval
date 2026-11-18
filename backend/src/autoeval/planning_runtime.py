@@ -324,6 +324,70 @@ def controlled_failure_reason(spec, exc):
     return "remote_probe_failed"
 
 
+def attach_harbor_evidence(output, result, budget, credential=None):
+    """Keep scoring for every case before spending the remainder on trajectories."""
+    root = output.resolve()
+    directories = {}
+    for path in output.rglob("*"):
+        if path.is_dir() and not path.is_symlink():
+            directories.setdefault(path.name, []).append(path)
+    trails = []
+
+    def content(path):
+        if not path.is_file() or path.is_symlink() or not path.resolve().is_relative_to(root):
+            return None
+        if path.stat().st_size > 8 * 1024 * 1024:
+            return None
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeError):
+            return None
+        if len(text.encode()) > 8 * 1024 * 1024 or (credential and credential in text):
+            return None
+        return text
+
+    for case in result.get("cases", []):
+        name = case.get("trial_dir", "")
+        paths = directories.get(name, []) if name and Path(name).name == name else []
+        if len(paths) > 1:
+            raise ValueError("Ambiguous native trial directory")
+        files = {}
+        if len(paths) == 1:
+            for relative in (
+                "result.json",
+                "verifier/reward.txt",
+                "verifier/reward.json",
+                "verifier/reward-details.json",
+            ):
+                value = content(paths[0] / relative)
+                if value is not None:
+                    files[relative] = value
+        artifact = {"trial_name": name, "files": files}
+        size = len(json.dumps(artifact).encode())
+        if size > min(10 * 1024 * 1024, budget):
+            raise ValueError("Scoring evidence exceeds collection budget; preserve remote output")
+        budget -= size
+        case["harbor_artifact"] = artifact
+        if len(paths) == 1:
+            trails.append((case, paths[0] / "agent/trajectory.json"))
+    for case, path in trails:
+        value = content(path)
+        if value is None:
+            continue
+        artifact = case["harbor_artifact"]
+        enriched = {**artifact, "files": {**artifact["files"], "agent/trajectory.json": value}}
+        extra = len(json.dumps(enriched).encode()) - len(json.dumps(artifact).encode())
+        if extra <= budget:
+            case["harbor_artifact"] = enriched
+            budget -= extra
+        else:
+            case["trajectory_evidence"] = {
+                "status": "retained_remote",
+                "relative_path": str(path.relative_to(output)),
+                "sha256": hashlib.sha256(value.encode()).hexdigest(),
+            }
+
+
 def execute(folder, spec):
     validate_spec(spec)
     secret_path = folder / "credential.json"
@@ -439,17 +503,19 @@ def execute(folder, spec):
         )
         environment = dict(os.environ)
         from urllib.parse import urlsplit
-        endpoint = config['params'].get('url') or config['params'].get('api_base') or ''
-        if endpoint.startswith('http://'):
+
+        endpoint = config["params"].get("url") or config["params"].get("api_base") or ""
+        if endpoint.startswith("http://"):
             hostname = urlsplit(endpoint).hostname
             import ipaddress
+
             if not hostname or not ipaddress.ip_address(hostname).is_private:
-                raise ValueError('Plain HTTP is limited to the private budget proxy')
-            bypass = ','.join(filter(None, [environment.get('NO_PROXY', ''), hostname]))
-            environment['NO_PROXY'] = environment['no_proxy'] = bypass
-            if config.get('subcommand') == 'harbor_agent':
-                agent_env = config['params'].setdefault('agent_env', {})
-                agent_env['NO_PROXY'] = agent_env['no_proxy'] = bypass
+                raise ValueError("Plain HTTP is limited to the private budget proxy")
+            bypass = ",".join(filter(None, [environment.get("NO_PROXY", ""), hostname]))
+            environment["NO_PROXY"] = environment["no_proxy"] = bypass
+            if config.get("subcommand") == "harbor_agent":
+                agent_env = config["params"].setdefault("agent_env", {})
+                agent_env["NO_PROXY"] = agent_env["no_proxy"] = bypass
                 config_path.write_text(json.dumps(config))
         environment["PYTHONPATH"] = (
             str(compatibility) + os.pathsep + environment.get("PYTHONPATH", "")
@@ -507,43 +573,8 @@ def execute(folder, spec):
         result = json.loads(raw)
         if key and key in json.dumps(result):
             raise ValueError("Credential present in result")
-        artifact_budget = max(0, 12 * 1024 * 1024 - len(raw))
         if config.get("subcommand") == "harbor_agent":
-            for case in result.get("cases", []):
-                name = case.get("trial_dir", "")
-                trials = (
-                    [p for p in output.rglob(name) if p.is_dir()]
-                    if name and Path(name).name == name
-                    else []
-                )
-                files = {}
-                if len(trials) == 1:
-                    for relative in (
-                        "agent/trajectory.json",
-                        "result.json",
-                        "verifier/reward.txt",
-                        "verifier/reward.json",
-                        "verifier/reward-details.json",
-                    ):
-                        source = trials[0] / relative
-                        if source.is_file() and not source.is_symlink():
-                            try:
-                                if source.stat().st_size > 8 * 1024 * 1024:
-                                    continue
-                                text = source.read_text(encoding="utf-8")
-                            except (OSError, UnicodeError):
-                                continue
-                            if len(text.encode()) <= 8 * 1024 * 1024 and (
-                                not key or key not in text
-                            ):
-                                files[relative] = text
-                artifact = {"trial_name": name, "files": files}
-                artifact_size = len(json.dumps(artifact).encode())
-                if artifact_size > min(10 * 1024 * 1024, artifact_budget):
-                    artifact = {"trial_name": name, "files": {}}
-                else:
-                    artifact_budget -= artifact_size
-                case["harbor_artifact"] = artifact
+            attach_harbor_evidence(output, result, max(0, 12 * 1024 * 1024 - len(raw)), key)
         return {
             "unified_result": result,
             "native_files": collect(output, contract) if contract else [],

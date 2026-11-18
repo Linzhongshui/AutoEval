@@ -101,7 +101,12 @@ async def test_report_evidence_and_score_cannot_be_overridden(
     )
     request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(settings=None)))
     monkeypatch.setattr(
-        "autoeval.reporting.data_workbench.report_evidence_status", AsyncMock(return_value=evidence_status)
+        "autoeval.reporting.data_workbench.report_evidence_status",
+        AsyncMock(return_value=evidence_status),
+    )
+    monkeypatch.setattr(
+        "autoeval.catalog.datasets.read_manifest",
+        lambda *args: {"schema_version": "gpqa-report.v1"},
     )
     with pytest.raises(HTTPException) as exc:
         await validate_report(request, session, entry)
@@ -191,3 +196,52 @@ def test_best_score_preserves_models_zero_and_newest_ties():
     ]
     assert [r["id"] for r in best_per_model(rows, "lower_is_better")] == ["new-low", "other-model"]
     assert len(rows) == 4
+
+
+@pytest.mark.parametrize("scope", ["Lite", "full"])
+async def test_legacy_report_scope_and_score_remain_valid(monkeypatch, scope):
+    identifier = uuid.uuid4()
+    frozen = {
+        "remote_model": "model",
+        "manifest_sha256": "b" * 64,
+        "tool": {"revision": "fixed"},
+        "parameters": {"scope": scope},
+    }
+    entry = EntryInput.model_validate(
+        {
+            **payload(),
+            "source_type": "report",
+            "report_id": str(identifier),
+            "source_key": "report-" + str(identifier),
+            "source_name": "AutoEval",
+            "source_version": str(identifier),
+            "model_name": "model",
+            "dataset": "GPQA",
+            "scope": scope.lower(),
+            "conditions": {"manifest_sha256": "b" * 64, "tool_revision": "fixed", "scope": scope},
+        }
+    )
+    report = SimpleNamespace(
+        id=identifier,
+        run_id=uuid.uuid4(),
+        validity="complete",
+        execution_origin="real",
+        summary={"accuracy": 75},
+        sha256="a" * 64,
+    )
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(settings=None)))
+    session = SimpleNamespace(
+        get=AsyncMock(
+            side_effect=[report, SimpleNamespace(trigger_scope="local-operator:evaluation")]
+        ),
+        scalar=AsyncMock(return_value=SimpleNamespace(canonical_body=frozen)),
+    )
+    monkeypatch.setattr(
+        "autoeval.reporting.data_workbench.report_evidence_status",
+        AsyncMock(return_value="verified"),
+    )
+    monkeypatch.setattr(
+        "autoeval.catalog.datasets.read_manifest",
+        lambda *args: {"schema_version": "gpqa-report.v1"},
+    )
+    assert await validate_report(request, session, entry) == frozen

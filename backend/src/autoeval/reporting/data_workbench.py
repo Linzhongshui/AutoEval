@@ -28,7 +28,7 @@ class EntryInput(BaseModel):
     unit: str = Field(min_length=1, max_length=32)
     direction: Literal["higher_is_better", "lower_is_better"]
     scope: Literal["full", "lite"]
-    conditions: dict[str, str | int | float] = Field(min_length=1, max_length=30)
+    conditions: dict[str, str | int | float | None] = Field(min_length=1, max_length=30)
     source_name: str = Field(min_length=1, max_length=128)
     source_url: HttpUrl | None = None
     source_version: str = Field(min_length=1, max_length=128)
@@ -113,7 +113,7 @@ async def validate_report(request, session, entry):
     run = await session.get(EvaluationRun, report.run_id)
     snapshot = await session.scalar(select(RunSnapshot).where(RunSnapshot.run_id == report.run_id))
     if (
-        report.validity != "complete"
+        report.validity not in {"complete", "partial"}
         or report.execution_origin != "real"
         or snapshot is None
         or run.trigger_scope not in {"local-operator:evaluation", "local-operator:orchestration"}
@@ -122,21 +122,43 @@ async def validate_report(request, session, entry):
     ):
         raise HTTPException(409, "Report is incomplete or original evidence is unavailable")
     frozen = snapshot.canonical_body
+    source_key = "report-" + str(report.id)
+    import asyncio
+
+    from autoeval.catalog.datasets import read_manifest
+
+    body = await asyncio.to_thread(read_manifest, request.app.state.settings, report)
+    if body.get("schema_version") == "task-report.v2":
+        sections = [d for d in body["datasets"] if report_dataset(d["context"]) == entry.dataset]
+        if len(sections) != 1 or sections[0]["validity"] != "complete":
+            raise HTTPException(409, "Dataset report is incomplete or ambiguous")
+        frozen = sections[0]["context"]
+        score = sections[0]["summary"].get("accuracy")
+        source_key += ":" + entry.dataset
+    else:
+        if report.validity != "complete":
+            raise HTTPException(409, "Report is incomplete")
+        score = report.summary.get("accuracy")
     expected_conditions = {
         "manifest_sha256": frozen["manifest_sha256"],
         "tool_revision": frozen["tool"]["revision"],
         **frozen["parameters"],
     }
     if (
-        entry.source_key != "report-" + str(report.id)
+        entry.source_key != source_key
         or entry.source_name != "AutoEval"
         or entry.model_name != frozen["remote_model"]
-        or entry.dataset not in {"GPQA", report_dataset(frozen)}
+        or entry.dataset
+        not in (
+            {"GPQA", "GPQA-Diamond"}
+            if report_dataset(frozen) == "GPQA-Diamond"
+            else {report_dataset(frozen)}
+        )
         or entry.metric != "accuracy"
         or entry.unit != "%"
-        or entry.scope != "lite"
+        or entry.scope != str(frozen["parameters"]["scope"]).lower()
         or entry.direction != "higher_is_better"
-        or entry.value != report.summary.get("accuracy")
+        or entry.value != score
         or entry.conditions != expected_conditions
         or entry.source_sha256 != report.sha256
         or entry.source_version != str(report.id)
@@ -302,7 +324,7 @@ async def published(request: Request, selection: Literal["best", "all"] = "best"
                 identity["dataset"] = report_dataset(frozen)
                 identity["config_version_id"] = frozen.get("config_version_id") if frozen else None
             if any(
-                str(value).strip().lower() in {"unknown", "未知", "未提供", "待确认"}
+                value is None or str(value).strip().lower() in {"unknown", "未知", "未提供", "待确认"}
                 for value in entry.conditions.values()
             ):
                 identity["unconfirmed_condition_record"] = str(row.id)

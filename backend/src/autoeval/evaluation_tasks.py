@@ -29,21 +29,25 @@ class SubmitTask(ResourceRef):
     resource_ids: list[uuid.UUID] = Field(default_factory=list, max_length=16)
     ignore_budget: bool = Field(default=False, strict=True)
 
-    @model_serializer(mode='wrap')
+    @model_serializer(mode="wrap")
     def serialize(self, handler):
         value = handler(self)
         if not self.resource_ids:
             value.pop("resource_ids", None)
         if not self.ignore_budget:
-            value.pop('ignore_budget', None)
+            value.pop("ignore_budget", None)
         return value
+
     target_id: uuid.UUID
     tasks: list[TaskSelection] = Field(min_length=1, max_length=4)
     dataset_concurrency: int = Field(default=1, ge=1, le=3)
 
     @model_validator(mode="after")
     def unique_selection(self):
-        if self.resource_ids and (self.resource_id not in self.resource_ids or len(set(self.resource_ids)) != len(self.resource_ids)):
+        if self.resource_ids and (
+            self.resource_id not in self.resource_ids
+            or len(set(self.resource_ids)) != len(self.resource_ids)
+        ):
             raise ValueError("Resource pool must be unique and contain the primary resource")
         if len({t.task_id for t in self.tasks}) != len(self.tasks) or len(
             {t.dataset for t in self.tasks}
@@ -243,6 +247,23 @@ async def task_report(run_id: uuid.UUID, request: Request):
         row = await session.get(EvaluationRun, run_id)
         if not row or row.trigger_scope not in SCOPES:
             raise HTTPException(404, "Evaluation task not found")
+        formal = await session.scalar(
+            select(EvaluationReport).where(EvaluationReport.run_id == run_id)
+        )
+        if formal:
+            import asyncio
+
+            from autoeval.catalog.datasets import read_manifest
+
+            try:
+                return envelope(
+                    await asyncio.to_thread(read_manifest, request.app.state.settings, formal),
+                    request,
+                )
+            except (BotoCoreError, ClientError, ValueError) as exc:
+                raise HTTPException(
+                    503, "Report evidence unavailable or integrity check failed"
+                ) from exc
         grouped = row.trigger_scope == "local-operator:orchestration"
     try:
         data = (
@@ -276,35 +297,51 @@ async def cleanup_task(run_id: uuid.UUID, request: Request):
     )
     return envelope(data, request)
 
-@router.get('/{run_id}/budget', response_model=Envelope[dict])
+
+@router.get("/{run_id}/budget", response_model=Envelope[dict])
 async def task_budget(run_id: uuid.UUID, request: Request):
     from autoeval.billing import BudgetAccount, BudgetRequest
 
     async with request.app.state.sessions() as db:
         run = await db.get(EvaluationRun, run_id)
         if run is None or run.trigger_scope not in SCOPES:
-            raise HTTPException(404, 'Evaluation task not found')
+            raise HTTPException(404, "Evaluation task not found")
         snapshot = await db.scalar(select(RunSnapshot).where(RunSnapshot.run_id == run_id))
-        frozen = snapshot.canonical_body.get('model_budget') if snapshot else None
+        frozen = snapshot.canonical_body.get("model_budget") if snapshot else None
         if not frozen:
-            return envelope({'state': 'not_configured'}, request)
-        if frozen.get('mode') == 'ignored':
-            return envelope({'state': 'ignored', 'limits_applied': False,
-                             'acknowledged_at': frozen['acknowledged_at'],
-                             'execution_deadline': frozen['execution_deadline']}, request)
-        account = await db.get(BudgetAccount, uuid.UUID(frozen['budget_id']))
+            return envelope({"state": "not_configured"}, request)
+        if frozen.get("mode") == "ignored":
+            return envelope(
+                {
+                    "state": "ignored",
+                    "limits_applied": False,
+                    "acknowledged_at": frozen["acknowledged_at"],
+                    "execution_deadline": frozen["execution_deadline"],
+                },
+                request,
+            )
+        account = await db.get(BudgetAccount, uuid.UUID(frozen["budget_id"]))
         if account is None:
-            raise HTTPException(409, 'Frozen budget account missing')
-        unresolved = await db.scalar(select(func.count()).select_from(BudgetRequest).where(
-            BudgetRequest.budget_id == account.id, BudgetRequest.state == 'unresolved'))
-        return envelope({
-            'budget_id': str(account.id), 'currency': account.currency,
-            'total_limit': str(account.total_limit),
-            'evaluation_limit': str(account.evaluation_limit),
-            'analysis_limit': str(account.analysis_limit),
-            'reserved': str(account.reserved), 'spent_upper_bound': str(account.spent),
-            'remaining': str(account.total_limit - account.reserved - account.spent),
-            'state': account.state, 'deadline': frozen['deadline'],
-            'unresolved_requests': unresolved,
-            'cost_basis': 'conservative_official_upper_bound_not_provider_invoice',
-        }, request)
+            raise HTTPException(409, "Frozen budget account missing")
+        unresolved = await db.scalar(
+            select(func.count())
+            .select_from(BudgetRequest)
+            .where(BudgetRequest.budget_id == account.id, BudgetRequest.state == "unresolved")
+        )
+        return envelope(
+            {
+                "budget_id": str(account.id),
+                "currency": account.currency,
+                "total_limit": str(account.total_limit),
+                "evaluation_limit": str(account.evaluation_limit),
+                "analysis_limit": str(account.analysis_limit),
+                "reserved": str(account.reserved),
+                "spent_upper_bound": str(account.spent),
+                "remaining": str(account.total_limit - account.reserved - account.spent),
+                "state": account.state,
+                "deadline": frozen["deadline"],
+                "unresolved_requests": unresolved,
+                "cost_basis": "conservative_official_upper_bound_not_provider_invoice",
+            },
+            request,
+        )

@@ -99,7 +99,7 @@ assert '/api/autoeval/v1/evaluation-tasks' in create_app().openapi()['paths']
     assert result.returncode == 0, result.stderr.decode(errors="replace")
 
 
-async def test_final_form_concurrency_cannot_override_standard_lock(monkeypatch):
+async def test_final_form_concurrency_cannot_override_scoring_lock(monkeypatch):
     from fastapi import HTTPException
 
     from autoeval.planning import PlanInput, resolve_inputs
@@ -114,7 +114,7 @@ async def test_final_form_concurrency_cannot_override_standard_lock(monkeypatch)
             "subcommand": "llm_accuracy",
             "params": {"datasets": ["gpqa"], "batch_size": 1},
         },
-        "locked_fields": {"params.batch_size": 1},
+        "locked_fields": {"params.batch_size": 1, "params.max_out_len": 100},
     }
 
     class Session:

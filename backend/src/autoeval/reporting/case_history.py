@@ -122,6 +122,7 @@ async def finish_attempt(sessions, settings, identifier: uuid.UUID, evidence: At
 
 
 class CaseExecutionItem(BaseModel):
+    metadata_provenance: dict | None = None
     trace_status: str
     trace_id: str | None
     trace_url: str | None
@@ -152,6 +153,7 @@ async def history(
     state: str | None = None,
     offset: int = 0,
     limit: int = 50,
+    evidence_version: Literal["current", "original"] = "current",
 ):
     if offset < 0 or not 1 <= limit <= 200:
         raise HTTPException(422, "Invalid pagination")
@@ -188,6 +190,13 @@ async def history(
                 )
             ).all()
             trace_rows = {r.attempt_id: r for r in imports}
+            from autoeval.reporting.case_metrics import current_metrics
+
+            metrics = (
+                await current_metrics(session, request.app.state.settings, run_id, rows[:limit])
+                if evidence_version == "current"
+                else {r.id: (r.tool_metadata, None) for r in rows[:limit]}
+            )
             return {
                 "data": [
                     {
@@ -202,7 +211,8 @@ async def history(
                         "evidence_available": r.sha256 is not None,
                         "created_at": r.created_at.isoformat(),
                         "finished_at": r.finished_at.isoformat() if r.finished_at else None,
-                        "tool_metadata": r.tool_metadata,
+                        "tool_metadata": metrics[r.id][0],
+                        "metadata_provenance": metrics[r.id][1],
                     }
                     for r in rows[:limit]
                 ],
@@ -212,10 +222,16 @@ async def history(
             }
     except SQLAlchemyError as exc:
         raise HTTPException(503, "Case history database unavailable") from exc
+    except (BotoCoreError, ClientError, ValueError, KeyError, TypeError) as exc:
+        raise HTTPException(503, "Current case metrics evidence unavailable or invalid") from exc
 
 
 @router.get("/case-executions/{attempt_id}/evidence", response_model=Envelope[dict])
-async def evidence(attempt_id: uuid.UUID, request: Request):
+async def evidence(
+    attempt_id: uuid.UUID,
+    request: Request,
+    evidence_version: Literal["current", "original"] = "current",
+):
     try:
         async with request.app.state.sessions() as session:
             row = await session.get(CaseExecutionRecord, attempt_id)
@@ -225,8 +241,147 @@ async def evidence(attempt_id: uuid.UUID, request: Request):
                 raise HTTPException(409, "Attempt has no confirmed outcome evidence")
             data = await asyncio.to_thread(read_manifest, request.app.state.settings, row)
             data = await enrich_case(session, request.app.state.settings, row, data)
+            if evidence_version == "current":
+                from autoeval.reporting.case_metrics import current_metrics
+
+                metrics = await current_metrics(
+                    session, request.app.state.settings, row.run_id, [row]
+                )
+                data = {
+                    **data,
+                    "effective_tool_metadata": metrics[row.id][0],
+                    "metadata_provenance": metrics[row.id][1],
+                    "original_evidence_sha256": row.sha256,
+                }
     except SQLAlchemyError as exc:
         raise HTTPException(503, "Case history database unavailable") from exc
     except (BotoCoreError, ClientError, ValueError, TypeError, KeyError) as exc:
         raise HTTPException(503, "Evidence missing or integrity check failed") from exc
     return {"data": data, "request_id": request.state.request_id}
+
+
+@router.get("/runs/{run_id}/result-revisions")
+async def result_revisions(run_id: uuid.UUID, request: Request):
+    from autoeval.evaluation.models import ResultArchiveRevision
+
+    async with request.app.state.sessions() as session:
+        rows = (
+            await session.scalars(
+                select(ResultArchiveRevision)
+                .where(ResultArchiveRevision.run_id == run_id)
+                .order_by(ResultArchiveRevision.created_at)
+            )
+        ).all()
+        return {
+            "data": [
+                {
+                    "id": str(r.id),
+                    "dataset_key": r.dataset_key,
+                    "sha256": r.sha256,
+                    "created_at": r.created_at.isoformat(),
+                    "provenance": r.provenance,
+                }
+                for r in rows
+            ],
+            "request_id": request.state.request_id,
+        }
+
+
+@router.get("/runs/{run_id}/result-revisions/{revision_id}/cases")
+async def recovered_cases(
+    run_id: uuid.UUID,
+    revision_id: uuid.UUID,
+    request: Request,
+    offset: int = 0,
+    limit: int = 50,
+    sample_id: str | None = None,
+    state: str | None = None,
+    dataset_key: str | None = None,
+):
+    from autoeval.evaluation.models import ResultArchiveRevision
+    from autoeval.reporting.models import UnifiedCollection
+    from autoeval.reporting.task_reports import checksum
+    from autoeval.reporting.unified_outputs import parse_output
+
+    if offset < 0 or not 1 <= limit <= 200:
+        raise HTTPException(422, "Invalid pagination")
+    async with request.app.state.sessions() as session:
+        row = await session.get(ResultArchiveRevision, revision_id)
+        if not row or row.run_id != run_id:
+            raise HTTPException(404, "Recovery revision not found")
+        parent = await session.get(
+            UnifiedCollection,
+            row.parent_collection_id,
+        )
+        if parent is None or parent.sha256 != row.provenance.get("parent_sha256"):
+            raise HTTPException(503, "Recovery parent evidence mismatch")
+        await asyncio.to_thread(read_manifest, request.app.state.settings, parent)
+        body = await asyncio.to_thread(read_manifest, request.app.state.settings, row)
+        cases, _ = parse_output(
+            canonical_manifest(body), parent.payload["expected"], row.dataset_key
+        )
+        selected = [
+            c
+            for c in cases
+            if (not sample_id or c["sample_id"] == sample_id)
+            and (not dataset_key or c["dataset_key"] == dataset_key)
+            and (not state or ("succeeded" if c["status"] == "success" else "failed") == state)
+        ]
+        page_cases = selected[offset : offset + limit]
+        originals = list(
+            await session.scalars(
+                select(CaseExecutionRecord).where(
+                    CaseExecutionRecord.run_id == run_id,
+                    CaseExecutionRecord.dataset_key == row.dataset_key,
+                    CaseExecutionRecord.sample_id.in_([c["sample_id"] for c in page_cases]),
+                )
+            )
+        )
+        by_identity = {(c.sample_id, c.attempt_no): c for c in originals}
+        from autoeval.langfuse_integration import TraceImport, trace_view
+
+        imports = list(
+            await session.scalars(
+                select(TraceImport).where(TraceImport.attempt_id.in_([c.id for c in originals]))
+            )
+        )
+        traces = {t.attempt_id: t for t in imports}
+        data = []
+        for c in page_cases:
+            original = by_identity.get((c["sample_id"], c["attempt_no"]))
+            if original is None:
+                raise HTTPException(503, "Recovered case has no matching original attempt")
+            data.append(
+                {
+                    "id": c["sample_id"] + ":" + str(c["attempt_no"]),
+                    "dataset_key": c["dataset_key"],
+                    "sample_id": c["sample_id"],
+                    "attempt_no": c["attempt_no"],
+                    "state": "succeeded" if c["status"] == "success" else "failed",
+                    "error_code": None,
+                    "evidence_available": True,
+                    "evidence_sha256": checksum(c),
+                    "created_at": row.created_at.isoformat(),
+                    "finished_at": c["tool_finished_at"],
+                    "tool_metadata": {k: v for k, v in c.items() if k != "raw"},
+                    **trace_view(traces.get(original.id), request.app.state.settings),
+                    "original_attempt_id": str(original.id),
+                    "recovery_revision_id": str(row.id),
+                    "recovered_evidence": c,
+                    "provenance": {
+                        **row.provenance,
+                        "source_files": [
+                            f
+                            for f in row.provenance.get("source_files", [])
+                            if f["trial"]
+                            == (c["raw"].get("trial_name") or c["raw"].get("trial_dir"))
+                        ],
+                    },
+                }
+            )
+        return {
+            "data": data,
+            "total": len(selected),
+            "next_offset": offset + limit if offset + limit < len(selected) else None,
+            "request_id": request.state.request_id,
+        }

@@ -6,6 +6,7 @@ import base64
 import hashlib
 import importlib.metadata
 import json
+import shlex
 import stat
 from pathlib import Path, PurePosixPath
 
@@ -83,7 +84,10 @@ for p in (root/'output').rglob('result.json'):
  if isinstance(d,dict) and 'agent_execution' in d and 'verifier_result' in d and d.get('finished_at'):done.add(str(p.parent))
 print(json.dumps({'job_id':root.name,'source':'harbor_result_files','finish_count':len(done),'observed_at':datetime.now(timezone.utc).isoformat(),'snapshot_kind':'live'}))
 """
-        extra = await asyncio.to_thread(adapter.command, ["exec", adapter.container_id, "python3", "-c", script, root + "/" + key])
+        extra = await asyncio.to_thread(
+            adapter.command,
+            ["exec", adapter.container_id, "python3", "-c", script, root + "/" + key],
+        )
         value = json.loads(extra)
     if value and value.get("job_id") != key:
         raise ValueError("Progress belongs to another job")
@@ -182,6 +186,54 @@ class PlanningRemoteContainer(DockerExecutor):
             ],
         )
         return json.loads(raw)
+
+    async def collect(self, job):
+        """Stage large results in a host file before transfer instead of capped stdout."""
+        import uuid
+
+        key = str(uuid.UUID(job.submission_key))
+        path = f"/tmp/autoeval-collect-{key}-{uuid.uuid4().hex}.json"
+        command = (
+            "umask 077; set -C; "
+            + shlex.join(
+                [
+                    "docker",
+                    "exec",
+                    self.container_id,
+                    "env",
+                    "PYTHONPATH=" + self.remote_dir + "/deps",
+                    "AE_JOB_ROOT=" + self.remote_dir + "/jobs",
+                    "python3",
+                    self.remote_dir + "/job_runtime.py",
+                    "collect",
+                    key,
+                ]
+            )
+            + " > "
+            + shlex.quote(path)
+        )
+
+        def read():
+            with self.control.connect() as client:
+                try:
+                    self.control.command(client, ["sh", "-c", command])
+                    with client.open_sftp() as sftp:
+                        entry = sftp.lstat(path)
+                        if not stat.S_ISREG(entry.st_mode):
+                            raise ValueError("Result must be a regular file")
+                        with sftp.open(path, "rb") as stream:
+                            raw = stream.read(16 * 1024 * 1024 + 1)
+                    if len(raw) > 16 * 1024 * 1024:
+                        raise ValueError("Result too large")
+                    return json.loads(raw)
+                finally:
+                    try:
+                        with client.open_sftp() as sftp:
+                            sftp.remove(path)
+                    except OSError:
+                        pass
+
+        return await asyncio.to_thread(read)
 
     async def preflight(self, tasks=None):
         await self.validate({"kind": "framework_smoke", "duration_seconds": 0})

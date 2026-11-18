@@ -7,6 +7,7 @@ keeps Temporal concerns in the activity wrapper at the bottom of this file.
 import asyncio
 import hashlib
 import uuid
+from contextlib import suppress
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
@@ -28,6 +29,28 @@ from autoeval.secrets import FileSecretStore
 from autoeval.standard_inputs import digest
 from autoeval.targets import TargetBinding
 from autoeval.unified_outputs import archive_output
+
+
+async def keep_heartbeat(callback, awaitable, *, interval_seconds=30):
+    """Keep the activity alive while long archives or reports hold the worker."""
+    stop = asyncio.Event()
+
+    async def beat():
+        while not stop.is_set():
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=interval_seconds)
+            except TimeoutError:
+                callback()
+
+    task = asyncio.create_task(beat())
+    try:
+        return await awaitable
+    finally:
+        stop.set()
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+
 
 TERMINAL = set(DATASET_TERMINAL)
 
@@ -58,30 +81,47 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
             raise ValueError("Frozen snapshot integrity mismatch")
         frozen = snapshot.canonical_body
         from autoeval.billing_transport import budget_ignored
+
         ignore_budget = budget_ignored(frozen)
         inputs = frozen["inputs"]
         adapter = await transport(session, settings, inputs)
         adapters = {}
         for item in inputs["tasks"]:
-            adapters[item["task_id"]] = await transport(session, settings, {**inputs, "resource_id": item["assigned_resource_id"], "resource_kind": item["assigned_resource_kind"]}) if item.get("assigned_resource_id") else adapter
+            adapters[item["task_id"]] = (
+                await transport(
+                    session,
+                    settings,
+                    {
+                        **inputs,
+                        "resource_id": item["assigned_resource_id"],
+                        "resource_kind": item["assigned_resource_kind"],
+                    },
+                )
+                if item.get("assigned_resource_id")
+                else adapter
+            )
         target = await session.get(TargetBinding, inputs["target_id"])
         secret = FileSecretStore(settings.secret_store_path).get(target.credential_ref)
     while True:
         heartbeat()
         async with sessions() as session:
             run = await session.get(EvaluationRun, run_id)
-            budget_config = getattr(settings, 'billing_execution_config', None)
+            budget_config = getattr(settings, "billing_execution_config", None)
             if (budget_config or ignore_budget) and run.cancel_requested_at is None:
                 import json
                 from pathlib import Path
 
                 deadline = datetime.fromisoformat(
-                    frozen['model_budget']['execution_deadline'] if ignore_budget
-                    else (frozen.get('model_budget') or {}).get('deadline')
-                    or json.loads(Path(budget_config).read_text())['deadline'])
+                    frozen["model_budget"]["execution_deadline"]
+                    if ignore_budget
+                    else (frozen.get("model_budget") or {}).get("deadline")
+                    or json.loads(Path(budget_config).read_text())["deadline"]
+                )
                 if datetime.now(UTC) >= deadline:
                     run.cancel_requested_at = datetime.now(UTC)
-                    await advance_run(session, run, 'cancelling', {'reason': 'budget_execution_deadline'})
+                    await advance_run(
+                        session, run, "cancelling", {"reason": "budget_execution_deadline"}
+                    )
                     await session.commit()
             cancelled = run.cancel_requested_at is not None
             children = list(
@@ -102,8 +142,15 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
             if child.state not in DATASET_ACTIVE:
                 continue
             from autoeval.billing_transport import execution_route
-            child_route = execution_route(settings, run_id, inputs['target_id'], child.payload['dataset'], ignore_budget=ignore_budget)
-            child_secret = child_route['api_key'] if child_route else secret
+
+            child_route = execution_route(
+                settings,
+                run_id,
+                inputs["target_id"],
+                child.payload["dataset"],
+                ignore_budget=ignore_budget,
+            )
+            child_secret = child_route["api_key"] if child_route else secret
             job = JobRef(external_job_id=str(child.id), submission_key=str(child.id))
             observation = (
                 await adapter.cancel(job, "cancel:" + str(child.id))
@@ -146,10 +193,13 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
             if final_reader:
                 try:
                     from autoeval.planning_observations import publish
+
                     await publish(sessions, settings, run_id, child.id, await final_reader(job))
                 except (OSError, ValueError, RuntimeError):
                     pass
-            await publish_lifecycle(sessions, settings, run_id, child, observation.state, final=True)
+            await publish_lifecycle(
+                sessions, settings, run_id, child, observation.state, final=True
+            )
             summary = None
             state = observation.state
             log_reader = getattr(adapter, "collect_log", None)
@@ -166,7 +216,11 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                     )
                     if existing_log is None:
                         observed_log = await log_reader(job)
-                        content = observed_log["content"].replace(secret, "[REDACTED]").replace(child_secret, "[REDACTED]")
+                        content = (
+                            observed_log["content"]
+                            .replace(secret, "[REDACTED]")
+                            .replace(child_secret, "[REDACTED]")
+                        )
                         file = {
                             "path": "job.log",
                             "content": content,
@@ -200,7 +254,9 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                 result = await adapter.collect(job)
                 from autoeval.planning_observations import archive_native, publish
 
-                await archive_native(sessions, settings, run_id, child, result["result"], child_secret)
+                await archive_native(
+                    sessions, settings, run_id, child, result["result"], child_secret
+                )
                 reader = getattr(adapter, "progress", None)
                 if reader:
                     await publish(sessions, settings, run_id, child.id, await reader(job))
@@ -222,18 +278,21 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                         child.payload["samples"],
                     )
                     raw = canonical_manifest(unified)
-                    summary = await archive_output(
-                        sessions,
-                        settings,
-                        run_id,
-                        child.task_id,
-                        raw,
-                        {
-                            child.payload["dataset"]: [
-                                s["sample_id"] for s in child.payload["samples"]
-                            ]
-                        },
-                        child.payload["dataset"],
+                    summary = await keep_heartbeat(
+                        heartbeat,
+                        archive_output(
+                            sessions,
+                            settings,
+                            run_id,
+                            child.task_id,
+                            raw,
+                            {
+                                child.payload["dataset"]: [
+                                    s["sample_id"] for s in child.payload["samples"]
+                                ]
+                            },
+                            child.payload["dataset"],
+                        ),
                     )
                 except ValueError:
                     summary = {
@@ -278,7 +337,10 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                 continue
             async with sessions() as session, session.begin():
                 if not await acquire(
-                    session, child.id, resource_for_task(frozen["resource"], child.task_id), demand_for(child.payload)
+                    session,
+                    child.id,
+                    resource_for_task(frozen["resource"], child.task_id),
+                    demand_for(child.payload),
                 ):
                     continue
                 stored = await session.get(DatasetExecution, child.id, with_for_update=True)
@@ -292,12 +354,22 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                 contract = case_contract(child.payload)
                 from autoeval.billing_transport import execution_route, route_compilation
 
-                route = execution_route(settings, run_id, inputs['target_id'], child.payload['dataset'], ignore_budget=ignore_budget)
-                compilation = route_compilation(child.payload['compilation'], route) if route else child.payload['compilation']
+                route = execution_route(
+                    settings,
+                    run_id,
+                    inputs["target_id"],
+                    child.payload["dataset"],
+                    ignore_budget=ignore_budget,
+                )
+                compilation = (
+                    route_compilation(child.payload["compilation"], route)
+                    if route
+                    else child.payload["compilation"]
+                )
                 from autoeval.evaluation.resource_allocation import execution_compilation
 
                 compilation = execution_compilation(compilation)
-                execution_secret = route['api_key'] if route else secret
+                execution_secret = route["api_key"] if route else secret
                 await adapter.submit(
                     {
                         "kind": "adaptor",
@@ -409,6 +481,11 @@ async def finish(sessions, settings, run_id, frozen, children, cancelled):
             else "failed"
         )
         await advance_run(session, run, state, {"report_object_key": key})
+        if not single_gpqa:
+            await session.flush()
+            from autoeval.reporting.task_reports import publish_task_report
+
+            await publish_task_report(session, settings, run_id)
 
 
 def child_view(child):

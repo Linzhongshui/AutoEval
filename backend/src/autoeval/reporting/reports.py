@@ -24,6 +24,7 @@ router = APIRouter(prefix="/api/autoeval/v1/reports", tags=["reports"])
 
 
 class ReportView(BaseModel):
+    dataset_results: list[dict] | None = None
     id: str
     run_id: str
     execution_kind: str
@@ -56,7 +57,15 @@ def report_data(
     analysis_id=None,
     evidence_status="not_checked",
 ):
-    comparison = compare_baseline(row.summary, snapshot.canonical_body, baselines)
+
+    aggregate = "parameters" not in snapshot.canonical_body
+
+    comparison = (
+        {"status": "incomparable", "baseline_value": None, "difference": None}
+        if aggregate
+        else compare_baseline(row.summary, snapshot.canonical_body, baselines)
+    )
+
     if evidence_status != "verified":
         comparison = {
             **comparison,
@@ -65,6 +74,7 @@ def report_data(
             "difference": None,
             "reason": "report_evidence_unverified",
         }
+
     return {
         "id": str(row.id),
         "run_id": str(row.run_id),
@@ -75,17 +85,17 @@ def report_data(
         "validity": row.validity,
         "evidence_status": evidence_status,
         "summary": row.summary,
-        "dataset_key": report_dataset(snapshot.canonical_body),
+        "dataset_key": "多个数据集" if aggregate else report_dataset(snapshot.canonical_body),
         "sha256": row.sha256,
         "snapshot_sha256": row.snapshot_sha256,
         "run_mode": run.run_mode,
         "remote_model": snapshot.canonical_body["remote_model"],
-        "config_version_id": snapshot.canonical_body["config_version_id"],
-        "manifest_id": snapshot.canonical_body["manifest_id"],
+        "config_version_id": snapshot.canonical_body.get("config_version_id"),
+        "manifest_id": snapshot.canonical_body.get("manifest_id"),
         "nomination_conditions": {
-            **snapshot.canonical_body["parameters"],
-            "manifest_sha256": snapshot.canonical_body["manifest_sha256"],
-            "tool_revision": snapshot.canonical_body["tool"]["revision"],
+            **snapshot.canonical_body.get("parameters", {}),
+            "manifest_sha256": snapshot.canonical_body.get("manifest_sha256"),
+            "tool_revision": snapshot.canonical_body.get("tool", {}).get("revision"),
         },
         "execution_origin": row.execution_origin,
         "gate_status": "not_applicable",
@@ -97,8 +107,10 @@ def report_data(
 
 @router.get("", response_model=PageEnvelope[ReportView])
 async def catalog(request: Request, offset: int = 0, limit: int = 20):
+
     if offset < 0 or not 1 <= limit <= 200:
         raise HTTPException(422, "Invalid pagination")
+
     try:
         async with request.app.state.sessions() as session:
             rows = (
@@ -117,8 +129,11 @@ async def catalog(request: Request, offset: int = 0, limit: int = 20):
                     .limit(limit + 1)
                 )
             ).all()
+
             baselines = (await session.scalars(select(BenchmarkBaseline))).all()
+
             selected = rows[:limit]
+
             analyses = (
                 (
                     await session.scalars(
@@ -130,10 +145,13 @@ async def catalog(request: Request, offset: int = 0, limit: int = 20):
                 if selected
                 else []
             )
+
             jobs = {job.report_id: job for job in analyses}
+
             statuses = await asyncio.gather(
                 *(report_evidence_status(request.app.state.settings, *row) for row in selected)
             )
+
             data = [
                 report_data(
                     *row,
@@ -148,8 +166,13 @@ async def catalog(request: Request, offset: int = 0, limit: int = 20):
                 )
                 for row, status in zip(selected, statuses, strict=True)
             ]
+
+            for item, row in zip(data, selected, strict=True):
+                await attach_datasets(item, request.app.state.settings, row[0], baselines)
+
     except SQLAlchemyError as exc:
         raise HTTPException(503, "Report catalog unavailable") from exc
+
     return {
         "data": data,
         "next_offset": offset + limit if len(rows) > limit else None,
@@ -159,6 +182,7 @@ async def catalog(request: Request, offset: int = 0, limit: int = 20):
 
 @router.get("/{report_id}", response_model=Envelope[ReportView])
 async def detail(report_id: uuid.UUID, request: Request):
+
     try:
         async with request.app.state.sessions() as session:
             row = (
@@ -184,12 +208,16 @@ async def detail(report_id: uuid.UUID, request: Request):
                     )
                 )
             ).one_or_none()
+
             if row is None:
                 raise HTTPException(404, "Report not found")
+
             baselines = (await session.scalars(select(BenchmarkBaseline))).all()
+
             job = await session.scalar(
                 select(ReportAnalysis).where(ReportAnalysis.report_id == report_id)
             )
+
             data = report_data(
                 *row,
                 baselines,
@@ -201,13 +229,18 @@ async def detail(report_id: uuid.UUID, request: Request):
                 analysis_id=job.id if job else None,
                 evidence_status=await report_evidence_status(request.app.state.settings, *row),
             )
+
+            await attach_datasets(data, request.app.state.settings, row[0], baselines)
+
     except SQLAlchemyError as exc:
         raise HTTPException(503, "Report database unavailable") from exc
+
     return {"data": data, "request_id": request.state.request_id}
 
 
 @router.get("/{report_id}/evidence", response_model=Envelope[dict])
 async def evidence(report_id: uuid.UUID, request: Request):
+
     try:
         async with request.app.state.sessions() as session:
             row = await session.scalar(
@@ -221,11 +254,38 @@ async def evidence(report_id: uuid.UUID, request: Request):
                     EvaluationReport.execution_origin == "real",
                 )
             )
+
             if row is None:
                 raise HTTPException(404, "Report not found")
+
             data = await asyncio.to_thread(read_manifest, request.app.state.settings, row)
+
     except SQLAlchemyError as exc:
         raise HTTPException(503, "Report database unavailable") from exc
+
     except (BotoCoreError, ClientError, ValueError) as exc:
         raise HTTPException(503, "Report evidence unavailable or integrity check failed") from exc
+
     return {"data": data, "request_id": request.state.request_id}
+
+
+async def attach_datasets(data, settings, report, baselines):
+
+    if data["evidence_status"] != "verified":
+        return
+
+    body = await asyncio.to_thread(read_manifest, settings, report)
+
+    if body.get("schema_version") != "task-report.v2":
+        return
+
+    data["dataset_key"] = ", ".join(d["dataset_key"] for d in body["datasets"])
+
+    data["dataset_results"] = [
+        {
+            **d,
+            "evidence_status": "verified" if d["archive"] else "missing",
+            "baseline_comparison": compare_baseline(d["summary"], d["context"], baselines),
+        }
+        for d in body["datasets"]
+    ]

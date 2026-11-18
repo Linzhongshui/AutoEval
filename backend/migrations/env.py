@@ -5,6 +5,10 @@ from alembic import context
 from autoeval.config import get_settings
 from autoeval.db import create_database
 from autoeval.models import Base
+from autoeval.reporting.models import UnifiedCollection  # noqa: F401
+
+# Register referenced tables before ORM-backed migration DDL resolves foreign-key types.
+from autoeval.resources.targets import TargetBinding  # noqa: F401
 
 config = context.config
 target_metadata = Base.metadata

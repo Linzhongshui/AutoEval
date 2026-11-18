@@ -53,9 +53,7 @@ def test_leaderboard_preserves_all_reports_and_separates_comparison_groups():
 
 def test_leaderboard_rejects_invalid_measured_values_instead_of_ranking_them():
     with pytest.raises(ValueError, match="Invalid leaderboard metric"):
-        rank_leaderboard(
-            [report("nan", math.nan)], dataset_key="GPQA", metric_name="accuracy"
-        )
+        rank_leaderboard([report("nan", math.nan)], dataset_key="GPQA", metric_name="accuracy")
 
 
 def test_leaderboard_api_validates_dataset_before_database():
@@ -65,3 +63,12 @@ def test_leaderboard_api_validates_dataset_before_database():
             params={"dataset_key": "unknown", "metric_name": "accuracy"},
         )
         assert response.status_code == 422
+
+
+def test_unknown_execution_conditions_do_not_form_a_comparable_group():
+    rows = [report("a", 60), report("b", 70)]
+    for row in rows:
+        row["snapshot"]["parameters"]["temperature"] = None
+    groups = rank_leaderboard(rows, dataset_key="GPQA", metric_name="accuracy")
+    assert len(groups) == 2
+    assert all("unconfirmed_conditions_report_id" in g["comparison"] for g in groups)

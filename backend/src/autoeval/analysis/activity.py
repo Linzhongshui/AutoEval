@@ -171,6 +171,30 @@ async def execute_report_analysis(analysis_id: str, retry_count: int = 0):
             attempt_evidence.append(
                 {"attempt_id": str(attempt.id), "sha256": attempt.sha256, "body": body}
             )
+        if report_body.get('schema_version') == 'task-report.v2':
+            from types import SimpleNamespace
+
+            from autoeval.reporting.unified_outputs import parse_output
+            recovered = {}
+            for section in report_body['datasets']:
+                ref = section.get('archive')
+                if not ref or ref.get('kind') != 'recovery':
+                    continue
+                raw = await asyncio.to_thread(read_manifest, settings, SimpleNamespace(**ref))
+                cases, _ = parse_output(canonical_manifest(raw), {section['dataset_key']: [s['sample_id'] for s in section['context']['samples']]}, section['dataset_key'])
+                for case in cases:
+                    recovered[(case['dataset_key'], case['sample_id'], case['attempt_no'])] = (case, ref)
+            replacement = []
+            for entry in attempt_evidence:
+                b = entry['body']
+                identity = (b.get('dataset_key'), b.get('sample_id'), b.get('attempt_no'))
+                if identity not in recovered:
+                    replacement.append(entry)
+            for identity, (case, ref) in recovered.items():
+                b = {'schema_version': 'unified-case.v1', **case, 'recovery_archive': ref}
+                replacement.append({'attempt_id': str(uuid.uuid5(uuid.UUID(ref['id']), repr(identity))),
+                                    'sha256': hashlib.sha256(canonical_manifest(b)).hexdigest(), 'body': b})
+            attempt_evidence = replacement
         baseline = job.baseline_comparison
         if job.baseline_comparison_sha256 is not None and (
             baseline is None

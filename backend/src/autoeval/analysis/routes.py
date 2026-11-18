@@ -44,6 +44,12 @@ async def current_baseline_comparison(session, report, snapshot):
     from autoeval.catalog.benchmarks import BenchmarkBaseline, compare_baseline
 
     baselines = (await session.scalars(select(BenchmarkBaseline))).all()
+    if 'dataset_results' in report.summary:
+        from autoeval.reporting.task_reports import dataset_context
+        tasks = snapshot.canonical_body['inputs']['tasks']
+        return {'datasets': [{'dataset_key': d['dataset_key'], 'comparison': compare_baseline(
+            d['summary'], dataset_context(snapshot.canonical_body, next(t for t in tasks if t['dataset'] == d['dataset_key'])), baselines)}
+            for d in report.summary['dataset_results']]}
     return compare_baseline(report.summary, snapshot.canonical_body, baselines)
 
 

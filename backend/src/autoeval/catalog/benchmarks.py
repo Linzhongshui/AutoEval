@@ -69,6 +69,25 @@ def compare_baseline(summary, snapshot, baselines):
         frozen = compare_frozen_standard(summary, tasks[0])
         if frozen is not None:
             return frozen
+    # An explicitly approved, content-addressed reference may be attached after execution.
+    # It is separate from the immutable run snapshot and never supplies a release verdict.
+    import hashlib
+
+    from autoeval.catalog.datasets import canonical_manifest
+    context_sha = hashlib.sha256(canonical_manifest(snapshot)).hexdigest()
+    for row in baselines:
+        conditions = row.conditions
+        if (conditions.get('reference_only') is True
+                and conditions.get('context_sha256') == context_sha
+                and row.dataset_key == snapshot.get('dataset_key')
+                and row.metric_name == 'accuracy' and len(tasks) == 1):
+            task = {**tasks[0], 'standard_baseline_source': conditions['standard_baseline_source']}
+            reference = compare_frozen_standard(summary, task)
+            if reference is None or reference.get('baseline_value') != row.value:
+                raise ValueError('Pinned standard reference mismatch')
+            return {**reference, 'comparison_kind':'standard_reference',
+                    'attached_after_execution':True, 'verdict':None,
+                    'reference_record_id':str(row.id)}
     parameters = snapshot["parameters"]
     signature = {
         "dataset_key": snapshot.get("dataset_key", "GPQA"),

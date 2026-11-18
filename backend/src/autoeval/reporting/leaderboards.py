@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from autoeval.catalog.dataset_identity import report_dataset
-from autoeval.catalog.datasets import canonical_manifest
+from autoeval.catalog.datasets import canonical_manifest, read_manifest
 from autoeval.evaluation.models import EvaluationReport
 from autoeval.models import EvaluationRun, RunSnapshot
 from autoeval.reporting.report_integrity import report_evidence_status
@@ -59,6 +59,8 @@ def rank_leaderboard(rows, *, dataset_key: str, metric_name: str):
                 for key in ("output", "concurrency", "temperature", "top_p", "scope")
             },
         }
+        if any(value is None for value in comparison["parameters"].values()):
+            comparison["unconfirmed_conditions_report_id"] = row["report_id"]
         identity = canonical_manifest(comparison)
         group = groups.setdefault(
             identity,
@@ -99,14 +101,6 @@ async def leaderboard(
     dataset_key: Literal["GPQA", "GPQA-Diamond", "MMMU-Pro", "AutomationBench"],
     metric_name: Literal["accuracy"],
 ):
-    # The implemented report schema is GPQA-only. Never relabel GPQA rows as a
-    # different benchmark merely because the query contains another dataset.
-    if dataset_key not in {"GPQA", "GPQA-Diamond"}:
-        return {
-            "data": [],
-            "excluded_unverified_reports": 0,
-            "request_id": request.state.request_id,
-        }
     try:
         async with request.app.state.sessions() as session:
             rows = (
@@ -115,10 +109,11 @@ async def leaderboard(
                     .join(EvaluationRun, EvaluationRun.id == EvaluationReport.run_id)
                     .join(RunSnapshot, RunSnapshot.run_id == EvaluationRun.id)
                     .where(
-                        EvaluationRun.trigger_scope == "local-operator:evaluation",
+                        EvaluationRun.trigger_scope.in_(
+                            ["local-operator:evaluation", "local-operator:orchestration"]
+                        ),
                         EvaluationReport.execution_origin == "real",
-                        EvaluationReport.validity == "complete",
-                        RunSnapshot.schema_version == "gpqa-run.v1",
+                        EvaluationReport.validity.in_(["complete", "partial"]),
                     )
                     .order_by(EvaluationReport.created_at.desc(), EvaluationReport.id.desc())
                 )
@@ -133,23 +128,39 @@ async def leaderboard(
             verified = [
                 row for row, status in zip(rows, statuses, strict=True) if status == "verified"
             ]
-            data = rank_leaderboard(
-                [
-                    {
-                        "report_id": str(report.id),
-                        "run_id": str(run.id),
-                        "remote_model": snapshot.canonical_body["remote_model"],
-                        "created_at": report.created_at.isoformat(),
-                        "validity": report.validity,
-                        "summary": report.summary,
-                        "snapshot": snapshot.canonical_body,
-                    }
-                    for report, run, snapshot in verified
-                    if dataset_key == "GPQA" or report_dataset(snapshot.canonical_body) == dataset_key
-                ],
-                dataset_key=dataset_key,
-                metric_name=metric_name,
-            )
+            entries = []
+            for report, run, snapshot in verified:
+                body = await asyncio.to_thread(read_manifest, request.app.state.settings, report)
+                sections = (
+                    body.get("datasets", [])
+                    if body.get("schema_version") == "task-report.v2"
+                    else [
+                        {
+                            "context": snapshot.canonical_body,
+                            "summary": report.summary,
+                            "validity": report.validity,
+                        }
+                    ]
+                )
+                for d in sections:
+                    context = d["context"]
+                    identity = report_dataset(context)
+                    if identity != dataset_key and not (
+                        dataset_key == "GPQA" and identity == "GPQA-Diamond"
+                    ):
+                        continue
+                    entries.append(
+                        {
+                            "report_id": str(report.id),
+                            "run_id": str(run.id),
+                            "remote_model": context["remote_model"],
+                            "created_at": report.created_at.isoformat(),
+                            "validity": d["validity"],
+                            "summary": d["summary"],
+                            "snapshot": context,
+                        }
+                    )
+            data = rank_leaderboard(entries, dataset_key=dataset_key, metric_name=metric_name)
     except SQLAlchemyError as exc:
         raise HTTPException(503, "Leaderboard database unavailable") from exc
     except (KeyError, TypeError, ValueError) as exc:

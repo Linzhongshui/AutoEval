@@ -1,3 +1,4 @@
+import { PageNumbers } from "../../shared/ui/PageNumbers";
 import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, FileCheck2, Workflow } from "lucide-react";
@@ -15,6 +16,9 @@ type ToolMetadata = {
   status: string;
 };
 type Attempt = {
+  metadata_provenance?: {kind: string; report_id: string; archive_sha256: string} | null;
+  recovered_evidence?: unknown;
+  provenance?: unknown;
   id: string;
   dataset_key: string;
   sample_id: string;
@@ -40,7 +44,17 @@ const STATUS: Record<string, { label: string; tone: string }> = {
 };
 const caseScore = (metadata?: ToolMetadata | null) => typeof metadata?.score === "number" && Number.isFinite(metadata.score) ? String(metadata.score) : "未提供评分";
 
-export function CaseHistory({ initialRun = "" }: { initialRun?: string }) {
+export function CaseHistory({ initialRun = "", datasets = [] }: { initialRun?: string; datasets?: string[] }) {
+  const [dataset, setDataset] = useState("");
+  const [revision, setRevision] = useState("");
+  const [revisions, setRevisions] = useState<{id: string; dataset_key: string; created_at: string}[]>([]);
+  useEffect(() => {
+    setRevision(""); setRevisions([]);
+    if (!initialRun) return;
+    const c = new AbortController();
+    apiGet<{id: string; dataset_key: string; created_at: string}[]>(`/runs/${initialRun}/result-revisions`, c.signal).then(setRevisions).catch(() => {});
+    return () => c.abort();
+  }, [initialRun]);
   const evidenceDialog = useRef<HTMLDialogElement>(null);
   const [run, setRun] = useState(initialRun);
   const [stateFilter, setStateFilter] = useState("");
@@ -68,9 +82,11 @@ export function CaseHistory({ initialRun = "" }: { initialRun?: string }) {
     const controller = new AbortController();
     setRows([]); setNext(null); setTotal(null); setSelected(null); setEvidence(null); setMessage("正在查询历史…");
     const parts = [`limit=${query.size}`, `offset=${query.offset}`];
+    parts.push(`evidence_version=${revision === "original" ? "original" : "current"}`);
+    if (dataset) parts.push(`dataset_key=${encodeURIComponent(dataset)}`);
     if (query.sample) parts.push(`sample_id=${encodeURIComponent(query.sample)}`);
     if (query.state) parts.push(`state=${encodeURIComponent(query.state)}`);
-    apiGetPage<Attempt[]>(`/runs/${encodeURIComponent(query.run)}/case-executions?${parts.join("&")}`, controller.signal)
+    apiGetPage<Attempt[]>(`/runs/${encodeURIComponent(query.run)}/${revision && revision !== "original" ? `result-revisions/${revision}/cases` : "case-executions"}?${parts.join("&")}`, controller.signal)
       .then((page) => {
         setRows(page.data); setNext(page.next_offset); setTotal(page.total ?? null);
         setMessage(
@@ -85,7 +101,7 @@ export function CaseHistory({ initialRun = "" }: { initialRun?: string }) {
         if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : "历史查询失败");
       });
     return () => controller.abort();
-  }, [query]);
+  }, [query, dataset, revision]);
 
   const applyState = (value: string) => {
     setStateFilter(value);
@@ -100,8 +116,9 @@ export function CaseHistory({ initialRun = "" }: { initialRun?: string }) {
   const openEvidence = (row: Attempt) => {
     setSelected(row);
     setEvidence(null);
+    if (row.recovered_evidence) { setEvidence({recovered_evidence: row.recovered_evidence, provenance: row.provenance}); return; }
     const controller = new AbortController();
-    apiGet<unknown>(`/case-executions/${row.id}/evidence`, controller.signal)
+    apiGet<unknown>(`/case-executions/${row.id}/evidence?evidence_version=${revision === "original" ? "original" : "current"}`, controller.signal)
       .then(setEvidence)
       .catch((error) => {
         if (!controller.signal.aborted) setEvidence({ message: error instanceof Error ? error.message : "证据读取失败" });
@@ -128,6 +145,8 @@ export function CaseHistory({ initialRun = "" }: { initialRun?: string }) {
       }}>重试失败的 Trace 导入</button>}
       {rows.some(row => row.trace_status === "pending") && <small>Trace 正在等待导入，刷新可查看最新状态</small>}
       <div className="filters case-toolbar">
+        {revisions.length > 0 && <label>证据版本 <select aria-label="Case证据版本" value={revision} onChange={e => { setRevision(e.target.value); setQuery(q => q ? {...q, offset: 0} : q); }}><option value="">当前有效证据（含已核验恢复）</option><option value="original">原始归档（历史记录）</option>{revisions.map(r => <option key={r.id} value={r.id}>{r.dataset_key} · 恢复归档 · {time(r.created_at)}</option>)}</select></label>}
+        {datasets.length > 1 && <label>数据集 <select aria-label="Case数据集筛选" value={dataset} onChange={e => { setDataset(e.target.value); setQuery(q => q ? {...q, offset: 0} : q); }}><option value="">全部数据集</option>{datasets.map(d => <option key={d} value={d}>{d}</option>)}</select></label>}
         {!initialRun && <label>运行ID <input aria-label="回溯运行ID" value={run} onChange={(event) => setRun(event.target.value)} /></label>}
         <label>样本ID（可选） <input aria-label="回溯样本ID" value={sample} onChange={(event) => setSample(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && run.trim()) setQuery({ run: run.trim(), sample: sample.trim(), state: stateFilter, offset: 0, size: pageSize }); }} /></label>
         <label>执行状态 <select aria-label="Case执行状态筛选" value={stateFilter} onChange={(event) => applyState(event.target.value)}><option value="">全部尝试</option><option value="succeeded">执行成功</option><option value="failed">执行失败</option><option value="started">执行中 / 待查证</option></select></label>
@@ -149,10 +168,10 @@ export function CaseHistory({ initialRun = "" }: { initialRun?: string }) {
                     <span className={`case-status ${status.tone}`}>{status.label}</span>
                     {row.error_code && <small className="case-cell-note">{row.error_code}</small>}
                   </td>
-                  <td>{caseScore(row.tool_metadata)}</td>
+                  <td>{caseScore(row.tool_metadata)}{row.metadata_provenance && <small className="muted">恢复评分已核验</small>}</td>
                   <td>{time(row.created_at)}</td>
-                  <td>{row.tool_metadata?.duration_sec != null ? `${row.tool_metadata.duration_sec} 秒` : "—"}</td>
-                  <td>{row.tool_metadata ? `${row.tool_metadata.input_tokens ?? "—"} / ${row.tool_metadata.output_tokens ?? "—"}` : "—"}</td>
+                  <td>{row.tool_metadata?.duration_sec != null ? `${row.tool_metadata.duration_sec} 秒` : "未采集"}</td>
+                  <td>{row.tool_metadata ? row.tool_metadata.input_tokens == null && row.tool_metadata.output_tokens == null ? "未采集" : `${row.tool_metadata.input_tokens ?? "未采集"} / ${row.tool_metadata.output_tokens ?? "未采集"}` : "未采集"}</td>
                   <td className="case-evidence-cell">
                     <div className="case-evidence-actions">
                       <button className="case-evidence-button" type="button" disabled={!row.evidence_available} aria-label={`查看第${row.attempt_no}次证据`} onClick={() => openEvidence(row)}><FileCheck2 size={14} aria-hidden="true" />查看证据</button>
@@ -171,7 +190,7 @@ export function CaseHistory({ initialRun = "" }: { initialRun?: string }) {
           <span>{total !== null ? `共 ${total} 条 · 第 ${page} / ${pages} 页` : `第 ${page} 页`}</span>
           <label className="pagination-page-size"><span>每页</span><select aria-label="每页条数" value={pageSize} onChange={(event) => changeSize(Number(event.target.value))}>{[20, 50, 100].map((size) => <option key={size} value={size}>{size} 条</option>)}</select></label>
           <button disabled={query.offset === 0} onClick={() => setQuery({ ...query, offset: Math.max(0, query.offset - query.size) })}>上一页</button>
-          <button className="primary" aria-current="page">{page}</button>
+          <PageNumbers current={page} total={pages ?? (next !== null ? page + 1 : page)} onChange={(value) => setQuery({ ...query, offset: (value - 1) * query.size })} />
           <button disabled={next === null} onClick={() => { if (next !== null) setQuery({ ...query, offset: next }); }}>下一页</button>
         </div>
       )}

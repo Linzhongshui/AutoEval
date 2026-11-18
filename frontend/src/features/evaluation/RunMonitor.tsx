@@ -149,6 +149,7 @@ export function RunMonitor({ runId, terminal }: { runId: string; terminal: boole
   const [selected, setSelected] = useState("");
   const [evidence, setEvidence] = useState<unknown>(null);
 
+  const [logDataset, setLogDataset] = useState("");
   const [log, setLog] = useState<ArchivedLog | null>(null);
   const [logMessage, setLogMessage] = useState("");
 
@@ -190,9 +191,10 @@ export function RunMonitor({ runId, terminal }: { runId: string; terminal: boole
     try { setEvidence(await apiGet(`/runs/${runId}/monitor/snapshots/${id}`)); }
     catch { setEvidence({ message: "证据尚未归档或校验未通过" }); }
   };
-  const loadLog = async () => {
+  const loadLog = async (dataset = logDataset) => {
+    if ((value?.datasets?.length ?? 0) > 1 && !dataset) { setLog(null); setLogMessage("请选择日志数据集"); return; }
     setLogMessage("正在读取归档日志…");
-    try { setLog(await apiGet<ArchivedLog>(`/runs/${runId}/monitor/log`)); setLogMessage(""); }
+    try { setLog(await apiGet<ArchivedLog>(`/runs/${runId}/monitor/log${dataset ? `?dataset_key=${encodeURIComponent(dataset)}` : ""}`)); setLogMessage(""); }
     catch {
       setLog(null);
       setLogMessage("本次运行未归档执行日志，或日志校验未通过。");
@@ -318,6 +320,7 @@ export function RunMonitor({ runId, terminal }: { runId: string; terminal: boole
 
       {tab === "log" && (
         <>
+          {(value.datasets?.length ?? 0) > 1 && <label>日志数据集 <select aria-label="日志数据集" value={logDataset} onChange={e => { setLogDataset(e.target.value); setLog(null); void loadLog(e.target.value); }}><option value="">请选择数据集</option>{value.datasets?.map(d => <option key={d.dataset} value={d.dataset}>{d.dataset}</option>)}</select></label>}
           {logMessage && <p role="status" className="muted">{logMessage}</p>}
           {log && (
             <>

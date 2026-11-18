@@ -21,6 +21,8 @@ type Summary = {
 };
 
 type BaselineComparison = {
+  comparison_kind?: string;
+  attached_after_execution?: boolean;
   status: "matched" | "missing" | "incomparable";
   baseline_key: string | null;
   baseline_version: string | null;
@@ -157,7 +159,7 @@ export function ReportView({ id, go }: { id: string; go: (path: string) => void 
 
   const summary = { ...report.summary, accuracy: report.evidence_status === "verified" ? report.summary.accuracy : null };
   const baseline = report.baseline_comparison;
-  const comparability = report.evidence_status !== "verified" ? "原始证据不可用，无法确认可比性" : baseline.status === "matched" ? "比较条件一致" : baseline.status === "missing" ? "未配置匹配基准" : "清单、工具版本或执行参数不一致";
+  const comparability = report.dataset_results ? "各数据集分别对照标准库参考成绩，不计算综合分" : report.evidence_status !== "verified" ? "原始证据不可用，无法确认可比性" : baseline.status === "matched" ? "比较条件一致" : baseline.status === "missing" ? "未配置匹配基准" : "清单、工具版本或执行参数不一致";
   const coverage =
     report.validity === "complete"
       ? "complete"
@@ -261,8 +263,10 @@ export function ReportView({ id, go }: { id: string; go: (path: string) => void 
         {report.execution_origin === "simulation" && <p className="notice">人工测试产物流程验证报告；不代表真实模型成绩，不参与榜单或正式发布门禁。</p>}
         </>}
         {view === "数据集结果" && <section className="report-datasets-tab"><div className="report-tab-heading"><p className="muted">按数据集查看覆盖范围、核心指标和基准差异，点击查看结果进入样本明细。</p></div>
-        <div className="table-wrap"><table><thead><tr><th>数据集</th><th>类型</th><th>覆盖</th><th>核心指标</th><th>指标值</th><th>基准差异</th><th>操作</th></tr></thead><tbody><tr><td>{report.dataset_key || "GPQA"}</td><td>科学问答</td><td>{summary.successful_samples}/{summary.expected_samples} · {validityLabels[report.validity]}</td><td>准确率</td><td>{accuracyText(summary.accuracy)}</td><td>{report.evidence_status !== "verified" ? "证据不可用" : baseline.status === "missing" ? "暂无基准" : baseline.status === "incomparable" ? "不可直接比较" : difference}</td><td><button className="link" onClick={() => setDatasetOpen(true)}>查看结果</button></td></tr></tbody></table></div>
+        <div className="table-wrap"><table><thead><tr><th>数据集</th><th>覆盖</th><th>准确率</th><th>基线</th><th>百分点差值</th></tr></thead><tbody>{(report.dataset_results ?? [{dataset_key: report.dataset_key || "GPQA", summary, validity: report.validity, evidence_status: report.evidence_status, baseline_comparison: baseline}]).map(d => <tr key={d.dataset_key}><td>{d.dataset_key}</td><td>{d.summary.successful_samples}/{d.summary.expected_samples} · {validityLabels[d.validity] ?? d.validity}</td><td>{accuracyText(d.evidence_status === "verified" ? d.summary.accuracy : null)}</td><td>{baselineValue(d.baseline_comparison.baseline_value, d.baseline_comparison.baseline_unit)}</td><td>{d.evidence_status === "verified" && d.baseline_comparison.difference != null ? d.baseline_comparison.difference.toFixed(2) : "不可直接比较"}</td></tr>)}</tbody></table></div>
         </section>}
+        {report.dataset_results && <ManagementDrawer title="各数据集 Case 与恢复证据"><CaseHistory initialRun={report.run_id} datasets={report.dataset_results.map(d => d.dataset_key)} /></ManagementDrawer>}
+        {!report.dataset_results && <button onClick={() => setDatasetOpen(true)}>查看数据集结果与样本</button>}
         {view === "智能分析" && <section className="report-analysis-view">
           <p className="muted">{report.evidence_status !== "verified" ? "原始证据不可用，当前无法确认有效成绩或生成可信比较结论。" : "本次为所选 Lite 清单的探索结果，不代表全量成绩，不适用正式发布门禁。"}</p>
           <AnalysisPanel reportId={report.id} status={report.analysis_status} executionOrigin={report.execution_origin} onStatus={(state) => setReport((current) => current ? { ...current, analysis_status: state } : current)} />
@@ -352,7 +356,7 @@ export function ReportView({ id, go }: { id: string; go: (path: string) => void 
               <button className="link" onClick={() => { setDatasetOpen(false); setView("智能分析"); }}>前往智能分析</button>
             </p>
           </>
-        ) : tab === "样本明细" ? <CaseHistory initialRun={report.run_id} /> : (
+        ) : tab === "样本明细" ? <CaseHistory datasets={report.dataset_results?.map(d => d.dataset_key) ?? []} initialRun={report.run_id} /> : (
           <section>
             <div className="notice">
               证据仅在点击后读取，并由后端校验完整性；以下按原始文本或 JSON 展示。执行 succeeded 不代表逐 case 判分通过。

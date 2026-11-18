@@ -8,6 +8,7 @@ import ssl
 import subprocess
 import uuid
 from pathlib import PurePosixPath
+from time import monotonic
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -643,6 +644,21 @@ async def dataset_registrations(request: Request):
 @router.get("/tags")
 async def repository_tags(request: Request):
     """Current repository labels only; immutable input identities remain commit-based."""
+    state = request.app.state
+    if not hasattr(state, "standard_tags_lock"):
+        state.standard_tags_lock = asyncio.Lock()
+        state.standard_tags_cache = None
+    async with state.standard_tags_lock:
+        cached = state.standard_tags_cache
+        if cached is not None and cached[0] > monotonic():
+            return envelope(cached[1], request)
+        result = await fetch_repository_tags()
+        ttl = 300 if result["status"] == "available" else 15
+        state.standard_tags_cache = (monotonic() + ttl, result)
+        return envelope(result, request)
+
+
+async def fetch_repository_tags():
     tags = []
     try:
         async with httpx.AsyncClient(
@@ -658,8 +674,8 @@ async def repository_tags(request: Request):
                 for item in items:
                     tags.append({"name": item["name"], "revision": item["commit"]["sha"]})
                 if len(items) < 100:
-                    return envelope({"status": "available", "tags": tags}, request)
-        return envelope({"status": "incomplete", "tags": tags}, request)
+                    return {"status": "available", "tags": tags}
+        return {"status": "incomplete", "tags": tags}
     except (httpx.HTTPError, ValueError, KeyError, TypeError):
         try:
             completed = await asyncio.to_thread(
@@ -680,17 +696,12 @@ async def repository_tags(request: Request):
                 else:
                     resolved[name] = sha
             resolved.update(peeled)
-            return envelope(
-                {
-                    "status": "available",
-                    "tags": [
-                        {"name": name, "revision": sha} for name, sha in sorted(resolved.items())
-                    ],
-                },
-                request,
-            )
+            return {
+                "status": "available",
+                "tags": [{"name": name, "revision": sha} for name, sha in sorted(resolved.items())],
+            }
         except (OSError, subprocess.SubprocessError, ValueError):
-            return envelope({"status": "unavailable", "tags": []}, request)
+            return {"status": "unavailable", "tags": []}
 
 
 @router.post("/sync-preview")

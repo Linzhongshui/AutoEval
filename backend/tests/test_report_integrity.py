@@ -71,9 +71,9 @@ async def test_leaderboard_excludes_unverified_objects_even_with_complete_databa
         async def execute(self, statement):
             return SimpleNamespace(all=lambda: [(object(), object(), object())])
 
-    checker = AsyncMock(return_value=status)
+    checker = AsyncMock(return_value=(status, None))
     rank = Mock(return_value=[])
-    monkeypatch.setattr(leaderboards, "report_evidence_status", checker)
+    monkeypatch.setattr(leaderboards, "verified_report_body", checker)
     monkeypatch.setattr(leaderboards, "rank_leaderboard", rank)
     request = SimpleNamespace(
         app=SimpleNamespace(state=SimpleNamespace(sessions=Session, settings=None)),
@@ -101,9 +101,10 @@ async def test_other_benchmark_never_relabels_gpqa_scores(dataset, monkeypatch):
     manager = MagicMock()
     manager.__aenter__.return_value = session
     sessions = Mock(return_value=manager)
-    monkeypatch.setattr(leaderboards, "report_evidence_status", AsyncMock(return_value="verified"))
     monkeypatch.setattr(
-        leaderboards, "read_manifest", lambda *args: {"schema_version": "gpqa-report.v1"}
+        leaderboards,
+        "verified_report_body",
+        AsyncMock(return_value=("verified", {"schema_version": "gpqa-report.v1"})),
     )
     request = SimpleNamespace(
         app=SimpleNamespace(state=SimpleNamespace(sessions=sessions, settings=None)),

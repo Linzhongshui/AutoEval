@@ -8,6 +8,11 @@ from autoeval.catalog.datasets import read_manifest
 
 
 async def report_evidence_status(settings, report, run, snapshot):
+    status, _ = await verified_report_body(settings, report, run, snapshot)
+    return status
+
+
+async def verified_report_body(settings, report, run, snapshot):
     try:
         body = await asyncio.to_thread(read_manifest, settings, report)
         if (
@@ -21,7 +26,7 @@ async def report_evidence_status(settings, report, run, snapshot):
             or body.get("summary") != report.summary
             or body.get("validity") != report.validity
         ):
-            return "invalid"
+            return "invalid", None
         if body.get("schema_version") == "task-report.v2":
             from types import SimpleNamespace
 
@@ -32,13 +37,13 @@ async def report_evidence_status(settings, report, run, snapshot):
                 checksum(snapshot.canonical_body) != snapshot.sha256
                 or body["summary"].get("accuracy") is not None
             ):
-                return "invalid"
+                return "invalid", None
             tasks = snapshot.canonical_body["inputs"]["tasks"]
             datasets = body.get("datasets", [])
             if len(tasks) != len(datasets) or len({d["dataset_key"] for d in datasets}) != len(
                 tasks
             ):
-                return "invalid"
+                return "invalid", None
             for task in tasks:
                 d = next((d for d in datasets if d["dataset_key"] == task["dataset"]), None)
                 if (
@@ -46,23 +51,23 @@ async def report_evidence_status(settings, report, run, snapshot):
                     or d["validity"] != d["summary"]["validity"]
                     or d["context"] != dataset_context(snapshot.canonical_body, task)
                 ):
-                    return "invalid"
+                    return "invalid", None
                 if d.get("archive"):
                     raw = await asyncio.to_thread(
                         read_manifest, settings, SimpleNamespace(**d["archive"])
                     )
                     if scored_summary(canonical_manifest(raw), task) != d["summary"]:
-                        return "invalid"
+                        return "invalid", None
                 elif d["validity"] == "complete":
-                    return "invalid"
-        return "verified"
+                    return "invalid", None
+        return "verified", body
     except ClientError as exc:
         return (
             "missing"
             if exc.response["Error"]["Code"] in {"NoSuchKey", "NoSuchBucket", "404"}
             else "unavailable"
-        )
+        ), None
     except BotoCoreError:
-        return "unavailable"
+        return "unavailable", None
     except (ValueError, TypeError, OSError, KeyError, StopIteration):
-        return "invalid"
+        return "invalid", None

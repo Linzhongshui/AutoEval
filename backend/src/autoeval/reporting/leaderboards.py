@@ -10,10 +10,10 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from autoeval.catalog.dataset_identity import report_dataset
-from autoeval.catalog.datasets import canonical_manifest, read_manifest
+from autoeval.catalog.datasets import canonical_manifest
 from autoeval.evaluation.models import EvaluationReport
 from autoeval.models import EvaluationRun, RunSnapshot
-from autoeval.reporting.report_integrity import report_evidence_status
+from autoeval.reporting.report_integrity import verified_report_body
 from autoeval.responses import LeaderboardEnvelope
 
 router = APIRouter(prefix="/api/autoeval/v1/leaderboard", tags=["internal leaderboard"])
@@ -122,15 +122,15 @@ async def leaderboard(
 
             async def check(row):
                 async with semaphore:
-                    return await report_evidence_status(request.app.state.settings, *row)
+                    return await verified_report_body(request.app.state.settings, *row)
 
-            statuses = await asyncio.gather(*(check(row) for row in rows))
-            verified = [
-                row for row, status in zip(rows, statuses, strict=True) if status == "verified"
-            ]
+            evidence = await asyncio.gather(*(check(row) for row in rows))
             entries = []
-            for report, run, snapshot in verified:
-                body = await asyncio.to_thread(read_manifest, request.app.state.settings, report)
+            excluded = 0
+            for (report, run, snapshot), (status, body) in zip(rows, evidence, strict=True):
+                if status != "verified" or body is None:
+                    excluded += 1
+                    continue
                 sections = (
                     body.get("datasets", [])
                     if body.get("schema_version") == "task-report.v2"
@@ -167,6 +167,6 @@ async def leaderboard(
         raise HTTPException(503, "Leaderboard source data is invalid") from exc
     return {
         "data": data,
-        "excluded_unverified_reports": len(rows) - len(verified),
+        "excluded_unverified_reports": excluded,
         "request_id": request.state.request_id,
     }

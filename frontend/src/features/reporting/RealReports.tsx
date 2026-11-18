@@ -30,7 +30,7 @@ export function RealReports({ reportId, open }: { reportId?: string; open: (id: 
     (async () => {
       const records: Report[] = []; let position: number | null = 0;
       while (position !== null) {
-        const page: { data: Report[]; next_offset: number | null } = await apiGetPage<Report[]>(`/reports?limit=200&offset=${position}`, controller.signal);
+        const page: { data: Report[]; next_offset: number | null } = await apiGetPage<Report[]>(`/reports?summary_only=true&limit=200&offset=${position}`, controller.signal);
         records.push(...page.data);
         if (page.next_offset !== null && page.next_offset <= position) throw Error("报告分页异常");
         position = page.next_offset;

@@ -14,7 +14,7 @@ from autoeval.catalog.dataset_identity import report_dataset
 from autoeval.evaluation.models import EvaluationReport
 from autoeval.models import RunSnapshot
 from autoeval.reporting.models import LeaderboardRecord
-from autoeval.reporting.report_integrity import report_evidence_status
+from autoeval.reporting.report_integrity import verified_report_body
 
 
 class EntryInput(BaseModel):
@@ -117,17 +117,13 @@ async def validate_report(request, session, entry):
         or report.execution_origin != "real"
         or snapshot is None
         or run.trigger_scope not in {"local-operator:evaluation", "local-operator:orchestration"}
-        or await report_evidence_status(request.app.state.settings, report, run, snapshot)
-        != "verified"
     ):
         raise HTTPException(409, "Report is incomplete or original evidence is unavailable")
     frozen = snapshot.canonical_body
     source_key = "report-" + str(report.id)
-    import asyncio
-
-    from autoeval.catalog.datasets import read_manifest
-
-    body = await asyncio.to_thread(read_manifest, request.app.state.settings, report)
+    status, body = await verified_report_body(request.app.state.settings, report, run, snapshot)
+    if status != "verified" or body is None:
+        raise HTTPException(409, "Report is incomplete or original evidence is unavailable")
     if body.get("schema_version") == "task-report.v2":
         sections = [d for d in body["datasets"] if report_dataset(d["context"]) == entry.dataset]
         if len(sections) != 1 or sections[0]["validity"] != "complete":
@@ -286,7 +282,9 @@ def best_per_model(rows, direction):
 
 
 @router.get("/published")
-async def published(request: Request, selection: Literal["best", "all"] = "best"):
+async def published(
+    request: Request, selection: Literal["best", "all"] = "best", compact: bool = False
+):
     async with request.app.state.sessions() as session:
         rows = (
             await session.scalars(
@@ -324,7 +322,8 @@ async def published(request: Request, selection: Literal["best", "all"] = "best"
                 identity["dataset"] = report_dataset(frozen)
                 identity["config_version_id"] = frozen.get("config_version_id") if frozen else None
             if any(
-                value is None or str(value).strip().lower() in {"unknown", "未知", "未提供", "待确认"}
+                value is None
+                or str(value).strip().lower() in {"unknown", "未知", "未提供", "待确认"}
                 for value in entry.conditions.values()
             ):
                 identity["unconfirmed_condition_record"] = str(row.id)
@@ -350,4 +349,8 @@ async def published(request: Request, selection: Literal["best", "all"] = "best"
                     rank = position
                 item["rank"] = rank
                 previous = item["entry"]["value"]
+        if compact:
+            for group in groups.values():
+                # Entry conditions remain available in the test method drawer.
+                group["comparison"].pop("conditions")
         return {"data": list(groups.values())}

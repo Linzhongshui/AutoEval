@@ -48,7 +48,7 @@ export function DataWorkbench() {
     const controller = new AbortController(); setLoading(true);
     Promise.all([
       apiGetPage<CuratedRecord[]>(`/data-workbench/entries?offset=${offset}&limit=20`, controller.signal),
-      apiGetPage<Report[]>(`/reports?offset=${reportOffset}&limit=20`, controller.signal),
+      apiGetPage<Report[]>(`/reports?summary_only=true&offset=${reportOffset}&limit=20`, controller.signal),
     ]).then(([entries, catalog]) => { if (!controller.signal.aborted) { setRows(entries.data); setNext(entries.next_offset); setReports(catalog.data); setReportNext(catalog.next_offset); } })
       .catch(() => { if (!controller.signal.aborted) setMessage("数据读取失败，请检查服务及数据库迁移后刷新。旧数据可能过期。"); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
@@ -125,9 +125,20 @@ const datasetPriority = (name: string) => {
 // 仅归一化平台服务别名，保留官方来源披露的模型标识。
 const MODEL_ALIASES: Record<string, string> = { "deepseek-flash": "deepseek-ai/DeepSeek-V4.1-Flash-1017" };
 const displayModelName = (name: string) => MODEL_ALIASES[name.trim().toLowerCase()] ?? name;
+const PUBLISHER_PERCENT_DATASETS = new Set(["AutomationBench", "GPQA-Diamond"]);
+const HIDDEN_REFERENCE_SOURCE = "official-ms-56a6dd9854fd8da9184dd928cbfa3af6";
 function LeaderboardChart({ group }: { group: { comparison: Record<string, unknown>; entries: CuratedRecord[] } }) {
   const models = new Map<string, CuratedRecord[]>();
-  for (const row of group.entries) models.set(row.entry.model_name, [...(models.get(row.entry.model_name) ?? []), row]);
+  for (const row of group.entries) {
+    // The GPQA reference is published for the Flash family. Keep its original model ID in source details.
+    const model = group.comparison.dataset === "GPQA-Diamond"
+      && row.entry.source_type === "official"
+      && row.entry.source_key === "latest-official-2d57266c7c89598816090031cb873221"
+      && group.entries.some((item) => item.entry.source_type === "report" && item.entry.model_name === MODEL_ALIASES["deepseek-flash"])
+      ? "deepseek-ai/DeepSeek-V4.1-Flash-1017"
+      : row.entry.model_name;
+    models.set(model, [...(models.get(model) ?? []), row]);
+  }
   const modelGroups = [...models.entries()];
   const max = Math.max(...group.entries.map((r) => r.entry.value), 1);
   const dense = modelGroups.length > 8;
@@ -142,7 +153,7 @@ export function PublishedLeaderboard() {
   const [message, setMessage] = useState("加载已评审榜单…");
   const [revision, setRevision] = useState(0);
   const [selection, setSelection] = useState("best");
-  useEffect(() => { const c = new AbortController(); apiGet<typeof groups>(`/data-workbench/published?selection=${selection}`, c.signal).then((data) => { setGroups(data); setMessage(data.length ? "" : "暂无已批准的榜单数据，请在数据工作台录入并评审。"); }).catch(() => { if (!c.signal.aborted) setMessage("已评审榜单读取失败，请检查服务及迁移。"); }); return () => c.abort(); }, [revision, selection]);
+  useEffect(() => { const c = new AbortController(); apiGet<typeof groups>(`/data-workbench/published?compact=true&selection=${selection}`, c.signal).then((data) => { setGroups(data); setMessage(data.length ? "" : "暂无已批准的榜单数据，请在数据工作台录入并评审。"); }).catch(() => { if (!c.signal.aborted) setMessage("已评审榜单读取失败，请检查服务及迁移。"); }); return () => c.abort(); }, [revision, selection]);
   const [mode, setMode] = useState("排行榜");
   const [dataset, setDataset] = useState("");
   const [datasetInitialized, setDatasetInitialized] = useState(false);
@@ -172,10 +183,24 @@ export function PublishedLeaderboard() {
   for (const original of groups) {
     const dataset = datasetIdentity(String(original.comparison.dataset));
     const rawMetric = String(original.comparison.metric);
-    const candidates = canonical.get(comparisonKey(dataset, original.comparison));
-    const metric = rawMetric === "publisher_reported_score" && candidates?.size === 1 ? [...candidates][0] : rawMetric;
-    const comparison = { ...original.comparison, dataset, metric } as Record<string, unknown>;
-    const group = { ...original, comparison, entries: original.entries.filter((row) => row.entry.source_type !== "manual") };
+    // These publisher references use a 0–100 scale in the official imports.
+    const deepSwe = dataset === "DeepSWE";
+    const percentageReference = (deepSwe || PUBLISHER_PERCENT_DATASETS.has(dataset))
+      && rawMetric === "publisher_reported_score"
+      && original.comparison.unit === "points"
+      && original.entries.every((row) => row.entry.source_type === "official" && row.entry.value >= 0 && row.entry.value <= 100);
+    const referenceUnit = percentageReference ? "%" : original.comparison.unit;
+    const candidates = canonical.get(comparisonKey(dataset, { ...original.comparison, unit: referenceUnit }));
+    // DeepSWE uses a shared Pass@1 reference view even without platform results.
+    const compatibleMetric = percentageReference
+      ? (deepSwe && original.comparison.direction === "higher_is_better"
+        ? "pass@1"
+        : candidates?.has("accuracy") ? "accuracy" : undefined)
+      : (candidates?.size === 1 ? [...candidates][0] : undefined);
+    const metric = rawMetric === "publisher_reported_score" && compatibleMetric ? compatibleMetric : rawMetric;
+    const unit = metric !== rawMetric ? referenceUnit : original.comparison.unit;
+    const comparison = { ...original.comparison, dataset, metric, unit } as Record<string, unknown>;
+    const group = { ...original, comparison, entries: original.entries.filter((row) => row.entry.source_type !== "manual" && row.entry.source_key !== HIDDEN_REFERENCE_SOURCE) };
     if (!group.entries.length) continue;
     const entries = group.entries.map((row) => ({ ...row, entry: { ...row.entry, model_name: row.entry.source_type === "report" ? displayModelName(row.entry.model_name) : row.entry.model_name } }));
     const key = JSON.stringify([comparison.dataset, comparison.metric, comparison.unit, comparison.direction]);
@@ -202,7 +227,7 @@ export function PublishedLeaderboard() {
       return <section className="card" key={group.id}>
         <div className="spread"><h3>{String(group.comparison.dataset)} · {String(group.comparison.metric)}</h3><span className="badge">参考对比</span></div>
         <p className="muted">{String(group.comparison.source_name)} · {String(group.comparison.scope)} · {group.comparison.direction === "higher_is_better" ? "越高越好" : "越低越好"} · {new Set(group.entries.map((row) => row.entry.model_name)).size} 个模型 · {group.entries.length} 条成绩</p>
-        {mode === "排行榜" ? <div className="table-wrap"><table className="leader-table leaderboard-compact"><thead><tr><th>参考顺序</th><th>模型标识</th><th>模型发布时间</th><th>评测时间</th><th>参数量</th><th>分数</th><th>测试方法</th><th>来源</th></tr></thead><tbody>{group.entries.map((row, index) => <tr key={row.id}><td><span className={`rank rank-${index}`}>{String(index + 1).padStart(2,"0")}</span></td><td><b className="model-with-logo"><VendorLogo model={row.entry.model_name} />{row.entry.model_name}</b><span className="leaderboard-model-tags" title={`${labels[row.entry.source_type]} · ${row.entry.scope} · ${row.entry.conditions.model_identity_status || ""}`}><span>{displayMetadata(row.entry.conditions.mode)}</span>{row.entry.scope === "lite" && <span>Lite</span>}{row.entry.conditions.output != null && <span title={String(row.entry.conditions.tool_revision || "")}>输出 {String(row.entry.conditions.output)} · 并发 {String(row.entry.conditions.concurrency ?? "—")}</span>}{row.entry.conditions.tool_revision != null && <span title={String(row.entry.conditions.tool_revision)}>工具 {String(row.entry.conditions.tool_revision).slice(0, 7)}</span>}</span></td><td>{displayMetadata(row.entry.conditions.model_release_date)}</td><td>{displayMetadata(row.entry.conditions.evaluated_at)}</td><td>{displayMetadata(row.entry.conditions.parameter_count)}</td><td><div className="inline score"><b>{formatScore(row.entry.value)} {displayScoreUnit(row.entry.unit)}</b><progress max={max} value={row.entry.value} aria-label={`${row.entry.model_name} 成绩`} /></div></td><td><ManagementDrawer title="查看"><h3>测试方法</h3><p>来源：{row.entry.source_name}</p><p>版本：{row.entry.source_version}</p><p>原始数据集 / 方法：{row.entry.dataset}</p><p>指标：{row.entry.metric}；范围：{row.entry.scope}</p><pre className="snapshot">{JSON.stringify(row.entry.conditions,null,2)}</pre><p>方法详情暂按来源披露信息展示。</p></ManagementDrawer></td><td>{row.entry.report_id ? <a href={`#report/${row.entry.report_id}`}>来源报告</a> : row.entry.source_url ? <a href={row.entry.source_url} target="_blank" rel="noreferrer">官方来源</a> : row.entry.source_name}</td></tr>)}</tbody></table></div> : <LeaderboardChart group={group} />}
+        {mode === "排行榜" ? <div className="table-wrap"><table className="leader-table leaderboard-compact"><thead><tr><th>参考顺序</th><th>模型标识</th><th>模型发布时间</th><th>评测时间</th><th>参数量</th><th>分数</th><th>测试方法</th><th>来源</th></tr></thead><tbody>{group.entries.map((row, index) => <tr key={row.id}><td><span className={`rank rank-${index}`}>{String(index + 1).padStart(2,"0")}</span></td><td><b className="model-with-logo"><VendorLogo model={row.entry.model_name} />{row.entry.model_name}</b><span className="leaderboard-model-tags" title={`${labels[row.entry.source_type]} · ${row.entry.scope} · ${row.entry.conditions.model_identity_status || ""}`}><span>{displayMetadata(row.entry.conditions.mode)}</span>{row.entry.scope === "lite" && <span>Lite</span>}{row.entry.conditions.output != null && <span title={String(row.entry.conditions.tool_revision || "")}>输出 {String(row.entry.conditions.output)} · 并发 {String(row.entry.conditions.concurrency ?? "—")}</span>}{row.entry.conditions.tool_revision != null && <span title={String(row.entry.conditions.tool_revision)}>工具 {String(row.entry.conditions.tool_revision).slice(0, 7)}</span>}</span></td><td>{displayMetadata(row.entry.conditions.model_release_date)}</td><td>{displayMetadata(row.entry.conditions.evaluated_at)}</td><td>{displayMetadata(row.entry.conditions.parameter_count)}</td><td><div className="inline score"><b>{formatScore(row.entry.value)} {displayScoreUnit(group.comparison.unit)}</b><progress max={max} value={row.entry.value} aria-label={`${row.entry.model_name} 成绩`} /></div></td><td><ManagementDrawer title="查看"><h3>测试方法</h3><p>来源：{row.entry.source_name}</p><p>版本：{row.entry.source_version}</p><p>原始数据集 / 方法：{row.entry.dataset}</p><p>原始指标：{row.entry.metric}；原始分数：{formatScore(row.entry.value)} {row.entry.unit}；范围：{row.entry.scope}</p><pre className="snapshot">{JSON.stringify(row.entry.conditions,null,2)}</pre><p>方法详情暂按来源披露信息展示。</p></ManagementDrawer></td><td>{row.entry.report_id ? <a href={`#report/${row.entry.report_id}`}>来源报告</a> : row.entry.source_url ? <a href={row.entry.source_url} target="_blank" rel="noreferrer">官方来源</a> : row.entry.source_name}</td></tr>)}</tbody></table></div> : <LeaderboardChart group={group} />}
         <details><summary>比较条件与来源版本</summary><pre className="snapshot">{JSON.stringify(group.entries.map((row) => ({ model: row.entry.model_name, original_dataset: row.entry.dataset, source: row.entry.source_url, version: row.entry.source_version, conditions: row.entry.conditions })),null,2)}</pre></details>
       </section>;
     })}

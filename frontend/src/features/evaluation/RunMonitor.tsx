@@ -115,7 +115,11 @@ export function RunProgress({ runId, terminal, stage, state, createdAt, events =
   }, [runId, terminal]);
 
   const start = createdAt ? Date.parse(createdAt) : NaN;
-  const endEvent = events.filter(event => event.type === state).at(-1);
+  const recoveryIndex = events.map(event => event.type).lastIndexOf("results_recovered");
+  const originalEnd = state === "completed" && recoveryIndex >= 0
+    ? events.slice(0, recoveryIndex).filter(event => ["completed", "failed", "cancelled"].includes(event.type)).at(-1)
+    : undefined;
+  const endEvent = events.filter(event => event.type === state).at(-1) ?? originalEnd;
   const end = terminal ? endEvent ? Date.parse(endEvent.created_at) : NaN : now;
   const elapsed = Number.isFinite(start) && Number.isFinite(end) && end >= start ? duration(end - start) : "暂无时间记录";
   const stopped = state === "failed" || state === "cancelled" || state === "cancelling";
@@ -132,7 +136,9 @@ export function RunProgress({ runId, terminal, stage, state, createdAt, events =
     </ol>
     {!terminal && <p className="task-wait-hint">{state === "accepted" || state === "queued" ? "提交已接收，正在等待执行资源" : state === "preparing" ? "正在校验环境并启动工具，阶段变化会自动更新" : state === "aggregating" ? "正在收集结果、校验证据并生成报告" : state === "cancelling" ? "正在确认远程作业停止，资源仍保留占用" : "工具正在执行；样本计数返回后自动显示完成比例"}</p>}
     {showSampleProgress ? <MonitorProgress value={value} error={unavailable} terminal={terminal} /> : <p className="muted">样本进度按下方各数据集分别展示，不合并不同工具的计数。</p>}
-    <small className="muted">任务耗时包含排队、环境准备、测评与归档；样本进度和评分结论分别记录。</small>
+    <small className="muted">{endEvent === originalEnd && originalEnd
+      ? "总耗时截至原始运行结束，后续证据处理时间单独记录。"
+      : "任务耗时包含排队、环境准备、测评与归档；样本进度和评分结论分别记录。"}</small>
   </section>;
 }
 

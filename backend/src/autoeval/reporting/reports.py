@@ -2,6 +2,7 @@
 
 import asyncio
 import uuid
+from itertools import batched
 from typing import Any
 
 from botocore.exceptions import BotoCoreError, ClientError
@@ -17,7 +18,7 @@ from autoeval.catalog.datasets import read_manifest
 from autoeval.catalog.models import BenchmarkBaseline
 from autoeval.evaluation.models import EvaluationReport
 from autoeval.models import EvaluationRun, RunSnapshot
-from autoeval.reporting.report_integrity import report_evidence_status
+from autoeval.reporting.report_integrity import verified_report_body
 from autoeval.responses import Envelope, PageEnvelope
 
 router = APIRouter(prefix="/api/autoeval/v1/reports", tags=["reports"])
@@ -106,7 +107,7 @@ def report_data(
 
 
 @router.get("", response_model=PageEnvelope[ReportView])
-async def catalog(request: Request, offset: int = 0, limit: int = 20):
+async def catalog(request: Request, offset: int = 0, limit: int = 20, summary_only: bool = False):
 
     if offset < 0 or not 1 <= limit <= 200:
         raise HTTPException(422, "Invalid pagination")
@@ -148,27 +149,26 @@ async def catalog(request: Request, offset: int = 0, limit: int = 20):
 
             jobs = {job.report_id: job for job in analyses}
 
-            statuses = await asyncio.gather(
-                *(report_evidence_status(request.app.state.settings, *row) for row in selected)
+        data = []
+        for batch in batched(selected, 8):
+            evidence = await asyncio.gather(
+                *(verified_report_body(request.app.state.settings, *row) for row in batch)
             )
-
-            data = [
-                report_data(
+            for row, (status, body) in zip(batch, evidence, strict=True):
+                job = jobs.get(row[0].id)
+                item = report_data(
                     *row,
                     baselines,
                     analysis_status=analysis_status_for(
-                        jobs.get(row[0].id),
+                        job,
                         request.app.state.settings,
                         execution_origin=row[0].execution_origin,
                     ),
-                    analysis_id=jobs.get(row[0].id).id if jobs.get(row[0].id) else None,
+                    analysis_id=job.id if job else None,
                     evidence_status=status,
                 )
-                for row, status in zip(selected, statuses, strict=True)
-            ]
-
-            for item, row in zip(data, selected, strict=True):
-                await attach_datasets(item, request.app.state.settings, row[0], baselines)
+                attach_datasets(item, body, baselines, summary_only=summary_only)
+                data.append(item)
 
     except SQLAlchemyError as exc:
         raise HTTPException(503, "Report catalog unavailable") from exc
@@ -218,6 +218,7 @@ async def detail(report_id: uuid.UUID, request: Request):
                 select(ReportAnalysis).where(ReportAnalysis.report_id == report_id)
             )
 
+            status, body = await verified_report_body(request.app.state.settings, *row)
             data = report_data(
                 *row,
                 baselines,
@@ -227,10 +228,10 @@ async def detail(report_id: uuid.UUID, request: Request):
                     execution_origin=row[0].execution_origin,
                 ),
                 analysis_id=job.id if job else None,
-                evidence_status=await report_evidence_status(request.app.state.settings, *row),
+                evidence_status=status,
             )
 
-            await attach_datasets(data, request.app.state.settings, row[0], baselines)
+            attach_datasets(data, body, baselines)
 
     except SQLAlchemyError as exc:
         raise HTTPException(503, "Report database unavailable") from exc
@@ -269,17 +270,13 @@ async def evidence(report_id: uuid.UUID, request: Request):
     return {"data": data, "request_id": request.state.request_id}
 
 
-async def attach_datasets(data, settings, report, baselines):
-
-    if data["evidence_status"] != "verified":
-        return
-
-    body = await asyncio.to_thread(read_manifest, settings, report)
-
-    if body.get("schema_version") != "task-report.v2":
+def attach_datasets(data, body, baselines, *, summary_only=False):
+    if body is None or body.get("schema_version") != "task-report.v2":
         return
 
     data["dataset_key"] = ", ".join(d["dataset_key"] for d in body["datasets"])
+    if summary_only:
+        return
 
     data["dataset_results"] = [
         {

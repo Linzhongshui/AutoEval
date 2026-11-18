@@ -101,12 +101,8 @@ async def test_report_evidence_and_score_cannot_be_overridden(
     )
     request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace(settings=None)))
     monkeypatch.setattr(
-        "autoeval.reporting.data_workbench.report_evidence_status",
-        AsyncMock(return_value=evidence_status),
-    )
-    monkeypatch.setattr(
-        "autoeval.catalog.datasets.read_manifest",
-        lambda *args: {"schema_version": "gpqa-report.v1"},
+        "autoeval.reporting.data_workbench.verified_report_body",
+        AsyncMock(return_value=(evidence_status, {"schema_version": "gpqa-report.v1"})),
     )
     with pytest.raises(HTTPException) as exc:
         await validate_report(request, session, entry)
@@ -237,11 +233,7 @@ async def test_legacy_report_scope_and_score_remain_valid(monkeypatch, scope):
         scalar=AsyncMock(return_value=SimpleNamespace(canonical_body=frozen)),
     )
     monkeypatch.setattr(
-        "autoeval.reporting.data_workbench.report_evidence_status",
-        AsyncMock(return_value="verified"),
-    )
-    monkeypatch.setattr(
-        "autoeval.catalog.datasets.read_manifest",
-        lambda *args: {"schema_version": "gpqa-report.v1"},
+        "autoeval.reporting.data_workbench.verified_report_body",
+        AsyncMock(return_value=("verified", {"schema_version": "gpqa-report.v1"})),
     )
     assert await validate_report(request, session, entry) == frozen

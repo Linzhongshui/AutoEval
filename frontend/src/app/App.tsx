@@ -76,6 +76,8 @@ export function App() {
   const [page, setPage] = useState(location.hash.slice(1) || "console");
   const [profiles, setProfiles] = useProfiles(page === "config" || page.startsWith("config/"));
   const [workbenchEnabled, setWorkbenchEnabled] = useState(false);
+  const [candidateScoresOpen, setCandidateScoresOpen] = useState(false);
+  useEffect(() => { if (page !== "leaderboard") setCandidateScoresOpen(false); }, [page]);
   const [toast, setToast] = useState("");
   const evaluationPage = page === "tasks" || page.startsWith("run/") || page.startsWith("evaluate?");
   const go = (path: string) => {
@@ -201,7 +203,7 @@ export function App() {
             open={(id) => go(`report/${id}`)}
           />
         )}
-        {page === "leaderboard" && (<div className="stack"><PublishedLeaderboard /><details><summary>平台运行报告候选成绩（未人工评审）</summary><RealLeaderboard open={(id) => go(`report/${id}`)} /></details></div>)}
+        {page === "leaderboard" && (<div className="stack"><PublishedLeaderboard /><details onToggle={(event) => setCandidateScoresOpen(event.currentTarget.open)}><summary>平台运行报告候选成绩（未人工评审）</summary>{candidateScoresOpen && <RealLeaderboard open={(id) => go(`report/${id}`)} />}</details></div>)}
         {workbenchEnabled && page === "data-workbench" && <DataWorkbench />}
 
         <footer className="page-foot">
@@ -232,7 +234,7 @@ function Overview({ go }: { go: (path: string) => void }) {
   const [message, setMessage] = useState("正在读取最近报告…");
   useEffect(() => {
     const controller = new AbortController();
-    apiGetPage<RecentReport[]>("/reports?limit=3&offset=0", controller.signal)
+    apiGetPage<RecentReport[]>("/reports?summary_only=true&limit=3&offset=0", controller.signal)
       .then((page) => {
         if (controller.signal.aborted) return;
         setReports(page.data);

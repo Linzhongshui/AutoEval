@@ -11,13 +11,13 @@ from autoeval.reporting.data_workbench import (
     edit,
     entries,
     published,
-    report_evidence_status,
     review,
     router,
     validate_report,
     view,
 )
 from autoeval.reporting.models import LeaderboardRecord
+from autoeval.reporting.report_integrity import report_evidence_status
 
 __all__ = [
     "Decision",

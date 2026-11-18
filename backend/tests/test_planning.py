@@ -90,8 +90,14 @@ def test_job_runtime_credential_file_is_private(tmp_path):
 def test_standard_locks_are_revalidated_when_applying():
     compilation = inputs()["tasks"][0]["compilation"]
     compilation["locked_fields"] = {"params.batch_size": 2}
+    overridden = apply_concurrency(compilation, 8)
+    assert overridden["config"]["params"]["batch_size"] == 8
+    assert overridden["locked_fields"]["params.batch_size"] == 8
+    assert compilation["locked_fields"]["params.batch_size"] == 2
+    compilation["locked_fields"]["params.scoring_rule"] = "unchanged"
     with pytest.raises(ValueError, match="lock conflicts"):
         apply_concurrency(compilation, 8)
+    del compilation["locked_fields"]["params.scoring_rule"]
     changed = apply_concurrency(compilation, 2)
     assert changed["config"]["params"]["max_num_workers"] == 1
     assert "max_num_workers" not in compilation["config"]["params"]

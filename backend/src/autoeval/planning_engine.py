@@ -43,12 +43,19 @@ def selected_samples(config, samples):
 
 
 def apply_concurrency(compilation, concurrency):
+    if isinstance(concurrency, bool) or not isinstance(concurrency, int) or not 1 <= concurrency <= 256:
+        raise ValueError("Concurrency must be an integer between 1 and 256")
     result = copy.deepcopy(compilation)
     config = result["config"]
     field = "batch_size" if config["subcommand"] == "llm_accuracy" else "n_concurrent_trials"
     config["params"][field] = concurrency
     # Each isolated child owns exactly one dataset; the platform owns outer concurrency.
     config["params"]["max_num_workers"] = 1
+    # Runtime scheduling overrides defaults only; scoring and dataset locks remain intact.
+    runtime_fields = {f"params.{field}": concurrency, "params.max_num_workers": 1}
+    for key, value in runtime_fields.items():
+        if key in result.get("locked_fields", {}):
+            result["locked_fields"][key] = value
     conflicts = [
         key
         for key, value in result.get("locked_fields", {}).items()

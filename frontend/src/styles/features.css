@@ -1336,6 +1336,11 @@
 .vertical-chart-plot { height: 280px; display: flex; align-items: flex-end; justify-content: center; border-bottom: 1px solid var(--border); background: repeating-linear-gradient(to top, transparent 0, transparent calc(25% - 1px), #eceef6 calc(25% - 1px), #eceef6 25%); }
 .vertical-chart-bar { position: relative; width: min(65%, 90px); background: var(--primary); border-radius: 6px 6px 0 0; }
 .vertical-chart-bar strong { position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 13px; }
+.vertical-chart-bar-group { display: flex; align-items: flex-end; justify-content: center; gap: 6px; width: 100%; height: 100%; }
+.vertical-chart-bar-group .vertical-chart-bar { width: min(46%, 62px); }
+.vertical-chart-bar-group.single .vertical-chart-bar { width: min(65%, 90px); }
+.leaderboard-chart-refined .vertical-chart-dense .vertical-chart-bar-group .vertical-chart-bar { width: min(48%, 30px); }
+.leaderboard-chart-refined .vertical-chart-dense .vertical-chart-bar-group.single .vertical-chart-bar { width: min(70%, 40px); }
 .vertical-chart-label { padding: 14px 8px; max-width: 280px; margin: auto; overflow-wrap: anywhere; font-size: 12px; line-height: 1.6; }
 .vertical-chart-label small { display: block; color: var(--muted); margin-top: 4px; }
 

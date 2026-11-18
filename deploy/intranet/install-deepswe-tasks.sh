@@ -23,5 +23,5 @@ fi
 scratch=$(mktemp -d)
 trap 'rm -rf -- "$scratch"' EXIT
 docker cp "$container:$target" "$scratch/tasks"
-diff -qr "$source_dir" "$scratch/tasks"
+diff -qr --no-dereference "$source_dir" "$scratch/tasks"
 echo "Verified 113 DeepSWE tasks in $container:$target"

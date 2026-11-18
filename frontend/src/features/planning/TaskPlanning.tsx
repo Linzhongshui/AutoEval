@@ -27,6 +27,17 @@ type Options = {
   curves: { id: string; target_id: string; resource_id: string; resource_kind: string; measured_at: string }[];
 };
 type DatasetCheck = { task_id: string; dataset: string; data_path: string | null; tool_revision: string | null; expected_tool_revision: string; blocking_reasons: string[] };
+const preflightReasons: Record<string, string> = {
+  dataset_not_validated: "该资源尚未完成此数据集的小样本验收",
+  dataset_path_unavailable: "执行容器无法访问数据目录",
+  dataset_path_missing: "配置缺少数据目录",
+  harbor_network_unavailable: "Harbor 网络容量不可用",
+  tool_identity_mismatch: "AISBench 版本或评分文件校验不匹配",
+  tool_environment_preflight_failed: "测评工具无法加载所选清单",
+  no_supported_datasets: "至少一个执行资源没有通过检查的数据集",
+};
+const describePreflight = (reasons: string[]) =>
+  reasons.map(reason => preflightReasons[reason] ?? reason).join("；");
 type Job = { id: string; state: string; created_at?: string; updated_at?: string; result?: { progress?: { stage: string; current_concurrency?: number | null; completed_levels: number; total_levels: number; observed_at?: string } | null; report?: Report; throughput_profile_id?: string; reason?: string; dispatch_blocked?: boolean; remote_check?: { state: string; checked_at: string }; execution_ready?: boolean; supported_datasets?: string[]; blocking_reasons?: string[]; dataset_checks?: DatasetCheck[]; tool_versions?: Record<string, { expected: string; actual: string | null }> } };
 const datasets = ["GPQA", "MMMU-Pro", "DeepSWE", "AutomationBench"];
 const duration = (seconds: number | null | undefined) => {
@@ -142,7 +153,7 @@ export function TaskPlanning() {
   useEffect(() => {
     generation.current++; if (job) setStaleEstimate(true); setJob(null); setAdviceJob(null);
   }, [fingerprint]);
-  useEffect(() => { setPreflight(null); }, [preflightFingerprint]);
+  useEffect(() => { setPreflight(null); setMessage(""); }, [preflightFingerprint]);
   useEffect(() => { setPreflight(null); setProbeReview(false); setCurve(""); }, [target, resource, resourceKind]);
   useEffect(() => {
     setSelection(current => {
@@ -279,8 +290,8 @@ export function TaskPlanning() {
     </div>
     {preflight?.state === "completed" && preflight.result && <div className="notice">
       <p>Planner：{preflight.result.tool_versions?.planner.actual?.slice(0, 12) || "未安装或版本未知"}；Adaptor：{preflight.result.tool_versions?.adaptor.actual?.slice(0, 12) || "未安装或版本未知"}</p>
-      {!!preflight.result.blocking_reasons?.length && <p>阻塞原因：{preflight.result.blocking_reasons.join("、")}</p>}
-      {preflight.result.dataset_checks?.map(check => <p key={check.task_id}>{check.dataset} · 数据路径：{check.data_path || "未配置"} · 工具版本：{check.tool_revision?.slice(0, 12) || "校验未通过"}{check.blocking_reasons.length ? ` · ${check.blocking_reasons.join("、")}` : " · 就绪"}</p>)}
+      {!!preflight.result.blocking_reasons?.length && <p>阻塞原因：{describePreflight(preflight.result.blocking_reasons)}</p>}
+      {preflight.result.dataset_checks?.map(check => <p key={check.task_id}>{check.dataset} · 数据路径：{check.data_path || "未配置"} · 工具版本：{check.tool_revision?.slice(0, 12) || `校验未通过（要求 ${check.expected_tool_revision.slice(0, 12)}）`}{check.blocking_reasons.length ? ` · ${describePreflight(check.blocking_reasons)}` : " · 就绪"}</p>)}
     </div>}
     <h2>2. 数据集与样本范围</h2>
     <p className="muted">勾选后自动填充唯一匹配的执行配置、全量清单及绑定资源；存在多个候选或缺少全量清单时，请手动确认。不会自动启动环境检查或测评。</p><div className="table-wrap"><table className="planning-table"><thead><tr><th>启用</th><th>数据集</th><th>执行配置</th><th>样本范围</th><th>状态</th></tr></thead><tbody>{datasets.map(d => {

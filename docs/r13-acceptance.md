@@ -52,3 +52,7 @@
 在真实 SSH 节点用已核验的固定镜像创建独立容器，并断开容器的 Docker bridge。将历史固定执行器中的 GPQA CSV 定向复制到本次容器，复制前后 SHA-256 一致。用容器回环地址的固定响应服务替代模型入口，GPQA 范围固定为首个样本，批量和尝试次数均为 1。
 
 首次夹具将 AISBench 的尝试次数设为 0，工具虽退出 0，但结果完整性未通过。将尝试次数改为 1 后，真实 AISBench 进程退出 0，SSH/SFTP 回收统一结果。按冻结样本映射及生产解析器核验，共 1 个样本、状态 success、完整性 complete。两次临时容器均已回收，外部模型调用为 0。Harbor 原生 trial 仍待验收。
+
+### Harbor 私有 Docker 能力探测
+
+历史 Harbor 固定镜像内含 Docker CLI 和 dockerd。隔离探测在不挂载宿主 Docker socket、断开外部网络的临时容器中进行。关闭默认 bridge 时私有 daemon 能响应，启用 bridge 时普通容器权限下出现 netlink `operation not permitted`。加入容器内网络管理能力后可成功创建和删除隔离 bridge，但向该 daemon 导入已预载 Alpine 镜像仍因 `unshare: operation not permitted` 失败。此结果尚不能证明可运行 trial。各探测容器已回收，未提交模型或 Harbor trial 作业。

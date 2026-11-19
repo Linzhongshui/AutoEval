@@ -1,3 +1,4 @@
+import { TableWrap } from "../../shared/ui/TableWrap";
 import { PageNumbers } from "../../shared/ui/PageNumbers";
 import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
@@ -155,7 +156,7 @@ export function CaseHistory({ initialRun = "", datasets = [] }: { initialRun?: s
       </div>
       <p className="case-history-message muted" role="status">{message}<span>执行状态与评分分别记录，缺少评分不补零。</span></p>
       {rows.length > 0 && (
-        <div className="table-wrap" data-testid="case-attempts">
+        <TableWrap data-testid="case-attempts">
           <table className="case-attempt-table">
             <thead><tr><th>数据集 / 样本</th><th>尝试</th><th>执行状态</th><th>得分</th><th>创建时间</th><th>耗时</th><th>Token（入 / 出）</th><th>证据与轨迹</th></tr></thead>
             <tbody>{rows.map((row) => {
@@ -183,7 +184,7 @@ export function CaseHistory({ initialRun = "", datasets = [] }: { initialRun?: s
               );
             })}</tbody>
           </table>
-        </div>
+        </TableWrap>
       )}
       {query && (
         <div className="pagination" aria-label="Case 列表分页">

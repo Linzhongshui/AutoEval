@@ -84,6 +84,8 @@ Harbor 轨迹导入失败不修改测评成绩。只有确认导入成功才提�
 
 部分根模块保留兼容导入或命令入口；实际实现位置见[重构清单](../docs/refactor-inventory.md)。
 
+接口输入输出、ORM 注册与实体外键见[数据契约与实体关系](../docs/backend-data-model.md)。
+
 ## 检查与依赖更新
 
 ```powershell

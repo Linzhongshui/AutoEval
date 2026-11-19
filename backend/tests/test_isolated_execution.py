@@ -225,3 +225,22 @@ async def test_tool_dispatch_contract_with_real_docker(family):
         assert result["result"]["model_called"] is False
     finally:
         await asyncio.gather(left.remove(), right.remove())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method", ["collect", "collect_log"])
+async def test_artifact_read_requires_owned_container_before_remote_io(method, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from autoeval.planning.planning_transport import PlanningRemoteContainer
+
+    adapter = object.__new__(IsolatedPlanningContainer)
+    adapter.validate = AsyncMock(side_effect=ValueError("Task container ownership mismatch"))
+    remote_read = AsyncMock()
+    monkeypatch.setattr(PlanningRemoteContainer, method, remote_read)
+
+    with pytest.raises(ValueError, match="ownership mismatch"):
+        await getattr(adapter, method)(None)
+
+    adapter.validate.assert_awaited_once()
+    remote_read.assert_not_awaited()

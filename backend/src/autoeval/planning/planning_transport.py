@@ -463,7 +463,7 @@ class IsolatedPlanningContainer(PlanningRemoteContainer):
         if (
             row["Name"] != "/" + self.name
             or row["Image"] != self.image_id
-            or row["Config"]["Labels"].get("autoeval.dataset_execution") != self.owner
+            or (row["Config"]["Labels"] or {}).get("autoeval.dataset_execution") != self.owner
         ):
             raise ValueError("Task container ownership mismatch")
         return row
@@ -512,6 +512,14 @@ class IsolatedPlanningContainer(PlanningRemoteContainer):
         # Validate ownership before writing the runtime or inspecting a job.
         await self.validate({"kind": "framework_smoke"})
         return await super().lookup(submission_key)
+
+    async def collect(self, job):
+        await self.validate({"kind": "framework_smoke"})
+        return await super().collect(job)
+
+    async def collect_log(self, job):
+        await self.validate({"kind": "framework_smoke"})
+        return await super().collect_log(job)
 
     def _inspect_owned(self):
         with self.control.connect() as client:

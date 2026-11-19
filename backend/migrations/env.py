@@ -2,8 +2,8 @@ import asyncio
 
 from alembic import context
 
-from autoeval.config import get_settings
-from autoeval.db import create_database
+from autoeval.infrastructure.config import get_settings
+from autoeval.infrastructure.db import create_database
 from autoeval.infrastructure.orm_registry import target_metadata
 
 config = context.config

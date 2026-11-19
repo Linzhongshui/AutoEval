@@ -10,20 +10,20 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select, text
 
-from autoeval.datasets import DatasetManifest
+from autoeval.catalog.datasets import DatasetManifest
+from autoeval.catalog.standard_inputs import (
+    StandardInputCompilation,
+    StandardInputVersion,
+    digest,
+    reject_secrets,
+)
 from autoeval.evaluation.inputs import resolve_inputs, target_data
 from autoeval.evaluation.service import (
     planned_run_detail,
     planned_run_report,
 )
 from autoeval.evaluation.submission import submit_planned_run
-from autoeval.planning.artifacts import artifact, current_preflight
-from autoeval.planning.models import PlanningArtifact, PlanningJob
-from autoeval.planning.schemas import ApplyInput, CurveInput, PlanInput, ProbeInput, Strict
-from autoeval.planning.schemas import ResourceRef as ResourceRef
-from autoeval.planning.schemas import TaskInput as TaskInput
-from autoeval.planning_engine import DATASETS, apply_concurrency
-from autoeval.responses import (
+from autoeval.infrastructure.responses import (
     Accepted,
     Envelope,
     ObjectPageEnvelope,
@@ -31,12 +31,12 @@ from autoeval.responses import (
     SubmittedRun,
     envelope,
 )
-from autoeval.standard_inputs import (
-    StandardInputCompilation,
-    StandardInputVersion,
-    digest,
-    reject_secrets,
-)
+from autoeval.planning.artifacts import artifact, current_preflight
+from autoeval.planning.models import PlanningArtifact, PlanningJob
+from autoeval.planning.planning_engine import DATASETS, apply_concurrency
+from autoeval.planning.schemas import ApplyInput, CurveInput, PlanInput, ProbeInput, Strict
+from autoeval.planning.schemas import ResourceRef as ResourceRef
+from autoeval.planning.schemas import TaskInput as TaskInput
 
 
 class IdOnly(BaseModel):
@@ -127,7 +127,7 @@ router = APIRouter(prefix="/api/autoeval/v1/planning", tags=["task planning"])
 
 @router.get("/options", response_model=ObjectPageEnvelope[PlanningOptions])
 async def options(request: Request, offset: int = 0, limit: int = 100, include_test: bool = False):
-    from autoeval.profiles import EvaluationProfile
+    from autoeval.catalog.models import EvaluationProfile
 
     if offset < 0 or not 1 <= limit <= 200:
         raise HTTPException(422, "Invalid pagination")
@@ -355,7 +355,7 @@ async def enqueue(kind, payload, request):
 
 @router.post("/probes", status_code=202, response_model=Envelope[JobAccepted])
 async def probe(body: ProbeInput, request: Request):
-    from autoeval.probe_dispatch import consumer_ready
+    from autoeval.planning.probe_dispatch import consumer_ready
 
     async with request.app.state.sessions() as session, session.begin():
         if not await consumer_ready(session):
@@ -404,7 +404,7 @@ async def job_status(job_id: uuid.UUID, request: Request):
             raise HTTPException(404, "Planning job not found")
         result = row.result
         if row.kind == "probe" and row.state == "pending":
-            from autoeval.probe_dispatch import consumer_ready
+            from autoeval.planning.probe_dispatch import consumer_ready
 
             if not await consumer_ready(session, row.id, row.created_at):
                 result = {
@@ -434,8 +434,8 @@ class CloseProbe(Strict):
 
 @router.post("/probes/{job_id}/reconcile", response_model=Envelope[ProbeReconciled])
 async def reconcile_probe(job_id: uuid.UUID, request: Request):
-    from autoeval.contracts import JobRef
-    from autoeval.planning_transport import transport
+    from autoeval.infrastructure.contracts import JobRef
+    from autoeval.planning.planning_transport import transport
 
     async with request.app.state.sessions() as session, session.begin():
         idle = await session.scalar(
@@ -492,7 +492,7 @@ async def reconcile_probe(job_id: uuid.UUID, request: Request):
 
 @router.post("/probes/{job_id}/close", response_model=Envelope[JobAccepted])
 async def close_probe(job_id: uuid.UUID, body: CloseProbe, request: Request):
-    from autoeval.audit import AuditEvent
+    from autoeval.infrastructure.audit import AuditEvent
 
     async with request.app.state.sessions() as session, session.begin():
         idle = await session.scalar(
@@ -654,7 +654,7 @@ async def submit_run(
 
 @router.get("/runs", response_model=PageEnvelope[PlannedRunItem])
 async def list_runs(request: Request, offset: int = 0, limit: int = 20):
-    from autoeval.models import EvaluationRun
+    from autoeval.infrastructure.models import EvaluationRun
 
     if offset < 0 or not 1 <= limit <= 100:
         raise HTTPException(422, "Invalid pagination")
@@ -690,7 +690,7 @@ async def run_detail(run_id: uuid.UUID, request: Request):
 
 @router.post("/runs/{run_id}/cancel", status_code=202, response_model=Envelope[Accepted])
 async def cancel_run(run_id: uuid.UUID, request: Request):
-    from autoeval.models import EvaluationRun
+    from autoeval.infrastructure.models import EvaluationRun
 
     async with request.app.state.sessions() as session, session.begin():
         run = await session.get(EvaluationRun, run_id, with_for_update=True)

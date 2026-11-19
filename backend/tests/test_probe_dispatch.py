@@ -2,8 +2,8 @@ import uuid
 
 import httpx
 
-from autoeval.api import create_app
-from autoeval.config import get_settings
+from autoeval.entrypoints.api import create_app
+from autoeval.infrastructure.config import get_settings
 
 
 async def test_unavailable_probe_consumer_does_not_enqueue(monkeypatch):
@@ -13,7 +13,7 @@ async def test_unavailable_probe_consumer_does_not_enqueue(monkeypatch):
     async def forbidden(*args, **kwargs):
         raise AssertionError("No worker: must not create a paid probe intent")
 
-    monkeypatch.setattr("autoeval.probe_dispatch.consumer_ready", unavailable)
+    monkeypatch.setattr("autoeval.planning.probe_dispatch.consumer_ready", unavailable)
     monkeypatch.setattr("autoeval.planning.routes.enqueue", forbidden)
     app = create_app(get_settings())
     async with (
@@ -40,8 +40,8 @@ async def test_probe_lease_cutoff_does_not_advertise_historical_jobs():
     import pytest
     from sqlalchemy import text
 
-    from autoeval.db import create_database
-    from autoeval.probe_dispatch import consumer_key, consumer_ready
+    from autoeval.infrastructure.db import create_database
+    from autoeval.planning.probe_dispatch import consumer_key, consumer_ready
 
     if not os.getenv("AE_INFRA_TEST"):
         pytest.skip("Explicit PostgreSQL validation required")

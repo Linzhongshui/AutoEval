@@ -16,7 +16,7 @@ from autoeval.catalog.models import (
     TestConfigItem,
     TestConfigVersion,
 )
-from autoeval.responses import Envelope, PageEnvelope
+from autoeval.infrastructure.responses import Envelope, PageEnvelope
 
 
 class Parameters(BaseModel):
@@ -32,7 +32,7 @@ class Parameters(BaseModel):
     @classmethod
     def validate_adapter_input(cls, value):
         if value is not None:
-            from autoeval.standard_inputs import validate_config
+            from autoeval.catalog.standard_inputs import validate_config
 
             validate_config(value)
         return value

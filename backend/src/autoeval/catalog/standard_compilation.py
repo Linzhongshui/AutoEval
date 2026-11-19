@@ -4,7 +4,7 @@ import copy
 import hashlib
 import json
 
-from autoeval.adaptor_versions import separate_runtime
+from autoeval.catalog.adaptor_versions import separate_runtime
 
 ADAPTOR_REVISION = "1fb877ace4a087cb805e9a3d5878dcce6349bc35"
 BENCHMARKS = {

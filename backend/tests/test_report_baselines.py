@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import uuid4
 
-from autoeval.reports import report_data
+from autoeval.reporting.reports import report_data
 
 
 def snapshot():

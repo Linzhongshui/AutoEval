@@ -14,25 +14,24 @@ from sqlalchemy import select
 from temporalio.client import Client
 from temporalio.worker import Worker
 
-from autoeval import evaluation_activity
-from autoeval.api import create_app
-from autoeval.case_history import AttemptInput, CaseExecutionRecord, begin_attempt
-from autoeval.cleanup import ExecutionCleanup, reclaim
-from autoeval.config import get_settings
-from autoeval.configuration import TestConfigItem as ConfigItem
-from autoeval.configuration import TestConfigVersion as ConfigVersion
-from autoeval.datasets import DatasetManifest, read_manifest
-from autoeval.dispatcher import deliver_once
-from autoeval.execution_transport import ssh_transport
-from autoeval.models import Outbox, RunSnapshot
-from autoeval.profiles import ConfigDatasetBinding, EvaluationProfile
-from autoeval.reconciler import reconcile_gpqa
-from autoeval.run_activities import transition
-from autoeval.runs import ExecutionLease
-from autoeval.ssh_native import SSHNativeTransport
-from autoeval.ssh_resources import SSHResourceBinding
-from autoeval.targets import TargetBinding
-from autoeval.workflows import GpqaExplorationWorkflow
+from autoeval.catalog.datasets import DatasetManifest, read_manifest
+from autoeval.catalog.models import ConfigDatasetBinding, EvaluationProfile
+from autoeval.catalog.models import TestConfigItem as ConfigItem
+from autoeval.catalog.models import TestConfigVersion as ConfigVersion
+from autoeval.entrypoints.api import create_app
+from autoeval.entrypoints.dispatcher import deliver_once
+from autoeval.entrypoints.reconciler import reconcile_gpqa
+from autoeval.evaluation import evaluation_activity
+from autoeval.evaluation.run_activities import transition
+from autoeval.evaluation.runs import ExecutionLease
+from autoeval.evaluation.workflows import GpqaExplorationWorkflow
+from autoeval.infrastructure.cleanup import ExecutionCleanup, reclaim
+from autoeval.infrastructure.config import get_settings
+from autoeval.infrastructure.models import Outbox, RunSnapshot
+from autoeval.reporting.case_history import AttemptInput, CaseExecutionRecord, begin_attempt
+from autoeval.resources.execution_transport import ssh_transport
+from autoeval.resources.models import SSHResourceBinding, TargetBinding
+from autoeval.resources.ssh_native import SSHNativeTransport
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("AE_SSH_NATIVE_PIPELINE_TEST"),

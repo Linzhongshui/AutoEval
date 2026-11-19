@@ -15,7 +15,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from autoeval.analysis.models import ReportAnalysis
 from autoeval.catalog.datasets import canonical_manifest
-from autoeval.models import Outbox
+from autoeval.infrastructure.models import Outbox
 from autoeval.resources import ResourceBinding
 from autoeval.resources.targets import TargetBinding
 
@@ -241,7 +241,7 @@ async def enqueue_analysis(
     baseline_comparison: dict | None = None,
 ):
     """Enqueue once inside the caller's transaction; report row lock serializes retries."""
-    from autoeval.evaluations import EvaluationReport
+    from autoeval.evaluation.evaluations import EvaluationReport
 
     locked = await session.scalar(
         select(EvaluationReport).where(EvaluationReport.id == report.id).with_for_update()
@@ -411,8 +411,8 @@ router = APIRouter(prefix="/api/autoeval/v1/reports", tags=["report analysis"])
 @router.get("/{report_id}/analysis")
 async def get_analysis(report_id: uuid.UUID, request: Request):
     from autoeval.analysis.activity import read_analysis_result
-    from autoeval.evaluations import EvaluationReport
-    from autoeval.models import EvaluationRun
+    from autoeval.evaluation.evaluations import EvaluationReport
+    from autoeval.infrastructure.models import EvaluationRun
 
     try:
         async with request.app.state.sessions() as session:
@@ -441,8 +441,8 @@ async def get_analysis(report_id: uuid.UUID, request: Request):
 
 @router.post("/{report_id}/analysis:start", status_code=202)
 async def start_analysis(report_id: uuid.UUID, request: Request):
-    from autoeval.evaluations import EvaluationReport
-    from autoeval.models import EvaluationRun, RunSnapshot
+    from autoeval.evaluation.evaluations import EvaluationReport
+    from autoeval.infrastructure.models import EvaluationRun, RunSnapshot
 
     settings = request.app.state.settings
     if not analysis_is_configured(settings):
@@ -493,8 +493,8 @@ async def start_analysis(report_id: uuid.UUID, request: Request):
 
 @router.post("/{report_id}/analysis:retry", status_code=202)
 async def retry_analysis(report_id: uuid.UUID, request: Request):
-    from autoeval.evaluations import EvaluationReport
-    from autoeval.models import EvaluationRun
+    from autoeval.evaluation.evaluations import EvaluationReport
+    from autoeval.infrastructure.models import EvaluationRun
 
     settings = request.app.state.settings
     if not analysis_is_configured(settings):

@@ -10,12 +10,12 @@ from sqlalchemy import select
 from temporalio.client import Client
 from temporalio.worker import Worker
 
-from autoeval.api import create_app
-from autoeval.config import get_settings
-from autoeval.dispatcher import deliver_once
+from autoeval.entrypoints.api import create_app
+from autoeval.entrypoints.dispatcher import deliver_once
+from autoeval.evaluation.run_activities import execute_docker_diagnostic
+from autoeval.evaluation.workflows import DockerDiagnosticWorkflow
+from autoeval.infrastructure.config import get_settings
 from autoeval.resources import ResourceBinding
-from autoeval.run_activities import execute_docker_diagnostic
-from autoeval.workflows import DockerDiagnosticWorkflow
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("AE_DOCKER_TEST"), reason="Live Docker and infrastructure required"

@@ -16,10 +16,10 @@ from autoeval.catalog.benchmarks import compare_baseline
 from autoeval.catalog.datasets import read_manifest
 from autoeval.catalog.models import BenchmarkBaseline
 from autoeval.evaluation.models import EvaluationReport
-from autoeval.models import EvaluationRun, RunSnapshot
+from autoeval.infrastructure.models import EvaluationRun, RunSnapshot
+from autoeval.infrastructure.responses import Envelope, PageEnvelope
 from autoeval.reporting.report_integrity import verified_report_body
 from autoeval.reporting.report_view import report_data
-from autoeval.responses import Envelope, PageEnvelope
 
 router = APIRouter(prefix="/api/autoeval/v1/reports", tags=["reports"])
 

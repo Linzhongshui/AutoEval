@@ -9,14 +9,14 @@ from pathlib import Path
 import pytest
 from sqlalchemy import func, select
 
-from autoeval.adaptor_bridge import invocation
-from autoeval.adaptor_versions import CURRENT_ADAPTOR, LEGACY_ADAPTOR, separate_runtime
-from autoeval.case_history import CaseExecutionRecord
-from autoeval.config import Settings
-from autoeval.db import create_database
-from autoeval.models import EvaluationRun
-from autoeval.standard_inputs import Bundle, CompileInput, compile_config, discover
-from autoeval.unified_outputs import archive_output, parse_output, read_raw_output
+from autoeval.catalog.adaptor_bridge import invocation
+from autoeval.catalog.adaptor_versions import CURRENT_ADAPTOR, LEGACY_ADAPTOR, separate_runtime
+from autoeval.catalog.standard_inputs import Bundle, CompileInput, compile_config, discover
+from autoeval.infrastructure.config import Settings
+from autoeval.infrastructure.db import create_database
+from autoeval.infrastructure.models import EvaluationRun
+from autoeval.reporting.case_history import CaseExecutionRecord
+from autoeval.reporting.unified_outputs import archive_output, parse_output, read_raw_output
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

@@ -9,7 +9,7 @@ import autoeval_planner.probe as planner_probe
 import pytest
 from autoeval_planner.errors import ProbeError
 
-from autoeval.planning_runtime import (
+from autoeval_runtime.planning_runtime import (
     ADAPTOR_REVISION,
     PLANNER_REVISION,
     controlled_failure_reason,
@@ -21,7 +21,7 @@ from autoeval.planning_runtime import (
 
 def test_preflight_reports_tool_versions_paths_and_dataset_blockers(tmp_path, monkeypatch):
     monkeypatch.setattr(
-        "autoeval.planning_runtime.installed_revision",
+        "autoeval_runtime.planning_runtime.installed_revision",
         lambda name: PLANNER_REVISION if name == "autoeval-task-planner" else ADAPTOR_REVISION,
     )
     versions = installed_tool_versions()
@@ -40,7 +40,7 @@ def test_preflight_reports_tool_versions_paths_and_dataset_blockers(tmp_path, mo
         },
         "tool": {"revision": "a" * 40},
     }
-    monkeypatch.setattr("autoeval.planning_runtime.verify_tool", lambda value: "a" * 40)
+    monkeypatch.setattr("autoeval_runtime.planning_runtime.verify_tool", lambda value: "a" * 40)
     checked = inspect_dataset(task, networks=None, validated={"GPQA"})
     assert checked["data_path"] == str(tmp_path)
     assert checked["tool_revision"] == "a" * 40
@@ -139,7 +139,7 @@ def test_probe_sse_fallback_missing_usage_and_failure(tmp_path, monkeypatch, mod
     }
     (tmp_path / "credential.json").write_text('{"value":"TEST-only"}')
     monkeypatch.setattr(
-        "autoeval.planning_runtime.installed_revision",
+        "autoeval_runtime.planning_runtime.installed_revision",
         lambda name: "0ee9abf49a57c5accc62df8900693cdcea88ea9a",
     )
     if mode == "timeout":
@@ -178,7 +178,7 @@ async def test_real_docker_controlled_runtime_without_generation():
     import os
     import uuid
 
-    from autoeval.planning_transport import PlanningDocker
+    from autoeval.planning.planning_transport import PlanningDocker
     from autoeval.resources import inspect_executor
 
     if os.getenv("AE_PLANNING_DOCKER_TEST") != "1":

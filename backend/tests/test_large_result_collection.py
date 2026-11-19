@@ -10,8 +10,8 @@ from types import SimpleNamespace
 import pytest
 
 from autoeval.evaluation.orchestration import keep_heartbeat
-from autoeval.planning_runtime import attach_harbor_evidence
-from autoeval.planning_transport import PlanningRemoteContainer
+from autoeval.planning.planning_transport import PlanningRemoteContainer
+from autoeval_runtime.planning_runtime import attach_harbor_evidence
 
 
 def test_scoring_is_reserved_for_all_cases_before_trajectories(tmp_path):

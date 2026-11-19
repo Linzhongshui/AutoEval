@@ -34,7 +34,7 @@ try:
         trial_model,
         validate_trial_analysis_output,
     )
-    from autoeval.dsh_agent import dsh_available, dsh_version, mock_analysis, run_dsh
+    from autoeval.resources.dsh_agent import dsh_available, dsh_version, mock_analysis, run_dsh
 except ImportError:  # run as a plain script from the repository root
     from dsh_agent import dsh_available, dsh_version, mock_analysis, run_dsh
     from trial_analysis_schema import (

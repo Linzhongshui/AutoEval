@@ -2,7 +2,7 @@ from decimal import Decimal
 
 import pytest
 
-from autoeval.billing_limits import maximum_request_cost, reservation_allowed
+from autoeval.billing.limits import maximum_request_cost, reservation_allowed
 
 
 def test_peak_reservation_and_concurrent_commitments():

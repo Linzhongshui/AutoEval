@@ -3,10 +3,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateTable
 
-from autoeval.api import create_app
-from autoeval.config import Settings
-from autoeval.domain import RunState, check_transition
-from autoeval.models import Base
+from autoeval.entrypoints.api import create_app
+from autoeval.infrastructure.config import Settings
+from autoeval.infrastructure.domain import RunState, check_transition
+from autoeval.infrastructure.models import Base
 
 
 def test_live_and_honest_capabilities():
@@ -45,7 +45,7 @@ async def test_workflows_validate_in_temporal_sandbox():
     from temporalio.worker.workflow_sandbox import SandboxedWorkflowRunner
     from temporalio.workflow import _Definition
 
-    from autoeval.workflows import AnalysisWorkflow, RunWorkflow
+    from autoeval.evaluation.workflows import AnalysisWorkflow, RunWorkflow
 
     for cls in (RunWorkflow, AnalysisWorkflow):
         SandboxedWorkflowRunner().prepare_workflow(_Definition.must_from_class(cls))
@@ -54,7 +54,7 @@ async def test_workflows_validate_in_temporal_sandbox():
 async def test_unconfigured_activities_cannot_fake_success():
     from temporalio.exceptions import ApplicationError
 
-    from autoeval.activities import analysis_not_configured, execution_not_configured
+    from autoeval.evaluation.activities import analysis_not_configured, execution_not_configured
 
     for activity in (execution_not_configured, analysis_not_configured):
         with pytest.raises(ApplicationError) as exc:
@@ -63,7 +63,7 @@ async def test_unconfigured_activities_cannot_fake_success():
 
 
 async def test_restore_rejects_non_scratch_targets_before_external_access(tmp_path):
-    from autoeval.backup import restore_backup
+    from autoeval.infrastructure.backup import restore_backup
 
     with pytest.raises(ValueError, match="database"):
         await restore_backup(
@@ -85,12 +85,12 @@ async def test_restore_rejects_non_scratch_targets_before_external_access(tmp_pa
 def test_readiness_does_not_claim_success_when_dependencies_fail(monkeypatch):
     from unittest.mock import AsyncMock
 
-    monkeypatch.setattr("autoeval.api.Client.connect", AsyncMock(side_effect=OSError("offline")))
+    monkeypatch.setattr("autoeval.entrypoints.api.Client.connect", AsyncMock(side_effect=OSError("offline")))
 
     def unavailable(*args, **kwargs):
         raise OSError("storage offline")
 
-    monkeypatch.setattr("autoeval.api.boto3.client", unavailable)
+    monkeypatch.setattr("autoeval.entrypoints.api.boto3.client", unavailable)
     settings = Settings(
         environment="test",
         dependency_timeout_seconds=0.1,

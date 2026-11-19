@@ -8,7 +8,7 @@ from pathlib import Path
 
 from sqlalchemy import inspect, text
 
-from autoeval.api import create_app
+from autoeval.entrypoints.api import create_app
 
 TEST = re.compile(r"^(?:TEST-|test-|fixture-|browser-|model-browser-|navigation-|pipeline-)")
 EXCLUDED = {"outbox", "execution_lease", "planning_capacity_lease"}

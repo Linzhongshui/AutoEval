@@ -67,35 +67,35 @@ services:
     profiles: ["tools"]
   dispatcher:
     <<: *backend
-    command: ["python", "-m", "autoeval.dispatcher"]
+    command: ["python", "-m", "autoeval.entrypoints.dispatcher"]
     profiles: ["workers"]
   workflow-worker:
     <<: *backend
-    command: ["python", "-m", "autoeval.worker", "workflow"]
+    command: ["python", "-m", "autoeval.entrypoints.worker", "workflow"]
     profiles: ["workers"]
   io-worker:
     <<: *backend
-    command: ["python", "-m", "autoeval.worker", "io"]
+    command: ["python", "-m", "autoeval.entrypoints.worker", "io"]
     profiles: ["workers"]
   result-worker:
     <<: *backend
-    command: ["python", "-m", "autoeval.worker", "result"]
+    command: ["python", "-m", "autoeval.entrypoints.worker", "result"]
     profiles: ["workers"]
   monitored-worker:
     <<: *backend
-    command: ["python", "-m", "autoeval.worker", "monitored"]
+    command: ["python", "-m", "autoeval.entrypoints.worker", "monitored"]
     profiles: ["workers"]
   planning-worker:
     <<: *backend
-    command: ["python", "-m", "autoeval.planning_worker"]
+    command: ["python", "-m", "autoeval.planning.planning_worker"]
     profiles: ["workers"]
   planning-execution-worker:
     <<: *backend
-    command: ["python", "-m", "autoeval.worker", "planning-execution"]
+    command: ["python", "-m", "autoeval.entrypoints.worker", "planning-execution"]
     profiles: ["workers"]
   reconciler:
     <<: *backend
-    command: ["python", "-m", "autoeval.reconciler"]
+    command: ["python", "-m", "autoeval.entrypoints.reconciler"]
     profiles: ["workers"]
 volumes:
   executor-work:

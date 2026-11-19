@@ -52,8 +52,8 @@ AutoEval 是面向单团队、单工作空间的模型测评平台。通过统�
 cd backend
 uv sync --frozen --python 3.12
 uv run alembic upgrade head
-uv run python -m autoeval.bootstrap storage
-uv run uvicorn autoeval.api:app --host 127.0.0.1 --port 8000
+uv run python -m autoeval.infrastructure.bootstrap storage
+uv run uvicorn autoeval.entrypoints.api:app --host 127.0.0.1 --port 8000
 ```
 
 API 文档：`http://127.0.0.1:8000/docs`。`/health/live` 检查进程存活，`/health/ready` 检查数据库、Temporal 和对象存储。
@@ -64,12 +64,12 @@ API 文档：`http://127.0.0.1:8000/docs`。`/health/live` 检查进程存活，
 
 | 进程 | 命令 |
 | --- | --- |
-| 持久化任务分发 | `uv run python -m autoeval.dispatcher` |
-| 测评工作流 | `uv run python -m autoeval.worker workflow` |
-| 预检与规划协调 | `uv run python -m autoeval.planning_worker` |
-| 测评执行活动 | `uv run python -m autoeval.worker planning-execution` |
-| 状态对账 | `uv run python -m autoeval.reconciler` |
-| Harbor 轨迹导入（启用 Langfuse 时） | `uv run python -m autoeval.worker langfuse` |
+| 持久化任务分发 | `uv run python -m autoeval.entrypoints.dispatcher` |
+| 测评工作流 | `uv run python -m autoeval.entrypoints.worker workflow` |
+| 预检与规划协调 | `uv run python -m autoeval.planning.planning_worker` |
+| 测评执行活动 | `uv run python -m autoeval.entrypoints.worker planning-execution` |
+| 状态对账 | `uv run python -m autoeval.entrypoints.reconciler` |
+| Harbor 轨迹导入（启用 Langfuse 时） | `uv run python -m autoeval.entrypoints.worker langfuse` |
 
 结果收集、独立分析和旧兼容路径所需角色见[后端说明](backend/README.md)。默认规划协调仅处理 `preflight,plan`；吞吐探测与独立分析需单独配置并明确授权，不能为补齐页面数据自动触发。
 

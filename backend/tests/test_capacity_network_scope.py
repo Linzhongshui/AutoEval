@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 from autoeval.evaluation.service import fits
-from autoeval.task_monitor import freshness
+from autoeval.evaluation.task_monitor import freshness
 
 
 def resource(networks=None):

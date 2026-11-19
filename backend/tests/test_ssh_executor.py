@@ -7,8 +7,13 @@ import paramiko
 import pytest
 from pydantic import SecretStr, ValidationError
 
-from autoeval.secrets import FileSecretStore
-from autoeval.ssh_executor import PinnedHostKey, SSHConnection, SSHExecutor, load_private_key
+from autoeval.infrastructure.secrets import FileSecretStore
+from autoeval.resources.ssh_executor import (
+    PinnedHostKey,
+    SSHConnection,
+    SSHExecutor,
+    load_private_key,
+)
 
 
 def connection(**updates):

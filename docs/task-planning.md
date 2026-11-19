@@ -14,11 +14,11 @@
 cd backend
 uv sync --frozen
 uv run alembic upgrade head
-uv run python -m autoeval.planning_worker
+uv run python -m autoeval.planning.planning_worker
 # 另开终端，启动通用执行活动；还需原有 workflow worker 与 dispatcher。
-uv run python -m autoeval.worker planning-execution
-uv run python -m autoeval.worker workflow
-uv run python -m autoeval.dispatcher
+uv run python -m autoeval.entrypoints.worker planning-execution
+uv run python -m autoeval.entrypoints.worker workflow
+uv run python -m autoeval.entrypoints.dispatcher
 ```
 
 迁移为 `0027_task_planning`，接续 `0026_run_monitor`。先升级数据库和 worker，再重启 API。现有 .env 不需要覆盖。
@@ -135,7 +135,7 @@ PlanInput：target_id、resource_id、resource_kind（docker_local/customer_ssh�
 
 客户 SSH 资源必须通过服务端 `AE_PLANNING_CONTAINER_CONFIG` 指向受保护 JSON：键为资源 UUID，值为 `{container_id, image_id}`，两个值都为完整 Docker 身份；缺少绑定拒绝执行，不回退 SSH 宿主机。开发本机配置为 `.secrets/planning-containers.json`，禁止提交凭据或受保护文件。
 
-平台 `python -m autoeval.planning_worker` 只承担持久化协调，计算与探测通过固定指纹 SSH 调用 docker exec，在指定已存在容器中运行。独立部署目录 `/tmp/autoeval-planning-runtime/<sha256>` 包含作业控制、计算模块、同源参数校验和固定提交 Planner 包及版本元数据；部署逐文件校验回读，不替换共享 AISBench。单作业使用独立 UUID、进程身份与追加式结果；不确定提交只查询，不盲目重发。规划结果归档后按所有权清理，取消使用原作业进程组。
+平台 `python -m autoeval.planning.planning_worker` 只承担持久化协调，计算与探测通过固定指纹 SSH 调用 docker exec，在指定已存在容器中运行。独立部署目录 `/tmp/autoeval-planning-runtime/<sha256>` 包含作业控制、计算模块、同源参数校验和固定提交 Planner 包及版本元数据；部署逐文件校验回读，不替换共享 AISBench。单作业使用独立 UUID、进程身份与追加式结果；不确定提交只查询，不盲目重发。规划结果归档后按所有权清理，取消使用原作业进程组。
 
 默认 `AE_PLANNING_JOB_KINDS=preflight,plan`，不会消费历史待执行探测。确认逐条遗留任务与预算后才能显式启用 probe；禁用不等于取消，历史记录保持不变。Docker 本地适配路径仍保留兼容，客户 SSH 路径强制选择绑定容器。
 

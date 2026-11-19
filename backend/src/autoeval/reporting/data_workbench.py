@@ -9,10 +9,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, model_validator
 from sqlalchemy import select
 
-from autoeval.audit import AuditEvent
 from autoeval.catalog.dataset_identity import report_dataset
 from autoeval.evaluation.models import EvaluationReport
-from autoeval.models import RunSnapshot
+from autoeval.infrastructure.audit import AuditEvent
+from autoeval.infrastructure.models import RunSnapshot
 from autoeval.reporting.models import LeaderboardRecord
 from autoeval.reporting.report_integrity import verified_report_body
 
@@ -105,7 +105,7 @@ def audit(session, request, row, action, reason):
 async def validate_report(request, session, entry):
     if entry.source_type != "report":
         return
-    from autoeval.models import EvaluationRun
+    from autoeval.infrastructure.models import EvaluationRun
 
     report = await session.get(EvaluationReport, entry.report_id)
     if report is None:

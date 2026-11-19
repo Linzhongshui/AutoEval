@@ -10,17 +10,17 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from autoeval import monitored_execution, task_monitor
-from autoeval.cleanup import ExecutionCleanup
-from autoeval.config import Settings
-from autoeval.datasets import canonical_manifest
-from autoeval.evaluations import EvaluationReport
-from autoeval.models import EvaluationRun, RunEvent, RunSnapshot
-from autoeval.registry import Asset, AssetVersion
-from autoeval.runs import ExecutionLease
-from autoeval.secrets import FileSecretStore
-from autoeval.targets import TargetBinding
-from autoeval.task_monitor import MonitorBinding, normalize
+from autoeval.catalog.datasets import canonical_manifest
+from autoeval.catalog.registry import Asset, AssetVersion
+from autoeval.evaluation import monitored_execution, task_monitor
+from autoeval.evaluation.evaluations import EvaluationReport
+from autoeval.evaluation.runs import ExecutionLease
+from autoeval.evaluation.task_monitor import MonitorBinding, normalize
+from autoeval.infrastructure.cleanup import ExecutionCleanup
+from autoeval.infrastructure.config import Settings
+from autoeval.infrastructure.models import EvaluationRun, RunEvent, RunSnapshot
+from autoeval.infrastructure.secrets import FileSecretStore
+from autoeval.resources.models import TargetBinding
 
 
 class FakeGateway:

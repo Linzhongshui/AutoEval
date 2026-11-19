@@ -10,12 +10,12 @@ from pathlib import PurePosixPath
 
 from sqlalchemy import select, text
 
-from autoeval.audit import AuditEvent
 from autoeval.catalog.datasets import canonical_manifest, read_manifest, write_manifest
-from autoeval.config import get_settings
-from autoeval.db import create_database
 from autoeval.evaluation.models import ResultArchiveRevision
-from autoeval.langfuse_integration import TraceImport, import_configured, intent
+from autoeval.infrastructure.audit import AuditEvent
+from autoeval.infrastructure.config import get_settings
+from autoeval.infrastructure.db import create_database
+from autoeval.reporting.langfuse_integration import TraceImport, import_configured, intent
 from autoeval.reporting.models import CaseExecutionRecord
 
 FILES = {"result.json", "verifier/reward.json", "agent/trajectory.json"}
@@ -110,9 +110,9 @@ async def recover(args):
             if not owned:
                 raise ValueError("Trace recovery already running")
             async with sessions() as db:
-                from autoeval.models import RunSnapshot
+                from autoeval.infrastructure.models import RunSnapshot
+                from autoeval.infrastructure.secrets import FileSecretStore
                 from autoeval.resources.targets import TargetBinding
-                from autoeval.secrets import FileSecretStore
 
                 snapshot = await db.scalar(select(RunSnapshot).where(RunSnapshot.run_id == run_id))
                 target = await db.get(

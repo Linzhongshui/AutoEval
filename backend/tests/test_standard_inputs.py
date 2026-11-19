@@ -15,10 +15,8 @@ from pydantic import ValidationError
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
-from autoeval.api import create_app
-from autoeval.config import Settings
-from autoeval.import_standard_inputs import read_directory
-from autoeval.standard_inputs import (
+from autoeval.catalog.import_standard_inputs import read_directory
+from autoeval.catalog.standard_inputs import (
     ADAPTOR_REVISION,
     Bundle,
     CompileInput,
@@ -27,6 +25,8 @@ from autoeval.standard_inputs import (
     discover,
     merge,
 )
+from autoeval.entrypoints.api import create_app
+from autoeval.infrastructure.config import Settings
 
 FIXTURE = Path(__file__).parent / "fixtures/standard_inputs/upstream.json"
 
@@ -238,7 +238,7 @@ async def test_postgres_concurrent_import_conflict_and_immutable_history():
             assert suggestion.json()["data"]["requires_confirmation"]
             before = (await client.get(base + f"/{identifier}")).json()["data"]
             assert before["compilations"] == []
-            from autoeval.registry import Asset
+            from autoeval.catalog.registry import Asset
 
             source_name = before["source_model"]
             async with app.state.sessions() as session, session.begin():

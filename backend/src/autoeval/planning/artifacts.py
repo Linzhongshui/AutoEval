@@ -3,11 +3,9 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
-from autoeval.datasets import canonical_manifest, write_manifest
+from autoeval.catalog.datasets import canonical_manifest, write_manifest
+from autoeval.catalog.standard_inputs import digest
 from autoeval.evaluation.inputs import selection_identity
-from autoeval.standard_inputs import (
-    digest,
-)
 
 
 async def artifact(session, settings, kind, payload):

@@ -2,7 +2,7 @@ import hashlib
 
 import pytest
 
-from autoeval.aisbench_native import verify_source
+from autoeval_runtime.aisbench_native import verify_source
 
 
 def test_changed_or_extra_python_source_rejects_native_execution(tmp_path):

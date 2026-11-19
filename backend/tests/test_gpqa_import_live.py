@@ -8,11 +8,11 @@ from types import SimpleNamespace
 import pytest
 from sqlalchemy import select
 
-from autoeval.config import get_settings
-from autoeval.datasets import read_manifest
-from autoeval.db import create_database
-from autoeval.import_gpqa import import_dataset
-from autoeval.registry import AssetVersion
+from autoeval.catalog.datasets import read_manifest
+from autoeval.catalog.import_gpqa import import_dataset
+from autoeval.catalog.registry import AssetVersion
+from autoeval.infrastructure.config import get_settings
+from autoeval.infrastructure.db import create_database
 from autoeval.resources import ResourceBinding
 
 pytestmark = pytest.mark.skipif(
@@ -40,7 +40,7 @@ async def test_reimport_preserves_ids_and_bundle_matches_manifest():
         assert bundle["source_sha256"] == result["source_csv_sha256"]
         assert len({s["sample_id"] for s in bundle["samples"]}) == 198
         # Query the exact immutable object, not a locally reconstructed CSV slice.
-        from autoeval.datasets import DatasetManifest
+        from autoeval.catalog.datasets import DatasetManifest
 
         async with sessions() as session:
             lite = await session.get(DatasetManifest, uuid.UUID(result["lite_manifest_id"]))

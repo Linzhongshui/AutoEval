@@ -356,8 +356,19 @@ async def test_native_tool_isolated_over_ssh(family, subcommand):
         assert observed.state == "succeeded", observed.reason
         result = (await adapter.collect(job))["result"]
         assert result.get("tool_exit_code", 0) == 0
-        cases = result["unified_result"]["cases"]
-        assert {case["sample_id"] for case in cases} == set(fixture["expected_sample_ids"])
+        from autoeval.catalog.datasets import canonical_manifest
+        from autoeval.reporting.result_identity import normalize_result_identities
+        from autoeval.reporting.unified_outputs import parse_output
+
+        dataset = fixture["dataset"]
+        samples = fixture["samples"]
+        normalized = normalize_result_identities(
+            result["unified_result"], dataset, spec["compilation"]["config"], samples
+        )
+        expected = {dataset: [sample["sample_id"] for sample in samples]}
+        cases, summary = parse_output(canonical_manifest(normalized), expected, dataset)
+        assert {case["sample_id"] for case in cases} == set(expected[dataset])
+        assert summary["validity"] == "complete"
     finally:
         assert await adapter.remove()
 

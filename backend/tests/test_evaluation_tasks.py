@@ -215,7 +215,10 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                         concurrency=t.get("concurrency") or 1,
                         assigned_resource_id=inputs["resource_id"],
                         assigned_resource_kind=inputs["resource_kind"],
-                        execution_template=template,
+                        execution_template={
+                            **template,
+                            "family": "harbor" if t["dataset"] == "DeepSWE" else "aisbench",
+                        },
                         samples=[{"sample_id": "0"}],
                         manifest_sha256="a" * 64,
                         tool={},
@@ -232,10 +235,12 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                     payload={
                         "execution_ready": True,
                         "execution_templates": {
-                            task["task_id"]: template for task in inputs["tasks"]
+                            task["task_id"]: task["execution_template"] for task in inputs["tasks"]
                         },
                         "planner_ready": False,
-                        "supported_datasets": ["GPQA", "MMMU-Pro"],
+                        "supported_datasets": [task["dataset"] for task in inputs["tasks"]],
+                        "node_id": "postgres-fixture-node",
+                        "network_available": 16,
                         "cpu_cores": 16,
                         "mem_mb": 65536,
                         "disk_gb": 100,
@@ -471,6 +476,57 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                     )
                     assert event.details["previous_result"]["remote_check"]["state"] == "unknown"
                 assert adapter.submits == 0
+
+                from unittest.mock import AsyncMock
+
+                from autoeval.evaluation import isolated_cleanup, orchestration
+                from autoeval.evaluation.models import CapacityLease
+                from autoeval.planning.planning_transport import HarborDaemonUnavailable
+
+                harbor = submission(("DeepSWE",))
+                harbor.update(target_id=target_id, resource_id=resource_id)
+                accepted = await send("r13-harbor-start-failure", harbor)
+                assert accepted.status_code == 202, accepted.text
+                harbor_id = uuid.UUID(accepted.json()["data"]["run_id"])
+                container_id = "d" * 64
+                remote = SimpleNamespace(
+                    ensure=AsyncMock(side_effect=HarborDaemonUnavailable(container_id)),
+                    submit=AsyncMock(),
+                    remove=AsyncMock(return_value=True),
+                )
+                execution_transport = AsyncMock(return_value=remote)
+                cleanup_transport = AsyncMock(return_value=remote)
+                monkeypatch.setattr(orchestration, "isolated_transport", execution_transport)
+                monkeypatch.setattr(isolated_cleanup, "isolated_transport", cleanup_transport)
+                monkeypatch.setattr(
+                    orchestration, "execution_template", lambda *a: {**template, "family": "harbor"}
+                )
+                monkeypatch.setattr(orchestration.FileSecretStore, "get", lambda *a: "test-only")
+                monkeypatch.setattr(
+                    "autoeval.billing.transport.execution_route", lambda *a, **kw: None
+                )
+                monkeypatch.setattr(orchestration, "write_manifest", lambda *a: None)
+                monkeypatch.setattr(
+                    "autoeval.reporting.task_reports.publish_task_report", AsyncMock()
+                )
+                async with asyncio.timeout(10):
+                    await orchestration.execute(app.state.sessions, settings, harbor_id)
+                remote.ensure.assert_awaited_once()
+                remote.submit.assert_not_awaited()
+                remote.remove.assert_awaited_once()
+                assert cleanup_transport.await_args.kwargs["container_id"] == container_id
+
+                async with app.state.sessions() as session:
+                    run = await session.get(EvaluationRun, harbor_id)
+                    child = await session.scalar(
+                        select(DatasetExecution).where(DatasetExecution.run_id == harbor_id)
+                    )
+                    environment = await session.get(DatasetExecutionEnvironment, child.id)
+                    lease = await session.scalar(
+                        select(CapacityLease).where(CapacityLease.owner_id == child.id)
+                    )
+                    assert run.state == child.state == "failed"
+                    assert environment.state == "cleaned" and lease.released
     finally:
         await admin.execute(f'DROP DATABASE "{database}"')
         await admin.close()

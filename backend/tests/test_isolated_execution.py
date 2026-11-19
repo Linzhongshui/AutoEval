@@ -255,6 +255,8 @@ def execute(folder, spec):
     time.sleep(tool["delay"])
     if tool["fail"]:
         raise RuntimeError("fixture failure")
+    print("x" * (1024 * 1024 + 1))
+    print("fixture-log:" + folder.name)
     return {"family": tool["family"], "child_id": folder.name, "model_called": False}
 """
 
@@ -294,6 +296,12 @@ def execute(folder, spec):
             "child_id": right_key,
             "model_called": False,
         }
+
+        if ssh_config:
+            log = await right.collect_log(right_job)
+            assert len(log["content"]) > 1024 * 1024
+            assert log["content"].endswith("fixture-log:" + right_key + "\n")
+            assert log["truncated"] is False
 
         await failed.ensure()
         failed_job = await failed.submit(spec(1, fail=True), failed_key)

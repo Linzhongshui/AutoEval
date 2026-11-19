@@ -166,54 +166,53 @@ class PlanningRemoteContainer(DockerExecutor):
         return await read_container_progress(self, job)
 
     async def collect_log(self, job):
-        """Read only this owned job's tool log before its files are cleaned."""
+        """Read the owned job's bounded log tail through host SFTP."""
         import uuid
 
         key = str(uuid.UUID(job.submission_key))
-        script = (
-            "import pathlib,sys,json;p=pathlib.Path(sys.argv[1]);"
-            "assert not p.is_symlink();p=p if p.is_file() else p.with_name('output.log');assert not p.is_symlink();raw=p.read_bytes() if p.is_file() else b'';"
-            "print(json.dumps({'content':raw[-2097152:].decode('utf-8',errors='replace'),"
-            "'truncated':len(raw)>2097152}))"
+        script = """
+import json
+import pathlib
+import sys
+p = pathlib.Path(sys.argv[1])
+assert not p.is_symlink()
+p = p if p.is_file() else p.with_name('output.log')
+assert not p.is_symlink()
+limit = 2 * 1024 * 1024
+raw = b''
+size = 0
+if p.is_file():
+    with p.open('rb') as stream:
+        size = stream.seek(0, 2)
+        stream.seek(max(0, size - limit))
+        raw = stream.read(limit)
+print(json.dumps({'content': raw.decode('utf-8', errors='replace'), 'truncated': size > limit}))
+"""
+        return await self._read_staged_json(
+            key,
+            ["docker", "exec", self.container_id, "python3", "-c", script,
+             self.remote_dir + "/jobs/" + key + "/tool.log"],
         )
-        raw = await asyncio.to_thread(
-            self.command,
-            [
-                "exec",
-                self.container_id,
-                "python3",
-                "-c",
-                script,
-                self.remote_dir + "/jobs/" + key + "/tool.log",
-            ],
-        )
-        return json.loads(raw)
 
     async def collect(self, job):
         """Stage large results in a host file before transfer instead of capped stdout."""
         import uuid
 
         key = str(uuid.UUID(job.submission_key))
-        path = f"/tmp/autoeval-collect-{key}-{uuid.uuid4().hex}.json"
-        command = (
-            "umask 077; set -C; "
-            + shlex.join(
-                [
-                    "docker",
-                    "exec",
-                    self.container_id,
-                    "env",
-                    "PYTHONPATH=" + self.remote_dir + "/deps",
-                    "AE_JOB_ROOT=" + self.remote_dir + "/jobs",
-                    "python3",
-                    self.remote_dir + "/job_runtime.py",
-                    "collect",
-                    key,
-                ]
-            )
-            + " > "
-            + shlex.quote(path)
+        return await self._read_staged_json(
+            key,
+            ["docker", "exec", self.container_id, "env",
+             "PYTHONPATH=" + self.remote_dir + "/deps",
+             "AE_JOB_ROOT=" + self.remote_dir + "/jobs",
+             "python3", self.remote_dir + "/job_runtime.py", "collect", key],
         )
+
+    async def _read_staged_json(self, key, arguments):
+        import uuid
+
+        path = f"/tmp/autoeval-collect-{key}-{uuid.uuid4().hex}.json"
+        command = "umask 077; set -C; " + shlex.join(arguments) + " > " + shlex.quote(path)
+        limit = 16 * 1024 * 1024
 
         def read():
             with self.control.connect() as client:
@@ -223,9 +222,11 @@ class PlanningRemoteContainer(DockerExecutor):
                         entry = sftp.lstat(path)
                         if not stat.S_ISREG(entry.st_mode):
                             raise ValueError("Result must be a regular file")
+                        if entry.st_size > limit:
+                            raise ValueError("Result too large")
                         with sftp.open(path, "rb") as stream:
-                            raw = stream.read(16 * 1024 * 1024 + 1)
-                    if len(raw) > 16 * 1024 * 1024:
+                            raw = stream.read(limit + 1)
+                    if len(raw) > limit:
                         raise ValueError("Result too large")
                     return json.loads(raw)
                 finally:

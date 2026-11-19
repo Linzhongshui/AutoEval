@@ -169,3 +169,59 @@ async def test_failed_removal_retains_lease_until_reconciled(monkeypatch):
     assert remove.await_count == 2
     assert release.await_count == 1
     assert release.await_args.args[1] == owner
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("family", ["peir", "agentx"])
+async def test_tool_dispatch_contract_with_real_docker(family):
+    import asyncio
+    import os
+    import subprocess
+    from contextlib import nullcontext
+
+    image = os.getenv("AE_ISOLATED_TEST_IMAGE")
+    if not image:
+        pytest.skip("Set AE_ISOLATED_TEST_IMAGE to a local Python image ID")
+
+    def command(_, argv, payload=None):
+        return subprocess.run(
+            argv, input=payload, capture_output=True, check=True, timeout=20
+        ).stdout
+
+    def executor():
+        owner = uuid4()
+        connection = SimpleNamespace(workdir="/tmp", owner_id=owner)
+        adapter = IsolatedPlanningContainer(
+            connection, owner, {"family": family, "image_id": image}
+        )
+        adapter.control = SimpleNamespace(command=command, connect=nullcontext)
+        return adapter, str(owner)
+
+    async def wait_for(adapter, job, desired):
+        for _ in range(50):
+            if (await adapter.status(job)).state == desired:
+                return
+            await asyncio.sleep(0.1)
+        pytest.fail(f"{family} fixture did not enter {desired}")
+
+    left, left_key = executor()
+    right, right_key = executor()
+    try:
+        assert await left.ensure() != await right.ensure()
+        running = {"kind": "framework_smoke", "duration_seconds": 20}
+        quick = {"kind": "framework_smoke", "duration_seconds": 2}
+        left_job = await left.submit(running, left_key)
+        right_job = await right.submit(quick, right_key)
+        await wait_for(left, left_job, "running")
+        await wait_for(right, right_job, "running")
+        await left.cancel(left_job, "fixture-cancel")
+        await wait_for(left, left_job, "cancelled")
+        assert await left.remove()
+
+        await wait_for(right, right_job, "succeeded")
+        from autoeval.resources.docker_executor import DockerExecutor
+
+        result = await DockerExecutor.collect(right, right_job)
+        assert result["result"]["model_called"] is False
+    finally:
+        await asyncio.gather(left.remove(), right.remove())

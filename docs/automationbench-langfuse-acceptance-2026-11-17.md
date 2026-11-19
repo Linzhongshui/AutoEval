@@ -51,13 +51,13 @@ ATIF 未提供逐步时间戳；Langfuse 展示的约 0.04 秒不是模型或工
 
 后端全量 pytest、Ruff、前端 typecheck / build，以及 Chrome 平台 → Langfuse 新标签页真实交互已执行。最终全量结果为 312 passed / 121 skipped，Ruff 通过，前端 typecheck 与 build 通过，真实 Chrome 跳转测试 1 passed。fork 命名评分与转换相关测试 27 项通过；曾尝试整个 fork 测试集，Windows 下为 100 passed / 17 failed，失败涉及路径转义、默认 GBK 与 Unix 权限假设，未将该结果宣称全量通过，Linux 全量尚未运行。
 
-- [真实轨迹与摘要核对](../deliverables/automationbench-real-trace-evidence.json)
-- [已有产物只读重解析](../deliverables/automationbench-score-reparse-evidence.txt)
-- [实际请求次数审计](../deliverables/automationbench-request-audit-summary.json)
-- [Langfuse 真实命名评分](../deliverables/automationbench-langfuse-scores.jsonl)
-- [固定产物失败恢复](../deliverables/automationbench-fixture-recovery-evidence.json)
+- [真实轨迹与摘要核对](evidence/automationbench-real-trace-evidence.json)
+- [已有产物只读重解析](evidence/automationbench-score-reparse-evidence.txt)
+- [实际请求次数审计](evidence/automationbench-request-audit-summary.json)
+- [Langfuse 真实命名评分](evidence/automationbench-langfuse-scores.jsonl)
+- [固定产物失败恢复](evidence/automationbench-fixture-recovery-evidence.json)
 - [平台跳转截图](../deliverables/automationbench-langfuse-platform.png)
-- [真实 agent 工具树截图](../deliverables/automationbench-langfuse-trace.png)
+- [真实 agent 工具树截图](https://github.com/llauren48/AutoEval-Platform/blob/1faf83a0d78d880324280f7d9e2656291ce00734/deliverables/automationbench-langfuse-trace.png)
 
 后续若要判定修复后的“新真实任务 completed → 报告样本明细 → Trace”全链路通过，需要新的模型执行授权；本轮不自动扩样或重跑。
 
@@ -81,6 +81,6 @@ ATIF 未提供逐步时间戳；Langfuse 展示的约 0.04 秒不是模型或工
 
 本次从相同原生产物生成私有正文 Trace `b48a5cdee574516489fa28c8e911b89c`，确认导入后更新该 attempt 的平台链接并追加模式切换审计。仍为 105 个唯一节点：38 generation、66 tool、1 root。35 条非空模型回复、66 个工具参数和 66 个工具输出与 ATIF 一致，38 条 reasoning_content 与对应节点 Attributes 一致；其余 3 条回复原本为空字符串，Langfuse 表示为 null，未补造文本。
 
-模式固定、正文保留与跨模式身份隔离回归通过，后端全量 315 passed / 123 skipped，Ruff、前端类型检查 / 构建通过。私有正文的未登录回跳、已登录直达和匿名权限隔离浏览器检查 **3 passed**。本次没有新增模型请求，原任务 failed 历史及成绩未改动。数值与摘要验证见 [正文内容核对](../deliverables/automationbench-full-content-verification.json)，正文截图保留本地 `.screenshots/`，不进入公开交付截图。
+模式固定、正文保留与跨模式身份隔离回归通过，后端全量 315 passed / 123 skipped，Ruff、前端类型检查 / 构建通过。私有正文的未登录回跳、已登录直达和匿名权限隔离浏览器检查 **3 passed**。本次没有新增模型请求，原任务 failed 历史及成绩未改动。数值与摘要验证见 [正文内容核对](evidence/automationbench-full-content-verification.json)，正文截图保留本地 `.screenshots/`，不进入公开交付截图。
 
-新默认模式通过真实 Outbox / Temporal / Langfuse worker 补验：simulation run `66cfc03a-c7ca-4520-9af0-c128db705b41` 的两个有效尝试自动导入成功，另两个为 missing / failed，4 条记录均冻结 content_mode=full；原样重复归档未产生额外 attempt。此项为固定产物联调，模型请求为 0，见 [worker 核对记录](../deliverables/automationbench-full-mode-worker-verification.json)。真实正文评分 `reward.accuracy=1.0` 的 ClickHouse FINAL 记录数仍为 1。API、planning、planning-execution、Langfuse worker 的 full 相关补丁镜像为 `sha256:3adb33cad49d620f20c3725b77863bf34d30b600488371e4a7a2c18b6342a981`，不代表其他历史 worker 已统一升级为最新主分支。
+新默认模式通过真实 Outbox / Temporal / Langfuse worker 补验：simulation run `66cfc03a-c7ca-4520-9af0-c128db705b41` 的两个有效尝试自动导入成功，另两个为 missing / failed，4 条记录均冻结 content_mode=full；原样重复归档未产生额外 attempt。此项为固定产物联调，模型请求为 0，见 [worker 核对记录](evidence/automationbench-full-mode-worker-verification.json)。真实正文评分 `reward.accuracy=1.0` 的 ClickHouse FINAL 记录数仍为 1。API、planning、planning-execution、Langfuse worker 的 full 相关补丁镜像为 `sha256:3adb33cad49d620f20c3725b77863bf34d30b600488371e4a7a2c18b6342a981`，不代表其他历史 worker 已统一升级为最新主分支。

@@ -35,6 +35,6 @@
 
 ## 证据与边界
 
-原始录屏、截图、请求路径及JSON：.screenshots/probe-real-acceptance-20261116/ 和 .screenshots/probe-paid-acceptance-20261116/。合并录屏：deliverables/probe-acceptance-20261116.mp4，两阶段拼接，中间有间隔。无密钥进入画面。
+原始录屏、截图、请求路径及JSON：.screenshots/probe-real-acceptance-20261116/ 和 .screenshots/probe-paid-acceptance-20261116/。合并录屏：[历史录屏](https://github.com/llauren48/AutoEval-Platform/blob/1faf83a0d78d880324280f7d9e2656291ce00734/deliverables/probe-acceptance-20261116.mp4)，两阶段拼接，中间有间隔。无密钥进入画面。
 
 真实探测与自动估时链路通过不等于估时误差精度验收；自动估时仍受样本历史覆盖及输出假设影响。API和Worker运行于本地，调用客户服务器；本轮未发布服务器版本、未提交推送。

@@ -8,6 +8,6 @@
 
 环境修复：SSH资源绑定改为现存已验证的 autoeval-gpqa-525ed17-repair 容器，固定容器和镜像身份，备份旧绑定；planning-execution服务同步更换通过源码校验的Planner包。没有替换共享测评容器。
 
-录屏：deliverables/live-e2e-server-20261116.mp4。由三段真实浏览器录像拼接，非连续实时录制。第一次脚本提交后等待旧路由超时；保留同一个任务，随后恢复录制。任务启动前修复Worker的Planner包。补录只访问原任务、报告和榜单，不再次调用模型。视频不作为样本实时进度验收证据。
+录屏：[历史录屏](https://github.com/llauren48/AutoEval-Platform/blob/1faf83a0d78d880324280f7d9e2656291ce00734/deliverables/live-e2e-server-20261116.mp4)。由三段真实浏览器录像拼接，非连续实时录制。第一次脚本提交后等待旧路由超时；保留同一个任务，随后恢复录制。任务启动前修复Worker的Planner包。补录只访问原任务、报告和榜单，不再次调用模型。视频不作为样本实时进度验收证据。
 
 原始录像、截图、JSON验收结果和脚本：.screenshots/live-e2e-server-20261116/。未提交推送代码。

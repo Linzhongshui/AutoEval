@@ -17,7 +17,7 @@
 
 ## 部署与网络
 
-发布与校验信息见[机器可读记录](../deliverables/budget-enforcement-validation-20261117.json)。服务器目录为 `/home/chenluwen/autoeval-platform/budget-bridge-20261117/`，持久化部署使用已有 Compose 配置加 `compose-runtime.json`；后台配置通过只读受保护目录挂载。
+发布与校验信息见[机器可读记录](evidence/budget-enforcement-validation-20261117.json)。服务器目录为 `/home/chenluwen/autoeval-platform/budget-bridge-20261117/`，持久化部署使用已有 Compose 配置加 `compose-runtime.json`；后台配置通过只读受保护目录挂载。
 
 私有代理容器 `autoeval-budget-gateway-20261117` 不发布宿主端口；使用独立内部网络 `autoeval-budget-execution`。现有测评容器未被重建或替换。服务器 nftables 增加三条接口及地址限定的转发许可：GPQA、分析容器至代理 18080，代理至平台数据库 5432；没有放宽全局策略或对公网开端口。无效的临时 rich rule 已移除。
 

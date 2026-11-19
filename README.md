@@ -124,7 +124,7 @@ backend/migrations/      Alembic 数据库迁移
 backend/tests/           单元、基础设施与浏览器检查
 deploy/                  容器、远程部署与客户端配置
 docs/                    接入、设计、验收与恢复说明
-deliverables/            已核对的截图、录屏与验收摘要
+deliverables/            各功能截图与最新演示录屏
 ```
 
 本地草稿、凭据、备份与调试产物按 `.gitignore` 保留在工作区。`deliverables/` 用于存放已核对的交付材料。
@@ -139,6 +139,6 @@ deliverables/            已核对的截图、录屏与验收摘要
 | 报告与榜单 | [数据工作台](docs/data-workbench.md)、[最优成绩选择](docs/leaderboard-best-selection.md)、[原生进度与输入输出](docs/progress-native-fix-2026-11-16.md) |
 | Langfuse | [配置与访问](docs/langfuse-integration.md)、[服务器部署历史](docs/langfuse-server-validation-2026-11-16.md)、[真实轨迹验收](docs/automationbench-langfuse-acceptance-2026-11-17.md) |
 | 部署与恢复 | [持久化与恢复](docs/development-recovery.md)、[内网发布操作](deploy/intranet/README.md) |
-| 验收与展示 | [GPQA 20 题验收及录屏](docs/live-e2e-gpqa20-2026-11-16.md)、[AutomationBench 平台截图](deliverables/automationbench-langfuse-platform.png)、[免登录轨迹截图](deliverables/automationbench-langfuse-public-trace.png) |
+| 验收与展示 | [最新全流程录屏](deliverables/AutoEval-official-full-flow-final.mp4)、[GPQA 20 题验收](docs/live-e2e-gpqa20-2026-11-16.md)、[AutomationBench 平台截图](deliverables/automationbench-langfuse-platform.png)、[免登录轨迹截图](deliverables/automationbench-langfuse-public-trace.png) |
 
 早期版本限制、按日期追加的开发记录和页面预览已移至[整理前 README 历史快照](docs/readme-history-2026-11-17.md)。历史快照只用于追溯，不能代替当前运行说明及分项验收。

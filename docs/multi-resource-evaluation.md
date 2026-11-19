@@ -14,4 +14,4 @@
 
 另外通过真实 SSH 在两个容器分别运行 framework_smoke：相同提交键返回相同作业，重建适配器后可恢复查询，结果明确 model_called=false；成功作业与取消作业均确认清理。本次为容器协议测试，不是通过 Temporal 执行完整多数据集测评，也没有创建新模型任务。真实多数据集模型调用、故障注入、报告生成及入榜仍未在本轮验收。
 
-证据：[浏览器预检记录](../deliverables/multi-resource-validation-20261117.json)、[预检截图](../deliverables/multi-resource-preflight-20261117.png)、[容器生命周期测试](../deliverables/multi-resource-lifecycle-20261117.json)。
+证据：[浏览器预检记录](evidence/multi-resource-validation-20261117.json)、[预检截图](../deliverables/multi-resource-preflight-20261117.png)、[容器生命周期测试](evidence/multi-resource-lifecycle-20261117.json)。

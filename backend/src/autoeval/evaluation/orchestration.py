@@ -258,6 +258,14 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                         summary={**(child.summary or {}), "archive_pending": True},
                     )
                 continue
+            if state == "failed" and summary is None:
+                remote_reason = getattr(observation, "reason", None)
+                reason = (
+                    remote_reason
+                    if remote_reason in {"controlled_job_failed", "native_unified_result_missing_or_ambiguous"}
+                    else "native_execution_failed"
+                )
+                summary = {"validity": "failed", "reason": reason}
             await update_child(
                 sessions, child.id, state=state, summary=summary, finished_at=datetime.now(UTC)
             )

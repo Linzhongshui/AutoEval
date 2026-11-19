@@ -299,6 +299,8 @@ def verify_tool(spec):
 
 def controlled_failure_reason(spec, exc):
     if spec.get("kind") != "planner_probe":
+        if isinstance(exc, ValueError) and str(exc) == "Exactly one unified_result.json required":
+            return "native_unified_result_missing_or_ambiguous"
         return "controlled_job_failed"
     from autoeval_planner.errors import ProbeError
 

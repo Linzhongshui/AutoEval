@@ -680,7 +680,11 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                 failed_adapter = SimpleNamespace(
                     ensure=AsyncMock(return_value="1" * 64),
                     submit=AsyncMock(),
-                    status=AsyncMock(return_value=SimpleNamespace(state="failed")),
+                    status=AsyncMock(
+                        return_value=SimpleNamespace(
+                            state="failed", reason="native_unified_result_missing_or_ambiguous"
+                        )
+                    ),
                     remove=AsyncMock(side_effect=remove_failed_child),
                 )
                 successful_adapter = SimpleNamespace(
@@ -718,6 +722,11 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                     assert (
                         await session.get(DatasetExecution, owners["DeepSWE"])
                     ).state == "succeeded"
+                    failed_child = await session.get(DatasetExecution, owners["AutomationBench"])
+                    assert (
+                        failed_child.summary["reason"]
+                        == "native_unified_result_missing_or_ambiguous"
+                    )
                     for owner in owners.values():
                         environment = await session.get(DatasetExecutionEnvironment, owner)
                         lease = await session.scalar(

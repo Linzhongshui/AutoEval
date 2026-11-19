@@ -2,7 +2,6 @@
 
 import asyncio
 import uuid
-from itertools import batched
 from typing import Any
 
 from botocore.exceptions import BotoCoreError, ClientError
@@ -91,26 +90,29 @@ async def catalog(request: Request, offset: int = 0, limit: int = 20, summary_on
 
             jobs = {job.report_id: job for job in analyses}
 
+        semaphore = asyncio.Semaphore(8)
+
+        async def check(row):
+            async with semaphore:
+                return await verified_report_body(request.app.state.settings, *row)
+
+        evidence = await asyncio.gather(*(check(row) for row in selected))
         data = []
-        for batch in batched(selected, 8):
-            evidence = await asyncio.gather(
-                *(verified_report_body(request.app.state.settings, *row) for row in batch)
+        for row, (status, body) in zip(selected, evidence, strict=True):
+            job = jobs.get(row[0].id)
+            item = report_data(
+                *row,
+                baselines,
+                analysis_status=analysis_status_for(
+                    job,
+                    request.app.state.settings,
+                    execution_origin=row[0].execution_origin,
+                ),
+                analysis_id=job.id if job else None,
+                evidence_status=status,
             )
-            for row, (status, body) in zip(batch, evidence, strict=True):
-                job = jobs.get(row[0].id)
-                item = report_data(
-                    *row,
-                    baselines,
-                    analysis_status=analysis_status_for(
-                        job,
-                        request.app.state.settings,
-                        execution_origin=row[0].execution_origin,
-                    ),
-                    analysis_id=job.id if job else None,
-                    evidence_status=status,
-                )
-                attach_datasets(item, body, baselines, summary_only=summary_only)
-                data.append(item)
+            attach_datasets(item, body, baselines, summary_only=summary_only)
+            data.append(item)
 
     except SQLAlchemyError as exc:
         raise HTTPException(503, "Report catalog unavailable") from exc

@@ -65,6 +65,27 @@ def test_preflight_reports_tool_versions_paths_and_dataset_blockers(tmp_path, mo
     ]
 
 
+def test_harbor_preflight_reports_invalid_selection_before_acceptance(tmp_path, monkeypatch):
+    monkeypatch.setattr("autoeval_runtime.planning_runtime.verify_tool", lambda task: "a" * 40)
+    monkeypatch.setattr("autoeval_runtime.planning_runtime.check_tool_environment", lambda config: True)
+    monkeypatch.setattr("autoeval_runtime.planning_runtime.check_task_selection", lambda config: False)
+    task = {
+        "task_id": "deepswe",
+        "dataset": "DeepSWE",
+        "tool": {"revision": "a" * 40},
+        "compilation": {
+            "config": {"subcommand": "harbor_agent", "params": {"path": str(tmp_path)}},
+        },
+    }
+
+    checked = inspect_dataset(task, networks=1, validated=set())
+
+    assert checked["blocking_reasons"] == [
+        "dataset_not_validated",
+        "task_selection_preflight_failed",
+    ]
+
+
 @pytest.mark.parametrize(
     "mode",
     ["sse", "fallback", "missing_usage", "rate_limit", "auth", "timeout", "incompatible"],

@@ -93,6 +93,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         response = await call_next(request)
         response.headers["X-Request-ID"] = request.state.request_id
         response.headers["Server-Timing"] = f"app;dur={(perf_counter() - started) * 1000:.1f}"
+        validation_ms = getattr(request.state, "report_validation_ms", None)
+        if validation_ms is not None:
+            response.headers["Server-Timing"] += f", report_validation;dur={validation_ms:.1f}"
         # One line per request; credentials, prompts and model payloads never appear here.
         request_log.info(
             "request_id=%s method=%s path=%s status=%s",

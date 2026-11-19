@@ -31,15 +31,16 @@ def allowed_result_datasets(dataset, config):
 def result_case_aliases(dataset, samples):
     """Harbor filters local directory IDs, but the official adapter names results.
 
-    Only the pinned AutomationBench namespace is accepted; arbitrary prefixes
+    Only the pinned benchmark namespaces are accepted; arbitrary prefixes
     and unknown sample IDs remain invalid.
     """
     aliases = {s["tool_case_id"]: s["sample_id"] for s in samples}
-    if dataset == "AutomationBench":
+    namespace = {"AutomationBench": "automationbench/", "DeepSWE": "datacurve/"}.get(dataset)
+    if namespace:
         for sample in samples:
             native = sample["tool_case_id"]
-            if not native.startswith("automationbench/"):
-                aliases["automationbench/" + native] = sample["sample_id"]
+            if not native.startswith(namespace):
+                aliases[namespace + native] = sample["sample_id"]
     return aliases
 
 

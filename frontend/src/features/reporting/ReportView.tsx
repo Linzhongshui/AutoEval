@@ -5,7 +5,7 @@ import { ManagementDrawer } from "../../shared/ui/ManagementDrawer";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnalysisPanel } from "./AnalysisPanel";
-import { apiGet } from "../../shared/api";
+import { apiGet, apiPost } from "../../shared/api";
 
 type Summary = {
   expected_samples: number;
@@ -52,6 +52,10 @@ export type Report = {
   baseline_comparison: BaselineComparison;
   analysis_status: string;
   analysis_id: string | null;
+  review_status: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  review_note: string | null;
 };
 
 const validityLabels: Record<string, string> = {
@@ -95,6 +99,7 @@ export function ReportView({ id, go }: { id: string; go: (path: string) => void 
   const [evidence, setEvidence] = useState<unknown>(null);
   const [evidenceRequested, setEvidenceRequested] = useState(false);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -157,6 +162,23 @@ export function ReportView({ id, go }: { id: string; go: (path: string) => void 
     );
   }
 
+  const review = async () => {
+    setReviewing(true);
+    setMessage("");
+    try {
+      const result = await apiPost<{ review_status: string }>(
+        `/reports/${report.id}/review`,
+        { decision: report.review_status === "approved" ? "revoke" : "approve" },
+      );
+      setReport((current) =>
+        current ? { ...current, review_status: result.review_status } : current,
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "审核状态更新失败");
+    } finally {
+      setReviewing(false);
+    }
+  };
   const summary = { ...report.summary, accuracy: report.evidence_status === "verified" ? report.summary.accuracy : null };
   const baseline = report.baseline_comparison;
   const comparability = report.dataset_results ? "各数据集分别对照标准库参考成绩，不计算综合分" : report.evidence_status !== "verified" ? "原始证据不可用，无法确认可比性" : baseline.status === "matched" ? "比较条件一致" : baseline.status === "missing" ? "未配置匹配基准" : "清单、工具版本或执行参数不一致";
@@ -189,7 +211,16 @@ export function ReportView({ id, go }: { id: string; go: (path: string) => void 
           </button>
           {datasetOpen && <button className="link" onClick={() => setDatasetOpen(false)}>返回报告总览</button>}
         </nav>
-        <a className="primary button" href={`#run/${report.run_id}`}>查看任务</a>
+        <div className="inline">
+          <a className="primary button" href={`#run/${report.run_id}`}>查看任务</a>
+          <a className="button" href={`#badcases/${report.run_id}`}>Badcase 对比</a>
+          <button
+            onClick={review}
+            disabled={reviewing || report.evidence_status !== "verified" || report.validity !== "complete"}
+          >
+            {report.review_status === "approved" ? "撤销有效历史" : "录入为有效历史"}
+          </button>
+        </div>
       </div>
 
       {!datasetOpen && <section className="card restored-detail">
@@ -226,6 +257,16 @@ export function ReportView({ id, go }: { id: string; go: (path: string) => void 
           <span>运行方式 <b>串行 · 探索</b></span>
           <span>范围 <b>Lite</b></span>
           <span>发布门禁 <b>不适用</b></span><span>分析状态 <b>{analysisLabels[report.analysis_status] || "待确认"}</b></span>
+          <span>
+            有效历史{" "}
+            <b>
+              {report.review_status === "approved"
+                ? "已录入"
+                : report.review_status === "revoked"
+                  ? "已撤销"
+                  : "未录入"}
+            </b>
+          </span>
         </div>
         <div className="report-summary-stats table-wrap">
           {stats.map(([label, value]) => (

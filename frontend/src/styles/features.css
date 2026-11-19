@@ -2046,3 +2046,28 @@ textarea { font: inherit; }
 .planning-table td[data-label="样本范围"] { vertical-align: top; }
 .planning-table td[data-label="执行配置"] > select,
 .planning-table td[data-label="样本范围"] > select { display: block; margin: 0; height: 40px; box-sizing: border-box; }
+
+/* Badcase comparison */
+.badcase-meta { display: flex; flex-wrap: wrap; gap: 18px; margin: 14px 0 8px; color: var(--muted); font-size: 13px; }
+.badcase-meta b { color: var(--text); font-weight: 600; }
+.badcase-config { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: #fafaff; color: var(--muted); font-size: 12px; }
+.badcase-config b { color: var(--text); }
+.badcase-summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+.badcase-summary > div { display: flex; flex-direction: column; gap: 6px; padding: 16px; border: 1px solid var(--border); border-radius: 12px; background: #fff; }
+.badcase-summary span { color: var(--muted); font-size: 12px; }
+.badcase-summary strong { color: var(--text); font-size: 20px; line-height: 1.2; }
+.badcase-toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin-bottom: 14px; }
+.badcase-toolbar > input { min-width: 180px; }
+.badcase-export-actions { margin-left: auto; }
+.badcase-table td { vertical-align: top; }
+.badcase-table td small { display: block; margin-top: 4px; color: var(--muted); font-size: 11px; }
+.badcase-table th:nth-child(3) { min-width: 150px; }
+.badcase-table th:nth-child(10) { min-width: 70px; }
+.badcase-row-detail td { background: #fafaff; }
+.badcase-verdict { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 8px; color: var(--muted); font-size: 12px; }
+.badcase-verdict b { color: var(--text); font-weight: 600; }
+.badcase-empty { display: grid; gap: 12px; }
+.badcase-empty h2 { margin: 0; }
+.badcase-empty p { margin: 0; }
+@media(max-width:1100px) { .badcase-summary { grid-template-columns: repeat(3, minmax(0,1fr)); } .badcase-export-actions { margin-left: 0; } }
+@media(max-width:650px) { .badcase-summary { grid-template-columns: repeat(2, minmax(0,1fr)); } .badcase-toolbar { align-items: stretch; } .badcase-toolbar > input { width: 100%; } }

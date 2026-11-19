@@ -2,12 +2,13 @@
 
 import asyncio
 import uuid
+from datetime import UTC, datetime
 from itertools import batched
-from typing import Any
+from typing import Any, Literal
 
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import and_, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -17,6 +18,7 @@ from autoeval.catalog.dataset_identity import report_dataset
 from autoeval.catalog.datasets import read_manifest
 from autoeval.catalog.models import BenchmarkBaseline
 from autoeval.evaluation.models import EvaluationReport
+from autoeval.infrastructure.audit import record_audit
 from autoeval.models import EvaluationRun, RunSnapshot
 from autoeval.reporting.report_integrity import verified_report_body
 from autoeval.responses import Envelope, PageEnvelope
@@ -46,6 +48,15 @@ class ReportView(BaseModel):
     analysis_status: str
     analysis_id: str | None
     baseline_comparison: dict
+    review_status: str
+    reviewed_by: str | None = None
+    reviewed_at: str | None = None
+    review_note: str | None = None
+
+
+class ReviewInput(BaseModel):
+    decision: Literal["approve", "revoke"]
+    note: str | None = Field(default=None, max_length=1000)
 
 
 def report_data(
@@ -103,14 +114,30 @@ def report_data(
         "analysis_status": analysis_status,
         "analysis_id": str(analysis_id) if analysis_id else None,
         "baseline_comparison": comparison,
+        "review_status": getattr(row, "review_status", "pending"),
+        "reviewed_by": getattr(row, "reviewed_by", None),
+        "reviewed_at": (
+            row.reviewed_at.isoformat()
+            if getattr(row, "reviewed_at", None)
+            else None
+        ),
+        "review_note": getattr(row, "review_note", None),
     }
 
 
 @router.get("", response_model=PageEnvelope[ReportView])
-async def catalog(request: Request, offset: int = 0, limit: int = 20, summary_only: bool = False):
+async def catalog(
+    request: Request,
+    offset: int = 0,
+    limit: int = 20,
+    summary_only: bool = False,
+    review_status: str | None = None,
+):
 
     if offset < 0 or not 1 <= limit <= 200:
         raise HTTPException(422, "Invalid pagination")
+    if review_status is not None and review_status not in {"pending", "approved", "revoked"}:
+        raise HTTPException(422, "Invalid review status")
 
     try:
         async with request.app.state.sessions() as session:
@@ -124,6 +151,11 @@ async def catalog(request: Request, offset: int = 0, limit: int = 20, summary_on
                             ["local-operator:evaluation", "local-operator:orchestration"]
                         ),
                         EvaluationReport.execution_origin == "real",
+                        *(
+                            [EvaluationReport.review_status == review_status]
+                            if review_status
+                            else []
+                        ),
                     )
                     .order_by(EvaluationReport.created_at.desc(), EvaluationReport.id.desc())
                     .offset(offset)
@@ -237,6 +269,84 @@ async def detail(report_id: uuid.UUID, request: Request):
         raise HTTPException(503, "Report database unavailable") from exc
 
     return {"data": data, "request_id": request.state.request_id}
+
+
+@router.post("/{report_id}/review", response_model=Envelope[dict])
+async def review(report_id: uuid.UUID, body: ReviewInput, request: Request):
+    """Mark one immutable report as an approved history source; never edits evidence."""
+    if body.decision == "approve" and body.note is not None:
+        body = body.model_copy(update={"note": body.note.strip() or None})
+    try:
+        async with request.app.state.sessions() as session, session.begin():
+            row = await session.get(EvaluationReport, report_id, with_for_update=True)
+            if row is None:
+                raise HTTPException(404, "Report not found")
+            run = await session.get(EvaluationRun, row.run_id)
+            snapshot = await session.scalar(
+                select(RunSnapshot).where(RunSnapshot.run_id == row.run_id)
+            )
+            if run is None or snapshot is None:
+                raise HTTPException(409, "Report source is unavailable")
+            previous = row.review_status
+            if body.decision == "approve":
+                if previous == "approved":
+                    return {
+                        "data": review_data(row),
+                        "request_id": request.state.request_id,
+                    }
+                if (
+                    row.execution_origin != "real"
+                    or row.validity != "complete"
+                    or run.state != "completed"
+                ):
+                    raise HTTPException(409, "Only complete real reports can be approved")
+                status, _ = await verified_report_body(
+                    request.app.state.settings, row, run, snapshot
+                )
+                if status != "verified":
+                    raise HTTPException(409, "Report evidence is not verified")
+                row.review_status = "approved"
+                row.reviewed_by = "local-operator"
+                row.reviewed_at = datetime.now(UTC)
+                row.review_note = body.note
+                action = "report.review.approve"
+                outcome = "approved"
+            else:
+                if previous != "approved":
+                    raise HTTPException(409, "Only approved reports can be revoked")
+                row.review_status = "revoked"
+                row.reviewed_by = "local-operator"
+                row.reviewed_at = datetime.now(UTC)
+                row.review_note = body.note
+                action = "report.review.revoke"
+                outcome = "revoked"
+            record_audit(
+                session,
+                action=action,
+                resource_id=str(row.id),
+                run_id=row.run_id,
+                outcome=outcome,
+                request_id=request.state.request_id,
+                details={"previous": previous, "note": body.note},
+                resource_type="evaluation_report",
+            )
+            return {
+                "data": review_data(row),
+                "request_id": request.state.request_id,
+            }
+    except SQLAlchemyError as exc:
+        raise HTTPException(503, "Report review database unavailable") from exc
+
+
+def review_data(row):
+    return {
+        "id": str(row.id),
+        "run_id": str(row.run_id),
+        "review_status": row.review_status,
+        "reviewed_by": row.reviewed_by,
+        "reviewed_at": row.reviewed_at.isoformat() if row.reviewed_at else None,
+        "review_note": row.review_note,
+    }
 
 
 @router.get("/{report_id}/evidence", response_model=Envelope[dict])

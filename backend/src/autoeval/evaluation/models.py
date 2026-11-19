@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -21,6 +21,18 @@ class EvaluationReport(Record, Base):
     object_key: Mapped[str] = mapped_column(String(256))
     sha256: Mapped[str] = mapped_column(String(64))
     execution_origin: Mapped[str] = mapped_column(String(16), server_default="unverified")
+    review_status: Mapped[str] = mapped_column(
+        String(16), server_default="pending", default="pending"
+    )
+    reviewed_by: Mapped[str | None] = mapped_column(String(256))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    review_note: Mapped[str | None] = mapped_column(String(1000))
+    __table_args__ = (
+        CheckConstraint(
+            "review_status IN ('pending','approved','revoked')",
+            name="ck_evaluation_report_review_status",
+        ),
+    )
 
 
 class ResultArchiveRevision(Record, Base):

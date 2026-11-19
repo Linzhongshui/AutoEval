@@ -27,6 +27,8 @@ from autoeval.infrastructure.db import create_database
 from autoeval.langfuse_integration import router as langfuse_router
 from autoeval.monitored_execution import router as monitored_router
 from autoeval.planning import router as planning_router
+from autoeval.reporting.badcase_export import router as badcase_export_router
+from autoeval.reporting.badcases import router as badcase_router
 from autoeval.reporting.case_history import router as case_history_router
 from autoeval.reporting.data_workbench import router as data_workbench_router
 from autoeval.reporting.leaderboards import router as leaderboard_router
@@ -76,6 +78,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(analysis_router)
     app.include_router(audit_router)
     app.include_router(reports_router)
+    app.include_router(badcase_router)
+    app.include_router(badcase_export_router)
 
     @app.middleware('http')
     async def budget_entrypoints(request: Request, call_next):

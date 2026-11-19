@@ -1,7 +1,13 @@
 import { ListPagination } from "../../shared/ui/ListPagination";
 import { useEffect, useState } from "react";
 import { ReportView, type Report } from "./ReportView";
-import { apiGetPage } from "../../shared/api";
+import { apiGetPage, apiPost } from "../../shared/api";
+
+const reviewLabels: Record<string, string> = {
+  pending: "未录入",
+  approved: "已录入有效历史",
+  revoked: "已撤销",
+};
 
 const validityLabels: Record<string, string> = {
   complete: "所选清单完整",
@@ -20,6 +26,7 @@ export function RealReports({ reportId, open }: { reportId?: string; open: (id: 
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [refresh, setRefresh] = useState(0);
+  const [reviewing, setReviewing] = useState("");
 
   useEffect(() => {
     if (reportId) return;
@@ -60,6 +67,19 @@ export function RealReports({ reportId, open }: { reportId?: string; open: (id: 
     );
   }
 
+  const review = async (row: Report) => {
+    const decision = row.review_status === "approved" ? "revoke" : "approve";
+    setReviewing(row.id);
+    setMessage("");
+    try {
+      await apiPost(`/reports/${row.id}/review`, { decision });
+      setRefresh((value) => value + 1);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "审核状态更新失败");
+    } finally {
+      setReviewing("");
+    }
+  };
   const analysisLabel = (value: string) => ({ completed: "分析成功", succeeded: "分析成功", failed: "分析失败", pending: "待分析", queued: "排队中", running: "分析中", not_enabled: "未启用", not_queued: "待排队", unresolved: "待查证", not_requested: "未分析" }[value] || "暂无分析");
   const filteredRows = rows.filter((row) => (!model || row.remote_model === model) && (!analysis || row.analysis_status === analysis) && `${row.id} ${row.run_id} ${row.remote_model}`.toLowerCase().includes(query.toLowerCase()));
   return (
@@ -80,6 +100,7 @@ export function RealReports({ reportId, open }: { reportId?: string; open: (id: 
                 <th>报告 / 任务</th>
                 <th>模型</th>
                 <th>报告状态</th>
+                <th>有效历史</th>
                 <th>结果覆盖</th>
                 <th>准确率</th>
                 <th>生成时间</th><th>分析状态</th>
@@ -102,6 +123,12 @@ export function RealReports({ reportId, open }: { reportId?: string; open: (id: 
                     {row.evidence_status !== "verified" && <small>原始证据暂不可用，成绩不参与比较。</small>}
                   </td>
                   <td>
+                    <span className={`badge ${row.review_status === "approved" ? "green" : row.review_status === "revoked" ? "orange" : "neutral"}`}>
+                      {reviewLabels[row.review_status] || row.review_status}
+                    </span>
+                    {row.reviewed_at && <small>{new Date(row.reviewed_at).toLocaleString("zh-CN")}</small>}
+                  </td>
+                  <td>
                     {row.summary.successful_samples}/{row.summary.expected_samples}
                     <small>
                       执行 {row.summary.executed_attempts} 次 · 失败 {row.summary.failed_samples} · 缺测 {row.summary.missing_samples}
@@ -118,6 +145,15 @@ export function RealReports({ reportId, open }: { reportId?: string; open: (id: 
                   <td>
                     <button className="run-report-action" onClick={() => open(row.id)}>
                       查看报告
+                    </button>
+                    <a className="button" href={`#badcases/${row.run_id}`}>
+                      Badcase 对比
+                    </a>
+                    <button
+                      onClick={() => review(row)}
+                      disabled={reviewing === row.id || row.evidence_status !== "verified" || row.validity !== "complete"}
+                    >
+                      {row.review_status === "approved" ? "撤销有效历史" : "录入为有效历史"}
                     </button>
                   </td>
                 </tr>

@@ -1,3 +1,4 @@
+import { version } from "../../package.json";
 import { apiGetPage } from "../shared/api";
 import { BackendConnection } from "../shared/ui/BackendConnection";
 import { ManagementDrawer } from "../shared/ui/ManagementDrawer";
@@ -121,7 +122,7 @@ export function App() {
           ))}
         </nav>
         <div className="sidebar-foot">
-          <span className="dot" /> AutoEval <small>v0.2</small>
+          <span className="dot" /> AutoEval <small>v{version}</small>
         </div>
       </aside>
       <main className="main">

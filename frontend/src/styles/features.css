@@ -1266,6 +1266,8 @@
 .detail-properties > div { display: grid; grid-template-columns: 120px 1fr; padding: 14px 0; border-bottom: 1px solid var(--border); }
 .detail-properties dd { margin: 0; overflow-wrap: anywhere; }
 .button { display: inline-flex; align-items: center; padding: 10px 16px; border-radius: 7px; text-decoration: none; }
+.button:not(.primary) { border: 1px solid #d3d7e8; background: white; }
+.button:not(.primary):hover { background: #f1efff; border-color: #b9b0ff; }
 @media (max-width: 900px) { .restored-detail .task-overview-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 500px) { .restored-detail .task-overview-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 

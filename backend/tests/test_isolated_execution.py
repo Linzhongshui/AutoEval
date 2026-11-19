@@ -130,3 +130,42 @@ def test_recover_created_container_and_remove_only_selected_child():
     assert recovered._remove()
     assert recovered._remove()
     assert rows[second.name]["State"]["Running"]
+
+
+@pytest.mark.asyncio
+async def test_failed_removal_retains_lease_until_reconciled(monkeypatch):
+    from contextlib import asynccontextmanager
+    from unittest.mock import AsyncMock
+
+    from autoeval.evaluation import isolated_cleanup
+
+    owner = uuid4()
+    row = SimpleNamespace(resource_id=uuid4(), template={}, state="cleanup_pending")
+    remove = AsyncMock(side_effect=[OSError("SSH disconnected"), True])
+    release = AsyncMock()
+
+    @asynccontextmanager
+    async def transaction():
+        yield
+
+    @asynccontextmanager
+    async def sessions():
+        yield SimpleNamespace(begin=transaction, get=AsyncMock(return_value=row))
+
+    monkeypatch.setattr(
+        isolated_cleanup,
+        "isolated_transport",
+        AsyncMock(return_value=SimpleNamespace(remove=remove)),
+    )
+    monkeypatch.setattr(isolated_cleanup, "release", release)
+
+    await isolated_cleanup.reclaim_child(sessions, None, owner)
+    assert row.state == "cleanup_pending"
+    release.assert_not_awaited()
+
+    await isolated_cleanup.reclaim_child(sessions, None, owner)
+    await isolated_cleanup.reclaim_child(sessions, None, owner)
+    assert row.state == "cleaned"
+    assert remove.await_count == 2
+    assert release.await_count == 1
+    assert release.await_args.args[1] == owner

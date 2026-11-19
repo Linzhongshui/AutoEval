@@ -16,6 +16,7 @@ from temporalio import activity
 
 from autoeval.catalog.datasets import canonical_manifest, read_manifest, write_manifest
 from autoeval.catalog.standard_inputs import digest
+from autoeval.evaluation.isolated_cleanup import reclaim_child
 from autoeval.evaluation.models import DatasetExecution, DatasetExecutionEnvironment
 from autoeval.evaluation.resource_allocation import acquire, demand_for, release, resource_for_task
 from autoeval.infrastructure.config import get_settings
@@ -354,6 +355,7 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
             # Release capacity only after the transport confirms cleanup. Harbor cancellation
             # can leave daemon-owned trial containers; retain ownership instead of overbooking.
             if isolated:
+                await reclaim_child(sessions, settings, child.id)
                 continue
             cleanup = await adapter.cleanup(job)
             if cleanup.get("cleaned"):

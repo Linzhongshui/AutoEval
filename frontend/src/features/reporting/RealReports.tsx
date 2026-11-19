@@ -146,7 +146,7 @@ export function RealReports({ reportId, open }: { reportId?: string; open: (id: 
                     <button className="run-report-action" onClick={() => open(row.id)}>
                       查看报告
                     </button>
-                    <a className="button" href={`#badcases/${row.run_id}`}>
+                    <a className="run-report-action" href={`#badcases/${row.run_id}`}>
                       Badcase 对比
                     </a>
                     <button

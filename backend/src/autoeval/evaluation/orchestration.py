@@ -239,116 +239,20 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
             await publish_lifecycle(
                 sessions, settings, run_id, child, observation.state, final=True
             )
-            summary = None
-            state = observation.state
-            log_reader = getattr(adapter, "collect_log", None)
-            if log_reader and observation.state in TERMINAL:
-                from autoeval.reporting.models import UnifiedArtifact
-
-                log_key = "planning-log:" + str(child.id)
-                async with sessions() as session, session.begin():
-                    existing_log = await session.scalar(
-                        select(UnifiedArtifact).where(
-                            UnifiedArtifact.run_id == run_id,
-                            UnifiedArtifact.collection_key == log_key,
-                        )
-                    )
-                    if existing_log is None:
-                        observed_log = await log_reader(job)
-                        content = (
-                            observed_log["content"]
-                            .replace(secret, "[REDACTED]")
-                            .replace(child_secret, "[REDACTED]")
-                        )
-                        file = {
-                            "path": "job.log",
-                            "content": content,
-                            "sha256": hashlib.sha256(content.encode()).hexdigest(),
-                            "truncated": observed_log["truncated"],
-                        }
-                        bundle = {
-                            "run_id": str(run_id),
-                            "child_id": str(child.id),
-                            "source": "adaptor_tool_log",
-                            "files": [file],
-                        }
-                        sha = digest(bundle)
-                        key = f"execution-logs/{run_id}/{child.id}/{sha}.json"
-                        await asyncio.to_thread(
-                            write_manifest, settings, key, canonical_manifest(bundle)
-                        )
-                        await asyncio.to_thread(
-                            read_manifest, settings, SimpleNamespace(object_key=key, sha256=sha)
-                        )
-                        session.add(
-                            UnifiedArtifact(
-                                run_id=run_id,
-                                collection_key=log_key,
-                                object_key=key,
-                                sha256=sha,
-                                manifest=bundle,
-                            )
-                        )
-            if state == "succeeded":
-                result = await adapter.collect(job)
-                from autoeval.planning.planning_observations import archive_native, publish
-
-                await archive_native(
-                    sessions, settings, run_id, child, result["result"], child_secret
+            try:
+                state, summary = await archive_terminal_child(
+                    sessions, settings, run_id, child, adapter, job, observation.state,
+                    secret, child_secret, heartbeat,
                 )
-                reader = getattr(adapter, "progress", None)
-                if reader:
-                    await publish(sessions, settings, run_id, child.id, await reader(job))
-                unified = result["result"]["unified_result"]
-                async with sessions() as session, session.begin():
-                    await artifact(
-                        session,
-                        settings,
-                        "raw_result",
-                        {"run_id": str(run_id), "task_id": child.task_id, "result": unified},
+            except Exception:  # noqa: BLE001 -- an isolated job retains its evidence for retry
+                if not isolated:
+                    raise
+                if not (child.summary or {}).get("archive_pending"):
+                    await update_child(
+                        sessions, child.id,
+                        summary={**(child.summary or {}), "archive_pending": True},
                     )
-                try:
-                    from autoeval.reporting.result_identity import normalize_result_identities
-
-                    unified = normalize_result_identities(
-                        unified,
-                        child.payload["dataset"],
-                        child.payload["compilation"]["config"],
-                        child.payload["samples"],
-                    )
-                    raw = canonical_manifest(unified)
-                    summary = await keep_heartbeat(
-                        heartbeat,
-                        archive_output(
-                            sessions,
-                            settings,
-                            run_id,
-                            child.task_id,
-                            raw,
-                            {
-                                child.payload["dataset"]: [
-                                    s["sample_id"] for s in child.payload["samples"]
-                                ]
-                            },
-                            child.payload["dataset"],
-                        ),
-                    )
-                except ValueError:
-                    summary = {
-                        "validity": "failed",
-                        "reason": "Result identity or evidence validation failed; raw result preserved",
-                    }
-                if child.payload["dataset"] == "GPQA":
-                    summary = gpqa_report_summary(summary, unified, child.payload)
-                if result["result"].get("tool_exit_code", 0) != 0:
-                    summary = {
-                        **summary,
-                        "validity": "partial",
-                        "tool_exit_code": result["result"]["tool_exit_code"],
-                        "diagnostic": result["result"].get("diagnostic"),
-                    }
-                if summary["validity"] != "complete":
-                    state = "failed"
+                continue
             await update_child(
                 sessions, child.id, state=state, summary=summary, finished_at=datetime.now(UTC)
             )
@@ -468,6 +372,121 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
 
             )
         await asyncio.sleep(2)
+
+
+async def archive_terminal_child(
+    sessions, settings, run_id, child, adapter, job, state, secret, child_secret, heartbeat,
+):
+    summary = None
+    log_reader = getattr(adapter, "collect_log", None)
+    if log_reader:
+        from autoeval.reporting.models import UnifiedArtifact
+
+        log_key = "planning-log:" + str(child.id)
+        async with sessions() as session, session.begin():
+            existing_log = await session.scalar(
+                select(UnifiedArtifact).where(
+                    UnifiedArtifact.run_id == run_id,
+                    UnifiedArtifact.collection_key == log_key,
+                )
+            )
+            if existing_log is None:
+                observed_log = await log_reader(job)
+                content = (
+                    observed_log["content"]
+                    .replace(secret, "[REDACTED]")
+                    .replace(child_secret, "[REDACTED]")
+                )
+                file = {
+                    "path": "job.log",
+                    "content": content,
+                    "sha256": hashlib.sha256(content.encode()).hexdigest(),
+                    "truncated": observed_log["truncated"],
+                }
+                bundle = {
+                    "run_id": str(run_id),
+                    "child_id": str(child.id),
+                    "source": "adaptor_tool_log",
+                    "files": [file],
+                }
+                sha = digest(bundle)
+                key = f"execution-logs/{run_id}/{child.id}/{sha}.json"
+                await asyncio.to_thread(
+                    write_manifest, settings, key, canonical_manifest(bundle)
+                )
+                await asyncio.to_thread(
+                    read_manifest, settings, SimpleNamespace(object_key=key, sha256=sha)
+                )
+                session.add(
+                    UnifiedArtifact(
+                        run_id=run_id,
+                        collection_key=log_key,
+                        object_key=key,
+                        sha256=sha,
+                        manifest=bundle,
+                    )
+                )
+    if state == "succeeded":
+        result = await adapter.collect(job)
+        from autoeval.planning.planning_observations import archive_native, publish
+
+        await archive_native(
+            sessions, settings, run_id, child, result["result"], child_secret
+        )
+        reader = getattr(adapter, "progress", None)
+        if reader:
+            await publish(sessions, settings, run_id, child.id, await reader(job))
+        unified = result["result"]["unified_result"]
+        async with sessions() as session, session.begin():
+            await artifact(
+                session,
+                settings,
+                "raw_result",
+                {"run_id": str(run_id), "task_id": child.task_id, "result": unified},
+            )
+        try:
+            from autoeval.reporting.result_identity import normalize_result_identities
+
+            unified = normalize_result_identities(
+                unified,
+                child.payload["dataset"],
+                child.payload["compilation"]["config"],
+                child.payload["samples"],
+            )
+            raw = canonical_manifest(unified)
+            summary = await keep_heartbeat(
+                heartbeat,
+                archive_output(
+                    sessions,
+                    settings,
+                    run_id,
+                    child.task_id,
+                    raw,
+                    {
+                        child.payload["dataset"]: [
+                            s["sample_id"] for s in child.payload["samples"]
+                        ]
+                    },
+                    child.payload["dataset"],
+                ),
+            )
+        except ValueError:
+            summary = {
+                "validity": "failed",
+                "reason": "Result identity or evidence validation failed; raw result preserved",
+            }
+        if child.payload["dataset"] == "GPQA":
+            summary = gpqa_report_summary(summary, unified, child.payload)
+        if result["result"].get("tool_exit_code", 0) != 0:
+            summary = {
+                **summary,
+                "validity": "partial",
+                "tool_exit_code": result["result"]["tool_exit_code"],
+                "diagnostic": result["result"].get("diagnostic"),
+            }
+        if summary["validity"] != "complete":
+            state = "failed"
+    return state, summary
 
 
 def gpqa_report_summary(summary, unified, task):

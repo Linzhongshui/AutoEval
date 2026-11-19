@@ -1,5 +1,5 @@
 FROM python:3.12-slim
-RUN apt-get update && apt-get install -y --no-install-recommends openssh-server \
+RUN apt-get update && apt-get install -y --no-install-recommends openssh-server python3 \
     && rm -f /etc/ssh/ssh_host_* \
     && mkdir -p /run/sshd
 LABEL autoeval.role=ssh-simulator

@@ -566,6 +566,38 @@ async def _fallback_cases(session, run_id, context):
     return cases, False
 
 
+async def report_case(session, settings, run_id, dataset_key, sample_id, attempt_no=None):
+    """Load one normalized case (including its raw inference payload) for export."""
+    report = await session.scalar(select(EvaluationReport).where(EvaluationReport.run_id == run_id))
+    if report is None:
+        return None
+    run = await session.get(EvaluationRun, run_id)
+    snapshot = await session.scalar(select(RunSnapshot).where(RunSnapshot.run_id == run_id))
+    if run is None or snapshot is None:
+        return None
+    status, body = await verified_report_body(settings, report, run, snapshot)
+    if status != "verified" or body is None:
+        return None
+    for section in report_sections(report, snapshot, body):
+        if canonical_dataset(section["context"]) != dataset_key:
+            continue
+        try:
+            cases, _ = await _section_cases_async(
+                settings, section["context"], section.get("archive")
+            )
+        except (ValueError, KeyError, TypeError, OSError):
+            cases = {}
+        if not cases:
+            cases, _ = await _fallback_cases(session, run_id, section["context"])
+        for case in cases.values():
+            if case["sample_id"] != sample_id:
+                continue
+            if attempt_no is not None and case["attempt_no"] != attempt_no:
+                continue
+            return case
+    return None
+
+
 @router.get("/runs/{run_id}/badcase-comparison")
 async def badcase_comparison(run_id: uuid.UUID, request: Request):
     try:

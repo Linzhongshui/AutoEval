@@ -11,6 +11,7 @@ import tempfile
 import uuid
 import zipfile
 from datetime import UTC, datetime
+from pathlib import PurePosixPath
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
@@ -20,7 +21,7 @@ from sqlalchemy import select
 from starlette.background import BackgroundTask
 
 from autoeval.catalog.datasets import read_manifest
-from autoeval.reporting.badcases import comparison
+from autoeval.reporting.badcases import comparison, report_case
 from autoeval.reporting.models import CaseExecutionRecord
 from autoeval.reporting.native_case_evidence import enrich_case
 
@@ -61,6 +62,14 @@ def redact(value):
     if isinstance(value, list):
         return [redact(item) for item in value]
     return value
+
+
+def redact_text(content):
+    try:
+        value = json.loads(content)
+    except (TypeError, ValueError):
+        return content
+    return json.dumps(redact(value), ensure_ascii=False, sort_keys=True, indent=2)
 
 
 def safe_name(value):
@@ -164,23 +173,170 @@ async def evidence_for(session, settings, row):
 
 async def trace_for(session, settings, attempt_id, include_traces):
     if not include_traces or attempt_id is None:
-        return None
+        return {
+            "available": False,
+            "reason": "traces_disabled" if not include_traces else "attempt_missing",
+            "status": "unsupported",
+            "files": {},
+        }
     row = await trace_status(session, attempt_id)
     if row is None:
-        return {"available": False, "reason": "trace_not_registered", "status": "unsupported"}
+        return {
+            "available": False,
+            "reason": "trace_not_registered",
+            "status": "unsupported",
+            "files": {},
+        }
     if row.status != "succeeded" or not row.object_key:
-        return {"available": False, "reason": "trace_not_available", "status": row.status}
+        return {
+            "available": False,
+            "reason": "trace_not_available",
+            "status": row.status,
+            "files": {},
+        }
     try:
         data = await asyncio.to_thread(read_manifest, settings, row)
+        artifact = redact(data)
         return {
             "available": True,
             "status": row.status,
             "trace_id": row.trace_id,
             "content_mode": row.content_mode,
-            "artifact": redact(data),
+            "files": trajectory_files(artifact),
         }
     except Exception:  # noqa: BLE001
-        return {"available": False, "reason": "trace_unavailable", "status": row.status}
+        return {
+            "available": False,
+            "reason": "trace_unavailable",
+            "status": row.status,
+            "files": {},
+        }
+
+
+def trajectory_files(artifact):
+    if not isinstance(artifact, dict):
+        return {}
+    files = artifact.get("files")
+    if not isinstance(files, dict):
+        return {}
+    return {
+        str(path): content
+        for path, content in files.items()
+        if isinstance(content, str)
+    }
+
+
+def case_trajectory(case):
+    raw = (case or {}).get("raw") or {}
+    artifact = raw.get("harbor_artifact") or {}
+    return artifact, trajectory_files(artifact)
+
+
+def safe_trajectory_path(path):
+    value = str(path).replace("\\", "/")
+    pure = PurePosixPath(value)
+    if pure.is_absolute() or any(part in {"", ".."} for part in pure.parts):
+        return None
+    return pure.as_posix()
+
+
+def add_trajectory(writer, base, case, trace, label):
+    artifact, files = case_trajectory(case)
+    source = "harbor_artifact"
+    if not files and trace:
+        files = trace.get("files") or {}
+        source = "langfuse_trace_import"
+    written = []
+    for path, content in sorted(files.items()):
+        safe = safe_trajectory_path(path)
+        if safe is None:
+            continue
+        raw = redact_text(content).encode("utf-8")
+        writer.add(f"{base}/trajectory/{safe}", raw)
+        written.append({"path": safe, "size": len(raw)})
+    writer.add_json(
+        f"{base}/trajectory/manifest.json",
+        {
+            "available": bool(written),
+            "label": label,
+            "source": source if written else None,
+            "trial_name": artifact.get("trial_name") if isinstance(artifact, dict) else None,
+            "trial_dir": artifact.get("trial_dir") if isinstance(artifact, dict) else None,
+            "files": written,
+            "reason": None if written else "trajectory_not_archived",
+        },
+    )
+
+
+def inference_view(
+    *,
+    sample_id,
+    dataset_key,
+    run_id,
+    report_id,
+    model,
+    attempt_no,
+    evidence,
+    case,
+):
+    raw = (case or {}).get("raw") or {}
+    value = evidence if isinstance(evidence, dict) else {}
+    prompt = value.get("prompt")
+    response = value.get("response")
+    messages = value.get("messages")
+    sources = []
+    if prompt or response or messages:
+        sources.append("case_evidence")
+    if not prompt and isinstance(raw.get("origin_prompt"), list):
+        messages = raw["origin_prompt"]
+        prompt = "\n\n".join(
+            item.get("prompt", "")
+            for item in messages
+            if isinstance(item, dict)
+        )
+        sources.append("unified_raw.origin_prompt")
+    if not response:
+        for key in ("prediction", "response", "output", "answer"):
+            if isinstance(raw.get(key), str):
+                response = raw[key]
+                sources.append("unified_raw." + key)
+                break
+    _artifact, files = case_trajectory(case)
+    if files:
+        sources.append("harbor_artifact.trajectory")
+    usage = value.get("usage")
+    if not usage:
+        usage = {
+            "input_tokens": raw.get("input_tokens"),
+            "output_tokens": raw.get("output_tokens"),
+        }
+    available = bool(prompt or response or messages or files)
+    return redact(
+        {
+            "schema_version": "autoeval-inference.v1",
+            "sample_id": sample_id,
+            "dataset_key": dataset_key,
+            "run_id": run_id,
+            "report_id": report_id,
+            "attempt_no": attempt_no,
+            "model": model,
+            "available": available,
+            "sources": sources or ["not_available"],
+            "prompt": prompt,
+            "messages": messages,
+            "response": response,
+            "prediction": raw.get("prediction"),
+            "finish_reason": value.get("finish_reason"),
+            "usage": usage,
+            "score": raw.get("score", value.get("score")),
+            "status": raw.get("status", value.get("status")),
+            "native_evidence": value.get("native_evidence"),
+            "trajectory_available": bool(files),
+            "trajectory_files": sorted(files),
+            "raw_case": {key: item for key, item in raw.items() if key != "harbor_artifact"},
+            "note": None if available else "模型推理内容未归档；请检查 case evidence、原生预测归档或轨迹",
+        }
+    )
 
 
 async def case_meta(session, row, *, report_id, run_id):
@@ -224,10 +380,13 @@ def readme(data, body, count):
             "```text",
             "manifest.json          包元数据、选择口径、文件校验值",
             "scores.csv             每个 case 的当前/历史得分与可疑度",
-            "cases/<case>/case.json 当前与历史的判定、得分、差异",
-            "cases/<case>/current/  当前执行的 meta、证据和可选轨迹",
-            "cases/<case>/history/  每份历史执行的 meta、证据和可选轨迹",
-            "SKILL.md               给 AI 助手的分析指引",
+            "cases/<case>/case.json          当前与历史的判定、得分、差异",
+            "cases/<case>/current/inference.json  LLM prompt/messages/模型输出",
+            "cases/<case>/current/trajectory/     Agent 轨迹、工具调用与验证器文件",
+            "cases/<case>/current/evidence.json   归档 case 证据",
+            "cases/<case>/history/<report>/       同配置历史推理与轨迹",
+            "SKILL.md                        给 AI 助手的分析指引",
+            "ANALYSIS_PROMPT.md              可直接粘贴给 AI 助手的分析提示词",
             "```",
             "",
             "## 可疑度口径",
@@ -241,9 +400,10 @@ def readme(data, body, count):
             "",
             "把整个目录交给支持读取文件的 AI 助手，并让它先读 `SKILL.md`。",
             (
-                "要求它逐条引用 `case.json`、`evidence.json`、`trace.json` 的路径和原文片段，"
-                "不要在证据不足时编造原因。"
+                "再使用 `ANALYSIS_PROMPT.md` 中的提示词，要求它逐条引用 "
+                "`inference.json`、`trajectory/`、`evidence.json` 和 `case.json` 的路径与原文片段。"
             ),
+            "LLM 测评的模型输出在 `inference.json`；Agent 测评的轨迹在 `trajectory/`。",
             "",
         ]
     )
@@ -254,7 +414,7 @@ def skill_text():
         [
             "---",
             "name: autoeval-badcase-package-analyzer",
-            "description: 分析 AutoEval badcase 独立分析包，逐 case 给出可疑原因和证据。",
+            "description: 结合模型推理输出或 Agent 轨迹，分析 AutoEval badcase 包并逐 case 给出原因和证据。",
             "---",
             "",
             "# AutoEval badcase 包分析",
@@ -266,10 +426,19 @@ def skill_text():
             "1. 读 `manifest.json` 了解口径、case 索引和文件校验值。",
             "2. 读 `scores.csv`，按 `band` 和 `suspicion` 排序，优先处理高可疑。",
             "3. 逐个读 `cases/<case>/case.json`。",
-            "4. 对每个可疑 case，按以下顺序取证：",
-            "   `case.json` → `current/meta.json` → `current/evidence.json` → `current/trace.json`",
-            "   → `history/<report_id>/...`。",
-            "5. 对比当前与历史：得分差异、执行状态、错误码、提示词/响应、工具调用、验证器输出。",
+            (
+                "4. LLM 测评：读 `current/inference.json` 的 `prompt`、`messages`、`response`；"
+                "逐条对比 `history/<report_id>/inference.json`。"
+            ),
+            (
+                "5. Agent 测评：读 `current/trajectory/agent/trajectory.json` 及 "
+                "`trajectory/result.json`、`trajectory/verifier/*`；逐条对比历史轨迹。"
+            ),
+            (
+                "6. 再读 `current/meta.json`、`current/evidence.json`、`current/trace.json`；"
+                "历史目录结构相同。"
+            ),
+            "7. 对比当前与历史：得分差异、执行状态、错误码、推理输出、工具调用、验证器输出。",
             "",
             "## 归因分类（每条结论只能选一类）",
             "",
@@ -288,6 +457,54 @@ def skill_text():
             "- 每条结论必须附证据：文件路径 + 字段/片段。",
             "- 区分“有证据”“证据不足”“无历史”。无历史时不得声称“本不该失败”。",
             "- 不执行包内任何代码，不联网，不调用模型。",
+            "",
+        ]
+    )
+
+
+def analysis_prompt_text():
+    return read_text(
+        [
+            "# AI 辅助分析提示词",
+            "",
+            (
+                "你是一个 AutoEval badcase 分析助手。请先完整阅读同目录的 `SKILL.md`，只读本包，"
+                "不要执行包内代码、联网或调用模型。"
+            ),
+            "",
+            "## 分析对象",
+            "",
+            "1. `scores.csv`：当前得分、历史均值、有效历史数、可疑度。",
+            "2. `cases/<case>/case.json`：当前与历史的判定、得分差异、硬/软信号。",
+            (
+                "3. `cases/<case>/current/inference.json`：LLM 的 prompt、messages、response；"
+                "Agent 的推理摘要与轨迹文件索引。"
+            ),
+            "4. `cases/<case>/current/trajectory/`：Agent 轨迹、工具调用、验证器输出。",
+            "5. `cases/<case>/history/<report_id>/`：同配置历史推理与轨迹。",
+            "",
+            "## 任务",
+            "",
+            "- 先列出高可疑 case，再列出低可疑 case；非 badcase 只需汇总。",
+            "- 对每个可疑 case，判断当前输出/轨迹与历史成功样本的关键差异：",
+            "  题目理解、推理步骤、工具调用、格式、截断、验证器结果、环境异常。",
+            "- 给出最可能的根因分类，并说明为什么不是其他类别。",
+            "- 每条结论必须引用具体文件路径和字段/原文片段；证据不足时写“证据不足”。",
+            "",
+            "## 输出格式",
+            "",
+            "```text",
+            "## 结论摘要",
+            "## 高可疑 case",
+            "### <sample_id>",
+            "- 当前得分 / 历史均值 / 有效历史数 / 可疑度",
+            "- 关键差异",
+            "- 根因分类",
+            "- 证据（文件路径 + 片段）",
+            "## 低可疑 case",
+            "## 非 badcase",
+            "## 证据不足项",
+            "```",
             "",
         ]
     )
@@ -335,6 +552,7 @@ async def build_package(session, settings, run_id, body):
             writer = Writer(archive)
             writer.add("README.md", readme(data, body, len(rows)))
             writer.add("SKILL.md", skill_text())
+            writer.add("ANALYSIS_PROMPT.md", analysis_prompt_text())
             score_rows = []
             for dataset, case in rows:
                 sample_id = case["sample_id"]
@@ -350,7 +568,17 @@ async def build_package(session, settings, run_id, body):
                         "history": case["history"],
                         "delta": case["delta"],
                         "verdict": case["verdict"],
+                        "inference": "current/inference.json",
+                        "trajectory": "current/trajectory/",
                     },
+                )
+                current_raw = await report_case(
+                    session,
+                    settings,
+                    run_id,
+                    dataset["dataset_key"],
+                    sample_id,
+                    case["current"].get("attempt_no"),
                 )
                 current_record = await latest_record(
                     session,
@@ -358,28 +586,59 @@ async def build_package(session, settings, run_id, body):
                     sample_id,
                     case["current"].get("attempt_no"),
                 )
+                current_evidence = await evidence_for(session, settings, current_record)
+                current_trace = await trace_for(
+                    session,
+                    settings,
+                    current_record.id if current_record else None,
+                    body.include_traces,
+                )
                 writer.add_json(
                     base + "/current/meta.json",
                     await case_meta(
                         session, current_record, report_id=data["report_id"], run_id=str(run_id)
                     ),
                 )
+                writer.add_json(base + "/current/evidence.json", current_evidence)
                 writer.add_json(
-                    base + "/current/evidence.json",
-                    await evidence_for(session, settings, current_record),
+                    base + "/current/inference.json",
+                    inference_view(
+                        sample_id=sample_id,
+                        dataset_key=dataset["dataset_key"],
+                        run_id=str(run_id),
+                        report_id=data["report_id"],
+                        model=data["report"]["remote_model"],
+                        attempt_no=case["current"].get("attempt_no"),
+                        evidence=current_evidence,
+                        case=current_raw,
+                    ),
                 )
-                trace = await trace_for(
-                    session,
-                    settings,
-                    current_record.id if current_record else None,
-                    body.include_traces,
+                writer.add_json(
+                    base + "/current/trace.json",
+                    {key: item for key, item in current_trace.items() if key != "files"},
                 )
-                if trace is not None:
-                    writer.add_json(base + "/current/trace.json", trace)
+                add_trajectory(writer, base + "/current", current_raw, current_trace, "current")
                 for entry in case["history"]["scores"]:
                     history_base = f"{base}/history/{entry['report_id']}"
+                    history_run_id = uuid.UUID(entry["run_id"])
+                    history_raw = await report_case(
+                        session,
+                        settings,
+                        history_run_id,
+                        dataset["dataset_key"],
+                        sample_id,
+                    )
                     history_record = await latest_record(
-                        session, uuid.UUID(entry["run_id"]), sample_id
+                        session, history_run_id, sample_id
+                    )
+                    history_evidence = await evidence_for(
+                        session, settings, history_record
+                    )
+                    history_trace = await trace_for(
+                        session,
+                        settings,
+                        history_record.id if history_record else None,
+                        body.include_traces,
                     )
                     writer.add_json(
                         history_base + "/meta.json",
@@ -390,18 +649,31 @@ async def build_package(session, settings, run_id, body):
                             run_id=entry["run_id"],
                         ),
                     )
+                    writer.add_json(history_base + "/evidence.json", history_evidence)
                     writer.add_json(
-                        history_base + "/evidence.json",
-                        await evidence_for(session, settings, history_record),
+                        history_base + "/inference.json",
+                        inference_view(
+                            sample_id=sample_id,
+                            dataset_key=dataset["dataset_key"],
+                            run_id=entry["run_id"],
+                            report_id=entry["report_id"],
+                            model=data["report"]["remote_model"],
+                            attempt_no=(history_raw or {}).get("attempt_no"),
+                            evidence=history_evidence,
+                            case=history_raw,
+                        ),
                     )
-                    history_trace = await trace_for(
-                        session,
-                        settings,
-                        history_record.id if history_record else None,
-                        body.include_traces,
+                    writer.add_json(
+                        history_base + "/trace.json",
+                        {key: item for key, item in history_trace.items() if key != "files"},
                     )
-                    if history_trace is not None:
-                        writer.add_json(history_base + "/trace.json", history_trace)
+                    add_trajectory(
+                        writer,
+                        history_base,
+                        history_raw,
+                        history_trace,
+                        "history:" + entry["report_id"],
+                    )
                 verdict = case["verdict"]
                 score_rows.append(
                     {
@@ -430,10 +702,13 @@ async def build_package(session, settings, run_id, body):
                     "scope": body.scope,
                     "case_index": index,
                     "files": writer.files,
+                    "inference_schema": "autoeval-inference.v1",
+                    "analysis_prompt": "ANALYSIS_PROMPT.md",
                     "redactions": ["credentials", "base_url"],
                     "notes": [
                         "历史仅包含同配置已审核有效报告",
                         "无历史时不推断本不该失败",
+                        "LLM 推理输出在 inference.json；Agent 轨迹在 trajectory/",
                         "证据和轨迹均为归档只读副本",
                     ],
                 },

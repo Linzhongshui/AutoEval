@@ -2,6 +2,7 @@
 
 import csv
 import io
+import json
 import os
 import tempfile
 import zipfile
@@ -12,9 +13,14 @@ from fastapi import HTTPException
 from autoeval.reporting.badcase_export import (
     ExportInput,
     Writer,
+    add_trajectory,
+    case_trajectory,
     csv_bytes,
+    inference_view,
     redact,
+    redact_text,
     safe_name,
+    safe_trajectory_path,
     selected_cases,
 )
 
@@ -66,6 +72,91 @@ def test_safe_name_keeps_identity_readable():
     assert safe_name("gpqa_diamond:0") == "gpqa_diamond_0"
     assert safe_name("a b/c") == "a_b_c"
     assert safe_name("::") == "case"
+
+
+def test_inference_view_includes_prompt_and_model_response():
+    view = inference_view(
+        sample_id="gpqa_diamond:0",
+        dataset_key="GPQA-Diamond",
+        run_id="run",
+        report_id="report",
+        model="deepseek-flash",
+        attempt_no=1,
+        evidence={
+            "prompt": "Question",
+            "response": "Answer: A",
+            "messages": [{"role": "HUMAN", "prompt": "Question"}],
+            "usage": {"input_tokens": 10, "output_tokens": 20},
+        },
+        case={"raw": {"score": 1.0, "status": "success"}},
+    )
+    assert view["available"] is True
+    assert view["prompt"] == "Question"
+    assert view["response"] == "Answer: A"
+    assert "case_evidence" in view["sources"]
+    assert view["usage"]["output_tokens"] == 20
+
+
+def test_inference_view_falls_back_to_unified_raw_prompt_and_prediction():
+    view = inference_view(
+        sample_id="gpqa_diamond:0",
+        dataset_key="GPQA-Diamond",
+        run_id="run",
+        report_id="report",
+        model="deepseek-flash",
+        attempt_no=1,
+        evidence={"available": False},
+        case={
+            "raw": {
+                "origin_prompt": [{"role": "HUMAN", "prompt": "Question"}],
+                "prediction": "Answer: B",
+                "input_tokens": 10,
+                "output_tokens": 20,
+            }
+        },
+    )
+    assert view["available"] is True
+    assert view["response"] == "Answer: B"
+    assert "unified_raw.origin_prompt" in view["sources"]
+
+
+def test_trajectory_files_are_sanitized_redacted_and_indexed():
+    trajectory = json.dumps({"steps": [], "api_key": "secret"})
+    case = {
+        "raw": {
+            "harbor_artifact": {
+                "trial_name": "trial-1",
+                "files": {
+                    "agent/trajectory.json": trajectory,
+                    "../escape.json": "{}",
+                },
+            }
+        }
+    }
+    artifact, files = case_trajectory(case)
+    assert artifact["trial_name"] == "trial-1"
+    assert set(files) == {"agent/trajectory.json", "../escape.json"}
+    assert safe_trajectory_path("agent/trajectory.json") == "agent/trajectory.json"
+    assert safe_trajectory_path("../escape.json") is None
+    assert "api_key" not in redact_text(trajectory)
+
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as handle:
+        path = handle.name
+    try:
+        with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
+            writer = Writer(archive)
+            add_trajectory(writer, "cases/x/current", case, None, "current")
+            names = {entry["path"] for entry in writer.files}
+            assert "cases/x/current/trajectory/agent/trajectory.json" in names
+            assert "cases/x/current/trajectory/manifest.json" in names
+            assert not any("../" in name for name in names)
+        with zipfile.ZipFile(path) as archive:
+            content = archive.read(
+                "cases/x/current/trajectory/agent/trajectory.json"
+            ).decode()
+            assert "api_key" not in content
+    finally:
+        os.unlink(path)
 
 
 def test_csv_and_writer_manifest_entries():

@@ -543,3 +543,34 @@ def test_readonly_mount_accepts_explicit_host_and_container_paths():
     for target in ("/tmp", "/tmp/autoeval-planning-runtime", "/var/lib/docker", "/run/docker.sock"):
         with pytest.raises(ValueError):
             readonly_mount_paths({"source": "/data", "target": target})
+
+
+@pytest.mark.asyncio
+async def test_harbor_preflight_blocks_daemon_without_image_import_permission(monkeypatch):
+    from unittest.mock import AsyncMock, Mock
+
+    from autoeval.planning.planning_transport import PlanningRemoteContainer
+
+    adapter = object.__new__(IsolatedPlanningContainer)
+    adapter.template = {"family": "harbor"}
+    adapter.container_id = "owned-container"
+    adapter.owner = str(uuid4())
+    adapter.command = Mock(side_effect=RuntimeError("Remote command failed"))
+    monkeypatch.setattr(
+        PlanningRemoteContainer,
+        "preflight",
+        AsyncMock(
+            return_value={
+                "execution_ready": True,
+                "blocking_reasons": [],
+                "dataset_checks": [{"blocking_reasons": []}],
+            }
+        ),
+    )
+
+    result = await adapter.preflight([])
+    reason = "harbor_private_daemon_image_import_failed"
+    assert result["execution_ready"] is False
+    assert result["blocking_reasons"] == [reason]
+    assert result["dataset_checks"][0]["blocking_reasons"] == [reason]
+    assert adapter.command.call_args.args[0][-1] == adapter.owner

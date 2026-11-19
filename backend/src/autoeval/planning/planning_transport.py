@@ -533,6 +533,48 @@ raise SystemExit(1)
             )
         return container_id
 
+    async def preflight(self, tasks=None):
+        result = await super().preflight(tasks)
+        if self.template["family"] != "harbor" or not result["execution_ready"]:
+            return result
+
+        # A live daemon can still lack permission to extract a trial image layer.
+        script = """
+import io
+import subprocess
+import sys
+import tarfile
+
+archive = io.BytesIO()
+with tarfile.open(fileobj=archive, mode="w") as tar:
+    entry = tarfile.TarInfo("autoeval-probe")
+    entry.size = 1
+    tar.addfile(entry, io.BytesIO(b"1"))
+docker = ["docker", "--host", "unix:///tmp/autoeval-docker.sock"]
+tag = "autoeval-private-daemon-probe:" + sys.argv[1]
+try:
+    subprocess.run(
+        docker + ["import", "-", tag], input=archive.getvalue(),
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=8,
+    )
+finally:
+    subprocess.run(
+        docker + ["image", "rm", tag],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3,
+    )
+"""
+        try:
+            await asyncio.to_thread(
+                self.command, ["exec", self.container_id, "python3", "-c", script, self.owner]
+            )
+        except (OSError, RuntimeError):
+            reason = "harbor_private_daemon_image_import_failed"
+            result["execution_ready"] = False
+            result["blocking_reasons"] = [*result["blocking_reasons"], reason]
+            for check in result["dataset_checks"]:
+                check["blocking_reasons"] = [*check["blocking_reasons"], reason]
+        return result
+
     async def validate(self, spec):
         row = await asyncio.to_thread(self._inspect_owned)
         if not row or not row["State"]["Running"]:

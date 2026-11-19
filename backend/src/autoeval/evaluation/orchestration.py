@@ -249,13 +249,17 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                     sessions, settings, run_id, child, adapter, job, observation.state,
                     secret, child_secret, heartbeat,
                 )
-            except Exception:  # noqa: BLE001 -- an isolated job retains its evidence for retry
+            except Exception as exc:  # noqa: BLE001 -- isolated jobs retain evidence for retry
                 if not isolated:
                     raise
                 if not (child.summary or {}).get("archive_pending"):
                     await update_child(
                         sessions, child.id,
-                        summary={**(child.summary or {}), "archive_pending": True},
+                        summary={
+                            **(child.summary or {}),
+                            "archive_pending": True,
+                            "archive_error_type": type(exc).__name__,
+                        },
                     )
                 continue
             if state == "failed" and summary is None:
@@ -452,14 +456,11 @@ async def archive_terminal_child(
                 )
     if state == "succeeded":
         result = await adapter.collect(job)
-        from autoeval.planning.planning_observations import archive_native, publish
+        from autoeval.planning.planning_observations import archive_native
 
         await archive_native(
             sessions, settings, run_id, child, result["result"], child_secret
         )
-        reader = getattr(adapter, "progress", None)
-        if reader:
-            await publish(sessions, settings, run_id, child.id, await reader(job))
         unified = result["result"]["unified_result"]
         async with sessions() as session, session.begin():
             await artifact(

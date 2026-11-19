@@ -546,6 +546,7 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                 remote.ensure.reset_mock(side_effect=True, return_value=True)
                 remote.ensure.return_value = container_id
                 remote.status = AsyncMock(return_value=SimpleNamespace(state="succeeded"))
+                remote.progress = AsyncMock(side_effect=OSError("Progress temporarily unavailable"))
                 remote.collect = AsyncMock(
                     return_value={"result": {"unified_result": unified, "tool_exit_code": 0}}
                 )
@@ -570,6 +571,7 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                         )
                         if failed_writes and remote.collect.await_count == 2:
                             assert child.summary["archive_pending"] is True
+                            assert child.summary["archive_error_type"] == "OSError"
                             assert not lease.released
                             remote.remove.assert_not_awaited()
                     return {"result": {"unified_result": unified, "tool_exit_code": 0}}

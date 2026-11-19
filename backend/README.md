@@ -150,3 +150,9 @@ the resolved execution `template`, an adaptor `spec` without credentials,
 AISBench fixture configured for a controlled model response and a Harbor
 fixture configured for a no-model trial. Both tests exercise preflight,
 native execution, SSH result retrieval, and removal on the configured node.
+
+The AISBench source lock records exact file bytes. For a disposable checkout at
+the locked commit, run `python deploy/prepare_r13_aisbench_source.py <checkout>`
+from the repository root before packaging the image. The command reconstructs
+CRLF bytes only when the result exactly matches the recorded SHA-256 and stops
+on any other discrepancy.

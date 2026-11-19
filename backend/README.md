@@ -158,9 +158,10 @@ CRLF bytes only when the result exactly matches the recorded SHA-256 and stops
 on any other discrepancy.
 
 Build the Harbor private-daemon image with `deploy/r13-harbor.Dockerfile` from
-the repository root, passing the locally available historical runner as
-`HARBOR_BASE`. Pin the resulting image ID in the SSH resource template. The
-recipe keeps the daemon socket and image storage inside the runner. The base
-image must also contain the tool and adaptor revisions required for the job.
+the repository root. Set `HARBOR_BASE` to the local Harbor runner containing
+the locked tool and its `/opt/venvs/harbor` environment. Set `ADAPTOR_IMAGE` to
+the AISBench image built with the locked adaptor. Pin the resulting image ID
+in the SSH resource template. The build verifies adaptor provenance and
+that the CLI actually exposes its preflight command.
 Provision the node with its approved container runtime policy and preloaded
 trial images before running the Harbor preflight.

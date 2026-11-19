@@ -23,9 +23,17 @@ def test_template_requires_selected_node_to_offer_exact_tool_revision(tmp_path, 
     node = str(uuid4())
     image = "sha256:" + "1" * 64
     file = tmp_path / "nodes.json"
-    file.write_text(json.dumps({
-        node: {"executors": {tool: {"revision": "fixed", "image_id": image, "private_docker": True}}},
-    }))
+    file.write_text(
+        json.dumps(
+            {
+                node: {
+                    "executors": {
+                        tool: {"revision": "fixed", "image_id": image, "private_docker": True}
+                    }
+                },
+            }
+        )
+    )
     settings = SimpleNamespace(planning_container_config=str(file))
     task = {"compilation": {"config": {"subcommand": subcommand}}, "tool": {"revision": "fixed"}}
     assert execution_template(settings, node, task)["image_id"] == image
@@ -47,9 +55,9 @@ def test_container_identity_must_match_owner_even_when_name_and_image_match():
         "Image": adapter.image_id,
         "Config": {"Labels": {"autoeval.dataset_execution": str(uuid4())}},
     }
-    adapter.control = SimpleNamespace(command=lambda _, argv: (
-        b"container-id" if argv[1] == "ps" else json.dumps([row]).encode()
-    ))
+    adapter.control = SimpleNamespace(
+        command=lambda _, argv: b"container-id" if argv[1] == "ps" else json.dumps([row]).encode()
+    )
     with pytest.raises(ValueError, match="ownership mismatch"):
         adapter._find(None)
 
@@ -58,3 +66,67 @@ def test_submission_rejects_local_resource_kind():
     with pytest.raises(ValidationError) as exc:
         SubmitTask.model_validate({"resource_kind": "docker_local"})
     assert any(error["loc"] == ("resource_kind",) for error in exc.value.errors())
+
+
+def test_recover_created_container_and_remove_only_selected_child():
+    import json
+    from contextlib import nullcontext
+
+    rows = {}
+    lost_reply = True
+
+    def command(_, argv):
+        nonlocal lost_reply
+        _, action, *args = argv
+        if action == "ps":
+            name = args[-1].removeprefix("name=^/").removesuffix("$")
+            return name.encode() if name in rows else b""
+        if action == "create":
+            name = args[args.index("--name") + 1]
+            assert name not in rows
+            rows[name] = {
+                "Id": name,
+                "Name": "/" + name,
+                "Image": image,
+                "Config": {
+                    "Labels": {
+                        "autoeval.dataset_execution": args[args.index("--label") + 1].split("=")[1]
+                    }
+                },
+                "State": {"Status": "created", "Running": False},
+            }
+            if lost_reply:
+                lost_reply = False
+                raise OSError("SSH reply lost after create")
+            return name.encode()
+        if action == "inspect":
+            return json.dumps([rows[args[-1]]]).encode()
+        if action == "start":
+            rows[args[-1]]["State"] = {"Status": "running", "Running": True}
+        elif action == "rm":
+            del rows[args[-1]]
+        else:
+            raise AssertionError(argv)
+        return b""
+
+    def adapter(owner):
+        result = object.__new__(IsolatedPlanningContainer)
+        result.owner = owner
+        result.name = "autoeval-task-" + owner
+        result.image_id = image
+        result.template = {"family": "aisbench"}
+        result.control = SimpleNamespace(command=command, connect=nullcontext)
+        return result
+
+    image = "sha256:" + "2" * 64
+    first = adapter(str(uuid4()))
+    second = adapter(str(uuid4()))
+    with pytest.raises(OSError, match="reply lost"):
+        first._ensure()
+    assert second._ensure() == second.name
+    recovered = adapter(first.owner)
+    assert recovered._ensure() == first.name
+    assert set(rows) == {first.name, second.name}
+    assert recovered._remove()
+    assert recovered._remove()
+    assert rows[second.name]["State"]["Running"]

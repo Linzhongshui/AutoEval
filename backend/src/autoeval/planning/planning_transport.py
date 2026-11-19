@@ -460,8 +460,10 @@ class IsolatedPlanningContainer(PlanningRemoteContainer):
         if len(raw) != 1:
             raise ValueError("Ambiguous task container")
         row = json.loads(self.control.command(client, ["docker", "inspect", raw[0]]))[0]
+        expected = getattr(self, "expected_container_id", None)
         if (
-            row["Name"] != "/" + self.name
+            (expected is not None and row["Id"] != expected)
+            or row["Name"] != "/" + self.name
             or row["Image"] != self.image_id
             or (row["Config"]["Labels"] or {}).get("autoeval.dataset_execution") != self.owner
         ):
@@ -495,6 +497,7 @@ class IsolatedPlanningContainer(PlanningRemoteContainer):
             elif not row["State"]["Running"]:
                 raise ValueError("Task container stopped")
             self.container_id = row["Id"]
+            self.expected_container_id = row["Id"]
             return row["Id"]
 
     async def ensure(self):
@@ -574,8 +577,11 @@ def execution_template(settings, resource_id, task):
     }
 
 
-async def isolated_transport(session, settings, resource_id, owner, template):
+async def isolated_transport(session, settings, resource_id, owner, template, *, container_id=None):
     row = await session.get(SSHResourceBinding, resource_id)
     if row is None:
         raise ValueError("SSH binding missing")
-    return IsolatedPlanningContainer(connection_for(row, settings), owner, template)
+    adapter = IsolatedPlanningContainer(connection_for(row, settings), owner, template)
+    adapter.expected_container_id = container_id
+    return adapter
+

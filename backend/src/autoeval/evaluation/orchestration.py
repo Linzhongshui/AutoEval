@@ -97,9 +97,12 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
         adapters = {}
         for item in inputs["tasks"]:
             if isolated:
+                owner = child_ids[item["task_id"]]
+                environment = await session.get(DatasetExecutionEnvironment, owner)
                 adapters[item["task_id"]] = await isolated_transport(
                     session, settings, item["assigned_resource_id"],
-                    child_ids[item["task_id"]], item["execution_template"],
+                    owner, item["execution_template"],
+                    container_id=environment.container_id if environment else None,
                 )
                 continue
             adapters[item["task_id"]] = (

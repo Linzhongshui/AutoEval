@@ -140,7 +140,9 @@ async def test_failed_removal_retains_lease_until_reconciled(monkeypatch):
     from autoeval.evaluation import isolated_cleanup
 
     owner = uuid4()
-    row = SimpleNamespace(resource_id=uuid4(), template={}, state="cleanup_pending")
+    row = SimpleNamespace(
+        resource_id=uuid4(), template={}, state="cleanup_pending", container_id=None
+    )
     remove = AsyncMock(side_effect=[OSError("SSH disconnected"), True])
     release = AsyncMock()
 
@@ -245,3 +247,27 @@ async def test_artifact_read_requires_owned_container_before_remote_io(method, m
 
     adapter.validate.assert_awaited_once()
     remote_read.assert_not_awaited()
+
+
+def test_recovered_container_rejects_replacement_with_same_labels():
+    import json
+
+    adapter = object.__new__(IsolatedPlanningContainer)
+    adapter.owner = str(uuid4())
+    adapter.name = "autoeval-task-" + adapter.owner
+    adapter.image_id = "sha256:" + "1" * 64
+    adapter.expected_container_id = "original-id"
+    row = {
+        "Id": "replacement-id",
+        "Name": "/" + adapter.name,
+        "Image": adapter.image_id,
+        "Config": {"Labels": {"autoeval.dataset_execution": adapter.owner}},
+    }
+    adapter.control = SimpleNamespace(
+        command=lambda _, argv: (
+            row["Id"].encode() if argv[1] == "ps" else json.dumps([row]).encode()
+        )
+    )
+
+    with pytest.raises(ValueError, match="ownership mismatch"):
+        adapter._find(None)

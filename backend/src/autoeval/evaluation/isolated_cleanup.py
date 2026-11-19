@@ -38,7 +38,12 @@ async def reclaim_child(sessions, settings, owner):
             row.cleanup_attempted_at = datetime.now(UTC)
             try:
                 adapter = await isolated_transport(
-                    session, settings, row.resource_id, owner, row.template
+                    session,
+                    settings,
+                    row.resource_id,
+                    owner,
+                    row.template,
+                    container_id=row.container_id,
                 )
                 removed = await adapter.remove()
             except (OSError, RuntimeError, ValueError):

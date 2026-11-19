@@ -128,7 +128,7 @@ runs a private Docker daemon at `/tmp/autoeval-docker.sock`. The runner sets
 `DOCKER_HOST` to that socket. Prepare and validate this image on the target
 node before enabling Harbor there. Its trial resources belong to that private
 daemon. Keep the existing fixed runner binding for planning and in-flight
-snapshots. Apply migration `0037_execution_environment` before starting the
+snapshots. Apply migrations through `0038_cleanup_attempt_order` before starting the
 updated worker and reconciler.
 
 PEIR and AgentX currently have tool identifiers and template matching tests.

@@ -93,6 +93,8 @@ def test_inference_view_includes_prompt_and_model_response():
     assert view["available"] is True
     assert view["prompt"] == "Question"
     assert view["response"] == "Answer: A"
+    assert view["prediction"] == "Answer: A"
+    assert view["output"] == "Answer: A"
     assert "case_evidence" in view["sources"]
     assert view["usage"]["output_tokens"] == 20
 

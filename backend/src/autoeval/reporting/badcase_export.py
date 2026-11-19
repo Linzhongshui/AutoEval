@@ -310,6 +310,9 @@ def inference_view(
             "input_tokens": raw.get("input_tokens"),
             "output_tokens": raw.get("output_tokens"),
         }
+    prediction = raw.get("prediction")
+    if prediction is None and response is not None:
+        prediction = response
     available = bool(prompt or response or messages or files)
     return redact(
         {
@@ -325,7 +328,8 @@ def inference_view(
             "prompt": prompt,
             "messages": messages,
             "response": response,
-            "prediction": raw.get("prediction"),
+            "prediction": prediction,
+            "output": response or prediction,
             "finish_reason": value.get("finish_reason"),
             "usage": usage,
             "score": raw.get("score", value.get("score")),

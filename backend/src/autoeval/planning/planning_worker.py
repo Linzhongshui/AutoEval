@@ -15,7 +15,12 @@ from autoeval.infrastructure.models import RunSnapshot
 from autoeval.infrastructure.secrets import FileSecretStore
 from autoeval.planning.artifacts import artifact, current_preflight
 from autoeval.planning.models import PlanningArtifact, PlanningJob
-from autoeval.planning.planning_transport import execution_template, isolated_transport, transport
+from autoeval.planning.planning_transport import (
+    HarborDaemonUnavailable,
+    execution_template,
+    isolated_transport,
+    transport,
+)
 from autoeval.reporting.case_history import CaseExecutionRecord
 from autoeval.resources.models import TargetBinding
 from autoeval.resources.targets import validate_url
@@ -40,8 +45,7 @@ async def set_job(sessions, identifier, **values):
 async def preflight_isolated_task(sessions, settings, job_id, item, check):
     resource_id = item["assigned_resource_id"]
     frozen = item["execution_template"]
-    if execution_template(settings, resource_id, item) != frozen:
-        reason = "ssh_execution_template_changed"
+    def blocked(reason):
         return {
             "execution_ready": False,
             "planner_ready": False,
@@ -58,6 +62,9 @@ async def preflight_isolated_task(sessions, settings, job_id, item, check):
             }],
         }
 
+    if execution_template(settings, resource_id, item) != frozen:
+        return blocked("ssh_execution_template_changed")
+
     async with sessions() as session:
         adapter = await isolated_transport(
             session, settings, resource_id, uuid.uuid5(job_id, item["task_id"]), frozen
@@ -68,6 +75,8 @@ async def preflight_isolated_task(sessions, settings, job_id, item, check):
         for dataset_check in result["dataset_checks"]:
             dataset_check["assigned_resource_id"] = resource_id
         return result
+    except HarborDaemonUnavailable:
+        return blocked("harbor_private_daemon_unavailable")
     finally:
         if not await adapter.remove():
             raise RuntimeError("Preflight container cleanup could not be confirmed")

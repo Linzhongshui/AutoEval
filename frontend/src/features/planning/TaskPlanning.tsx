@@ -26,6 +26,7 @@ const preflightReasons: Record<string, string> = {
   dataset_path_unavailable: "执行容器无法访问数据目录",
   dataset_path_missing: "配置缺少数据目录",
   harbor_network_unavailable: "Harbor 网络容量不可用",
+  harbor_private_daemon_unavailable: "Harbor 私有 Docker 无法启动",
   harbor_private_daemon_image_import_failed: "Harbor 私有 Docker 无法导入试运行镜像",
   ssh_execution_template_changed: "SSH 执行模板已变更，请重新检查环境",
   tool_identity_mismatch: "AISBench 版本或评分文件校验不匹配",

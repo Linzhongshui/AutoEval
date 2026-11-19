@@ -525,8 +525,9 @@ async def test_harbor_container_waits_for_private_daemon(monkeypatch):
     adapter.template = {"family": "harbor"}
     adapter._ensure = Mock(return_value="owned-container")
     adapter.command = Mock(side_effect=RuntimeError("Private daemon unavailable"))
-    with pytest.raises(RuntimeError, match="Private daemon unavailable"):
+    with pytest.raises(RuntimeError, match="Harbor private Docker daemon is unavailable") as exc:
         await adapter.ensure()
+    assert exc.value.container_id == "owned-container"
     command = adapter.command.call_args.args[0]
     assert command[:4] == ["exec", "owned-container", "python3", "-c"]
     assert "unix:///tmp/autoeval-docker.sock" in command[4]

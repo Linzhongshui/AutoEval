@@ -27,7 +27,12 @@ from autoeval.infrastructure.models import EvaluationRun, RunEvent, RunSnapshot
 from autoeval.infrastructure.secrets import FileSecretStore
 from autoeval.planning.artifacts import artifact
 from autoeval.planning.models import PlanningArtifact
-from autoeval.planning.planning_transport import execution_template, isolated_transport, transport
+from autoeval.planning.planning_transport import (
+    HarborDaemonUnavailable,
+    execution_template,
+    isolated_transport,
+    transport,
+)
 from autoeval.reporting.unified_outputs import InvalidUnifiedOutput, archive_output
 from autoeval.resources.models import TargetBinding
 
@@ -334,7 +339,18 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                             summary={"reason": "SSH execution template changed"},
                         )
                         continue
-                    container_id = await adapter.ensure()
+                    try:
+                        container_id = await adapter.ensure()
+                    except HarborDaemonUnavailable as exc:
+                        async with sessions() as session, session.begin():
+                            environment = await session.get(DatasetExecutionEnvironment, child.id)
+                            environment.container_id = exc.container_id
+                        await update_child(
+                            sessions, child.id, state="failed", finished_at=datetime.now(UTC),
+                            summary={"reason": "Harbor private Docker daemon is unavailable"},
+                        )
+                        await reclaim_child(sessions, settings, child.id)
+                        continue
                     async with sessions() as session, session.begin():
                         current_run = await session.get(EvaluationRun, run_id, with_for_update=True)
                         environment = await session.get(DatasetExecutionEnvironment, child.id)

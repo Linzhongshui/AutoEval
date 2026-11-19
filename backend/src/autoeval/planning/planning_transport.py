@@ -442,6 +442,12 @@ async def transport(session, settings, inputs):
     return PlanningDocker(settings.docker_executable, row.container_id, row.image_id)
 
 
+class HarborDaemonUnavailable(RuntimeError):
+    def __init__(self, container_id):
+        super().__init__("Harbor private Docker daemon is unavailable")
+        self.container_id = container_id
+
+
 class IsolatedPlanningContainer(PlanningRemoteContainer):
     """An execution container whose Docker identity is scoped to one subtask."""
 
@@ -528,9 +534,12 @@ while time.monotonic() < deadline:
     time.sleep(0.25)
 raise SystemExit(1)
 """
-            await asyncio.to_thread(
-                self.command, ["exec", container_id, "python3", "-c", script]
-            )
+            try:
+                await asyncio.to_thread(
+                    self.command, ["exec", container_id, "python3", "-c", script]
+                )
+            except (OSError, RuntimeError) as exc:
+                raise HarborDaemonUnavailable(container_id) from exc
         return container_id
 
     async def preflight(self, tasks=None):

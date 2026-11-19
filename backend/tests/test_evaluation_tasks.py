@@ -217,7 +217,9 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                         assigned_resource_kind=inputs["resource_kind"],
                         execution_template={
                             **template,
-                            "family": "harbor" if t["dataset"] == "DeepSWE" else "aisbench",
+                            "family": "harbor"
+                            if t["dataset"] in {"DeepSWE", "AutomationBench"}
+                            else "aisbench",
                         },
                         samples=[{"sample_id": "0", "tool_case_id": "0"}],
                         manifest_sha256="a" * 64,
@@ -653,6 +655,75 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                     assert run.state == child.state == "cancelled"
                     assert environment.container_id == container_id
                     assert environment.state == "cleaned" and lease.released
+
+                mixed = submission(("AutomationBench", "DeepSWE"))
+                mixed.update(target_id=target_id, resource_id=resource_id)
+                accepted = await send("r13-shared-node-isolation", mixed)
+                assert accepted.status_code == 202
+                mixed_id = uuid.UUID(accepted.json()["data"]["run_id"])
+                async with app.state.sessions() as session:
+                    children = await session.scalars(
+                        select(DatasetExecution).where(DatasetExecution.run_id == mixed_id)
+                    )
+                    owners = {child.payload["dataset"]: child.id for child in children}
+
+                async def remove_failed_child():
+                    async with app.state.sessions() as session:
+                        survivor = await session.get(DatasetExecutionEnvironment, owners["DeepSWE"])
+                        reserved = await session.scalar(
+                            select(CapacityLease).where(CapacityLease.owner_id == owners["DeepSWE"])
+                        )
+                        assert survivor.container_id == "2" * 64
+                        assert not reserved.released
+                    return True
+
+                failed_adapter = SimpleNamespace(
+                    ensure=AsyncMock(return_value="1" * 64),
+                    submit=AsyncMock(),
+                    status=AsyncMock(return_value=SimpleNamespace(state="failed")),
+                    remove=AsyncMock(side_effect=remove_failed_child),
+                )
+                successful_adapter = SimpleNamespace(
+                    ensure=AsyncMock(return_value="2" * 64),
+                    submit=AsyncMock(),
+                    status=AsyncMock(return_value=SimpleNamespace(state="succeeded")),
+                    collect=AsyncMock(
+                        return_value={"result": {"unified_result": unified, "tool_exit_code": 0}}
+                    ),
+                    remove=AsyncMock(return_value=True),
+                )
+
+                async def choose_adapter(session, settings, resource, owner, template, **kwargs):
+                    assert resource == resource_id or resource == uuid.UUID(resource_id)
+                    return (
+                        failed_adapter if owner == owners["AutomationBench"] else successful_adapter
+                    )
+
+                monkeypatch.setattr(orchestration, "isolated_transport", choose_adapter)
+                monkeypatch.setattr(isolated_cleanup, "isolated_transport", choose_adapter)
+                async with asyncio.timeout(10):
+                    await orchestration.execute(app.state.sessions, settings, mixed_id)
+                failed_adapter.submit.assert_awaited_once()
+                successful_adapter.submit.assert_awaited_once()
+                failed_adapter.remove.assert_awaited_once()
+                successful_adapter.remove.assert_awaited_once()
+                async with app.state.sessions() as session:
+                    evidence = await session.scalar(
+                        select(CaseExecutionRecord).where(CaseExecutionRecord.run_id == mixed_id)
+                    )
+                    assert evidence.dataset_key == "DeepSWE"
+                    assert (
+                        await session.get(DatasetExecution, owners["AutomationBench"])
+                    ).state == "failed"
+                    assert (
+                        await session.get(DatasetExecution, owners["DeepSWE"])
+                    ).state == "succeeded"
+                    for owner in owners.values():
+                        environment = await session.get(DatasetExecutionEnvironment, owner)
+                        lease = await session.scalar(
+                            select(CapacityLease).where(CapacityLease.owner_id == owner)
+                        )
+                        assert environment.state == "cleaned" and lease.released
     finally:
         await admin.execute(f'DROP DATABASE "{database}"')
         await admin.close()

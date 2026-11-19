@@ -69,7 +69,10 @@ async def execute_job(sessions, settings, identifier):
                     )
                 try:
                     await isolated.ensure()
-                    task_resources[item["task_id"]] = await isolated.preflight([check])
+                    result = await isolated.preflight([check])
+                    for dataset_check in result["dataset_checks"]:
+                        dataset_check["assigned_resource_id"] = item["assigned_resource_id"]
+                    task_resources[item["task_id"]] = result
                 finally:
                     if not await isolated.remove():
                         raise RuntimeError("Preflight container cleanup could not be confirmed")

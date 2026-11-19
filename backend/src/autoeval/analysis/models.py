@@ -7,7 +7,7 @@ from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from autoeval.models import Base, Record
+from autoeval.infrastructure.models import Base, Record
 
 
 class ReportAnalysis(Record, Base):

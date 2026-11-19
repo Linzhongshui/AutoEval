@@ -6,7 +6,7 @@ from sqlalchemy import DateTime, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from autoeval.models import Base, Record
+from autoeval.infrastructure.models import Base, Record
 
 
 class PlanningArtifact(Record, Base):

@@ -9,14 +9,15 @@ import httpx
 import pytest
 from sqlalchemy import select
 
-from autoeval.api import create_app
-from autoeval.config import get_settings
-from autoeval.contracts import JobObservation, JobRef
-from autoeval.models import EvaluationRun, RunSnapshot
-from autoeval.orchestration import CapacityLease, DatasetExecution, execute
+from autoeval.catalog.standard_inputs import digest
+from autoeval.entrypoints.api import create_app
+from autoeval.evaluation.models import CapacityLease, DatasetExecution
+from autoeval.evaluation.orchestration import execute
+from autoeval.infrastructure.config import get_settings
+from autoeval.infrastructure.contracts import JobObservation, JobRef
+from autoeval.infrastructure.models import EvaluationRun, RunSnapshot
 from autoeval.planning import PlanningArtifact, PlanningJob
-from autoeval.standard_inputs import digest
-from autoeval.targets import TargetBinding
+from autoeval.resources.models import TargetBinding
 
 pytestmark = pytest.mark.skipif(
     os.getenv("AE_INFRA_TEST") != "1", reason="Explicit PostgreSQL/S3 integration flag required"
@@ -172,9 +173,9 @@ async def test_real_storage_three_dataset_execution_and_partial_failure(
         async def transport(*args):
             return fake
 
-        monkeypatch.setattr("autoeval.orchestration.transport", transport)
+        monkeypatch.setattr("autoeval.evaluation.orchestration.transport", transport)
         monkeypatch.setattr(
-            "autoeval.orchestration.FileSecretStore.get", lambda *args: "TEST-no-secret"
+            "autoeval.evaluation.orchestration.FileSecretStore.get", lambda *args: "TEST-no-secret"
         )
         await asyncio.wait_for(execute(app.state.sessions, app.state.settings, run_id), 25)
         assert len(fake.submitted) == 3
@@ -213,9 +214,9 @@ async def test_cancel_before_submission_never_calls_model(monkeypatch):
         async def transport(*args):
             return fake
 
-        monkeypatch.setattr("autoeval.orchestration.transport", transport)
+        monkeypatch.setattr("autoeval.evaluation.orchestration.transport", transport)
         monkeypatch.setattr(
-            "autoeval.orchestration.FileSecretStore.get", lambda *args: "TEST-no-secret"
+            "autoeval.evaluation.orchestration.FileSecretStore.get", lambda *args: "TEST-no-secret"
         )
         await execute(app.state.sessions, app.state.settings, run_id)
         assert not fake.submitted
@@ -245,7 +246,7 @@ async def test_planning_routes_and_invalid_probe_validation():
 
 
 async def test_capacity_is_shared_across_distinct_runs():
-    from autoeval.orchestration import acquire, release
+    from autoeval.evaluation.service import acquire, release
 
     app = create_app(get_settings())
     resource = {
@@ -270,7 +271,7 @@ async def test_capacity_is_shared_across_distinct_runs():
 
 async def test_worker_does_not_repeat_completed_job_or_connect_after_pending_cancel(monkeypatch):
     from autoeval.planning import PlanningJob
-    from autoeval.planning_worker import execute_job
+    from autoeval.planning.planning_worker import execute_job
 
     app = create_app(get_settings())
     async with app.router.lifespan_context(app):
@@ -298,7 +299,7 @@ async def test_worker_does_not_repeat_completed_job_or_connect_after_pending_can
         async def forbidden(*args):
             pytest.fail("No transport or model contact is allowed")
 
-        monkeypatch.setattr("autoeval.planning_worker.transport", forbidden)
+        monkeypatch.setattr("autoeval.planning.planning_worker.transport", forbidden)
         await execute_job(app.state.sessions, app.state.settings, completed)
         await execute_job(app.state.sessions, app.state.settings, cancelled)
         async with app.state.sessions() as session:
@@ -307,7 +308,7 @@ async def test_worker_does_not_repeat_completed_job_or_connect_after_pending_can
 
 
 async def test_running_probe_cancel_is_confirmed_without_resubmission(monkeypatch):
-    from autoeval.planning_worker import execute_job
+    from autoeval.planning.planning_worker import execute_job
 
     app = create_app(get_settings())
     async with app.router.lifespan_context(app):
@@ -369,10 +370,10 @@ async def test_running_probe_cancel_is_confirmed_without_resubmission(monkeypatc
         async def transport(*args):
             return adapter
 
-        monkeypatch.setattr("autoeval.planning_worker.transport", transport)
-        monkeypatch.setattr("autoeval.planning_worker.validate_url", lambda *args: None)
+        monkeypatch.setattr("autoeval.planning.planning_worker.transport", transport)
+        monkeypatch.setattr("autoeval.planning.planning_worker.validate_url", lambda *args: None)
         monkeypatch.setattr(
-            "autoeval.planning_worker.FileSecretStore.get", lambda *args: "TEST-no-secret"
+            "autoeval.planning.planning_worker.FileSecretStore.get", lambda *args: "TEST-no-secret"
         )
         await execute_job(app.state.sessions, app.state.settings, identifier)
         async with app.state.sessions() as session:
@@ -452,7 +453,7 @@ async def test_planned_run_is_visible_in_task_management_detail():
 
 
 async def test_preflight_job_does_not_create_evaluation_run(monkeypatch):
-    from autoeval.planning_worker import execute_job
+    from autoeval.planning.planning_worker import execute_job
 
     app = create_app(get_settings())
     async with app.router.lifespan_context(app):
@@ -489,7 +490,7 @@ async def test_preflight_job_does_not_create_evaluation_run(monkeypatch):
         async def transport(*args):
             return PreflightAdapter()
 
-        monkeypatch.setattr("autoeval.planning_worker.transport", transport)
+        monkeypatch.setattr("autoeval.planning.planning_worker.transport", transport)
         await execute_job(app.state.sessions, app.state.settings, identifier)
 
         async with app.state.sessions() as session:

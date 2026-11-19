@@ -13,12 +13,12 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr
 from sqlalchemy import and_, select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
+from autoeval.infrastructure.secrets import FileSecretStore
 from autoeval.resources.models import ResourceProvider, SSHResourceBinding
-from autoeval.secrets import FileSecretStore
-from autoeval.ssh_executor import SSHConnection, SSHExecutor, load_private_key
+from autoeval.resources.ssh_executor import SSHConnection, SSHExecutor, load_private_key
 
 # The native bridge module stays at the package root; pin its bytes by absolute path.
-_AISBENCH_NATIVE_PATH = Path(__file__).resolve().parents[1] / "aisbench_native.py"
+_AISBENCH_NATIVE_PATH = Path(__file__).resolve().parents[2] / "autoeval_runtime" / "aisbench_native.py"
 
 
 class SSHCredential(BaseModel):
@@ -193,7 +193,7 @@ async def validate(binding_id: uuid.UUID, request: Request):
             ready = False
             if row.native_tool_root:
                 from autoeval.resources.execution_transport import frozen_ssh_resource
-                from autoeval.ssh_native import SSHNativeTransport
+                from autoeval.resources.ssh_native import SSHNativeTransport
 
                 spec = frozen_ssh_resource(row, request.app.state.settings)
                 native = SSHNativeTransport(

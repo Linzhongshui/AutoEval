@@ -1,6 +1,6 @@
 import pytest
 
-from autoeval.secrets import FileSecretStore
+from autoeval.infrastructure.secrets import FileSecretStore
 
 
 def test_secret_reference_is_opaque_and_retrievable(tmp_path):

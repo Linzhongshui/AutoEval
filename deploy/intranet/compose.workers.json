@@ -22,7 +22,7 @@
       "command": [
         "python",
         "-m",
-        "autoeval.dispatcher"
+        "autoeval.entrypoints.dispatcher"
       ],
       "user": "1008:1008",
       "network_mode": "service:network-anchor",
@@ -52,7 +52,7 @@
       "command": [
         "python",
         "-m",
-        "autoeval.worker",
+        "autoeval.entrypoints.worker",
         "workflow"
       ],
       "user": "1008:1008",
@@ -83,7 +83,7 @@
       "command": [
         "python",
         "-m",
-        "autoeval.worker",
+        "autoeval.entrypoints.worker",
         "monitored"
       ],
       "user": "1008:1008",
@@ -114,7 +114,7 @@
       "command": [
         "python",
         "-m",
-        "autoeval.planning_worker"
+        "autoeval.planning.planning_worker"
       ],
       "user": "1008:1008",
       "network_mode": "service:network-anchor",
@@ -144,7 +144,7 @@
       "command": [
         "python",
         "-m",
-        "autoeval.worker",
+        "autoeval.entrypoints.worker",
         "planning-execution"
       ],
       "user": "1008:1008",
@@ -175,7 +175,7 @@
       "command": [
         "python",
         "-m",
-        "autoeval.reconciler"
+        "autoeval.entrypoints.reconciler"
       ],
       "user": "1008:1008",
       "network_mode": "service:network-anchor",

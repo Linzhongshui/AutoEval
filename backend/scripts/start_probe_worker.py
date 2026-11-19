@@ -12,9 +12,9 @@ import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
-from autoeval.config import get_settings
-from autoeval.db import create_database
-from autoeval.probe_dispatch import consumer_ready
+from autoeval.infrastructure.config import get_settings
+from autoeval.infrastructure.db import create_database
+from autoeval.planning.probe_dispatch import consumer_ready
 
 
 async def ready():
@@ -46,7 +46,7 @@ def main():
         (logs / "probe-worker-future.stderr.log").open("ab") as err,
     ):
         process = subprocess.Popen(
-            [sys.executable, "-m", "autoeval.planning_worker"],
+            [sys.executable, "-m", "autoeval.planning.planning_worker"],
             cwd=root,
             env=environment,
             stdout=out,

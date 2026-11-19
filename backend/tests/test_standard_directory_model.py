@@ -1,8 +1,8 @@
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import uuid4
 
-from autoeval import standard_inputs
+from autoeval.catalog import standard_inputs
 
 
 def test_directory_model_overrides_service_alias_without_mutating_snapshot(monkeypatch):

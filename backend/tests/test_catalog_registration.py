@@ -8,10 +8,10 @@ import httpx
 import pytest
 from sqlalchemy import delete, select
 
-from autoeval.api import create_app
-from autoeval.config import Settings
-from autoeval.data_workbench import LeaderboardRecord
-from autoeval.registry import Asset, AssetVersion
+from autoeval.catalog.registry import Asset, AssetVersion
+from autoeval.entrypoints.api import create_app
+from autoeval.infrastructure.config import Settings
+from autoeval.reporting.models import LeaderboardRecord
 
 
 @pytest.mark.asyncio

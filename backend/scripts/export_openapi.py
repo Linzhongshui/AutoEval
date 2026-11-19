@@ -8,7 +8,7 @@ factory only touches external dependencies inside its lifespan handler.
 import json
 from pathlib import Path
 
-from autoeval.api import create_app
+from autoeval.entrypoints.api import create_app
 
 
 def main() -> None:

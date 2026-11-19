@@ -2,9 +2,9 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from autoeval.api import create_app
-from autoeval.config import Settings
-from autoeval.configuration import Parameters
+from autoeval.catalog.configuration import Parameters
+from autoeval.entrypoints.api import create_app
+from autoeval.infrastructure.config import Settings
 
 
 def test_configuration_rejects_unknown_and_unbounded_parameters():

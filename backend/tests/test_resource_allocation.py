@@ -3,8 +3,8 @@ import uuid
 import pytest
 from fastapi import HTTPException
 
+from autoeval.evaluation.evaluation_tasks import SubmitTask
 from autoeval.evaluation.resource_allocation import allocate_resource, resource_for_task
-from autoeval.evaluation_tasks import SubmitTask
 from autoeval.planning.routes import PlanInput
 
 

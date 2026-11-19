@@ -5,8 +5,8 @@ import asyncio
 from sqlalchemy import select, text
 
 from autoeval.catalog.models import Asset, AssetVersion
-from autoeval.config import get_settings
-from autoeval.db import create_database
+from autoeval.infrastructure.config import get_settings
+from autoeval.infrastructure.db import create_database
 
 
 async def register():

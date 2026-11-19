@@ -6,11 +6,12 @@ import pytest
 from fastapi import HTTPException
 from sqlalchemy.dialects import postgresql
 
-from autoeval.configuration import TestConfigVersion as ConfigVersion
-from autoeval.configuration import list_configs
-from autoeval.registry import Asset, AssetVersion, list_models
+from autoeval.catalog.configuration import list_configs
+from autoeval.catalog.models import TestConfigVersion as ConfigVersion
+from autoeval.catalog.registry import Asset, AssetVersion, list_models
 from autoeval.resources import ResourceBinding, list_resources
-from autoeval.targets import TargetBinding, list_targets
+from autoeval.resources.models import TargetBinding
+from autoeval.resources.targets import list_targets
 
 
 class Result:

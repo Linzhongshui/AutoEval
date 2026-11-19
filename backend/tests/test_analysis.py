@@ -14,9 +14,9 @@ from autoeval.analysis import (
     retry_existing_analysis,
     validate_analysis_output,
 )
-from autoeval.analysis_activity import build_analysis_result
-from autoeval.api import create_app
-from autoeval.config import Settings
+from autoeval.analysis.activity import build_analysis_result
+from autoeval.entrypoints.api import create_app
+from autoeval.infrastructure.config import Settings
 
 ATTEMPT_ID = uuid.uuid4()
 CATALOG = {
@@ -559,8 +559,8 @@ async def test_activity_freezes_input_before_running(monkeypatch):
     import hashlib
     from pathlib import Path
 
-    from autoeval import analysis_activity
-    from autoeval.datasets import canonical_manifest
+    from autoeval.analysis import activity as analysis_activity
+    from autoeval.catalog.datasets import canonical_manifest
 
     snapshot_body = {"config_version_id": "config", "parameters": {}, "tool": {}}
     snapshot_digest = hashlib.sha256(canonical_manifest(snapshot_body)).hexdigest()
@@ -734,7 +734,7 @@ def test_analysis_api_and_capabilities_reflect_explicit_configuration():
 
 
 def test_outbox_metadata_accepts_analysis_intents():
-    from autoeval.models import Outbox
+    from autoeval.infrastructure.models import Outbox
 
     assert any(
         "ANALYZE_REPORT" in str(constraint.sqltext)

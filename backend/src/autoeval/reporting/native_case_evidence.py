@@ -79,7 +79,7 @@ async def enrich_case(session, settings, row, original):
     from sqlalchemy import select
 
     from autoeval.catalog.datasets import read_manifest
-    from autoeval.models import RunSnapshot
+    from autoeval.infrastructure.models import RunSnapshot
     from autoeval.reporting.models import UnifiedArtifact
 
     if original.get("schema_version") != "unified-case.v1" or original.get("prompt") is not None:
@@ -87,8 +87,8 @@ async def enrich_case(session, settings, row, original):
     snapshot = await session.scalar(select(RunSnapshot).where(RunSnapshot.run_id == row.run_id))
     if snapshot and snapshot.canonical_body.get("schema_version") == "planned-run.v1":
         from autoeval.evaluation.models import DatasetExecution
-        from autoeval.native_predictions import selected
-        from autoeval.planning_observations import case_contract
+        from autoeval.planning.planning_observations import case_contract
+        from autoeval_runtime.native_predictions import selected
 
         children = list(
             await session.scalars(

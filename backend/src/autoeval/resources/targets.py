@@ -12,8 +12,8 @@ from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
 
 from autoeval.catalog.models import Asset, AssetVersion, ModelConfigBinding
+from autoeval.infrastructure.secrets import FileSecretStore
 from autoeval.resources.models import ConnectionProbe, TargetBinding
-from autoeval.secrets import FileSecretStore
 
 
 class CredentialInput(BaseModel):

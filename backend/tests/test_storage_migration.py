@@ -4,7 +4,7 @@ from unittest.mock import Mock
 import pytest
 from botocore.exceptions import ClientError
 
-from autoeval.migrate_storage import copy_object
+from autoeval.infrastructure.migrate_storage import copy_object
 
 
 def source(raw):

@@ -1,4 +1,4 @@
-from autoeval.dataset_identity import report_dataset
+from autoeval.catalog.dataset_identity import report_dataset
 
 
 def test_identity():

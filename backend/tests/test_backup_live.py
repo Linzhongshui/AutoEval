@@ -11,9 +11,9 @@ from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from autoeval.backup import create_backup, restore_backup
-from autoeval.config import get_settings
-from autoeval.datasets import storage
+from autoeval.catalog.datasets import storage
+from autoeval.infrastructure.backup import create_backup, restore_backup
+from autoeval.infrastructure.config import get_settings
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("AE_INFRA_TEST") or not os.environ.get("AE_DOCKER_TEST"),

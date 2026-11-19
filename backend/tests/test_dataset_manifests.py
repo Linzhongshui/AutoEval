@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from autoeval.datasets import ManifestInput
+from autoeval.catalog.datasets import ManifestInput
 
 
 def test_manifest_requires_unique_samples_and_parent():

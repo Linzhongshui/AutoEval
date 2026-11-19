@@ -6,8 +6,8 @@ import httpx
 import pytest
 from sqlalchemy import select
 
-from autoeval.api import create_app
-from autoeval.evaluations import EvaluationReport
+from autoeval.entrypoints.api import create_app
+from autoeval.evaluation.evaluations import EvaluationReport
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("AE_REPORTS_TEST"), reason="Verified real report required"

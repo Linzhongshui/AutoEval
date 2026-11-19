@@ -9,14 +9,14 @@ import pytest
 from playwright.sync_api import expect, sync_playwright
 from sqlalchemy import delete, select
 
-from autoeval.config import get_settings
-from autoeval.configuration import TestConfigItem as ConfigItem
-from autoeval.configuration import TestConfigVersion as ConfigVersion
-from autoeval.db import create_database
-from autoeval.profiles import ConfigDatasetBinding
-from autoeval.registry import Asset, AssetVersion, ModelConfigBinding
+from autoeval.catalog.models import ConfigDatasetBinding
+from autoeval.catalog.models import TestConfigItem as ConfigItem
+from autoeval.catalog.models import TestConfigVersion as ConfigVersion
+from autoeval.catalog.registry import Asset, AssetVersion, ModelConfigBinding
+from autoeval.infrastructure.config import get_settings
+from autoeval.infrastructure.db import create_database
 from autoeval.resources import ResourceBinding, ResourceProvider
-from autoeval.targets import TargetBinding
+from autoeval.resources.models import TargetBinding
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("AE_BROWSER_URL") or not os.environ.get("AE_REPORTS_TEST"),

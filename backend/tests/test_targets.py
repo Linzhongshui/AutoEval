@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-from autoeval.targets import probe_model_list, validate_url
+from autoeval.resources.targets import probe_model_list, validate_url
 
 
 @pytest.mark.parametrize(

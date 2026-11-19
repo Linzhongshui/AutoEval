@@ -1,4 +1,4 @@
-from autoeval.result_identity import allowed_result_datasets
+from autoeval.reporting.result_identity import allowed_result_datasets
 
 
 def test_automationbench_native_accuracy_requires_matching_evidence():
@@ -6,7 +6,7 @@ def test_automationbench_native_accuracy_requires_matching_evidence():
 
     import pytest
 
-    from autoeval.result_identity import apply_automationbench_accuracy
+    from autoeval.reporting.result_identity import apply_automationbench_accuracy
 
     case = {
         "harbor_artifact": {
@@ -61,7 +61,7 @@ def test_accuracy_aliases_still_supported():
 
 
 def test_automationbench_directory_and_native_name_are_distinct():
-    from autoeval.result_identity import result_case_aliases
+    from autoeval.reporting.result_identity import result_case_aliases
 
     samples = [
         {
@@ -81,7 +81,7 @@ def test_automationbench_directory_and_native_name_are_distinct():
 def test_harbor_omitted_dataset_uses_frozen_identity_without_mutation():
     import pytest
 
-    from autoeval.result_identity import normalize_result_identities
+    from autoeval.reporting.result_identity import normalize_result_identities
 
     raw = {"cases": [{"case_id": "automationbench/task-one", "attempt": 1}]}
     config = {"subcommand": "harbor_agent", "params": {}}

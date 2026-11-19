@@ -584,4 +584,3 @@ async def isolated_transport(session, settings, resource_id, owner, template, *,
     adapter = IsolatedPlanningContainer(connection_for(row, settings), owner, template)
     adapter.expected_container_id = container_id
     return adapter
-

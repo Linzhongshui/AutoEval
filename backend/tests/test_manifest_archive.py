@@ -14,7 +14,7 @@ async def test_archived_manifest_blocks_new_submissions_without_reading_history(
     async def target(*args):
         return {"model": "TEST", "base_url": "https://fixture.invalid"}
 
-    monkeypatch.setattr("autoeval.evaluation.service.target_data", target)
+    monkeypatch.setattr("autoeval.evaluation.inputs.target_data", target)
     body = PlanInput(
         target_id=uuid.uuid4(),
         resource_id=uuid.uuid4(),

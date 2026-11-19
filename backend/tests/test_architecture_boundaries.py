@@ -6,6 +6,8 @@ importing schemas, ORM classes or constants from sibling modules stays legal.
 """
 
 import ast
+import subprocess
+import sys
 from pathlib import Path
 
 from autoeval.api import create_app
@@ -49,3 +51,14 @@ def test_routes_do_not_import_sibling_route_handlers():
                         f"{target}.{alias.name}; move the shared logic into a service"
                     )
     assert not violations, "\n".join(violations)
+
+def test_planning_worker_import_does_not_register_planning_routes():
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            ("import sys; import autoeval.planning_worker; "
+            "assert 'autoeval.planning.routes' not in sys.modules"),
+        ],
+        check=True,
+    )

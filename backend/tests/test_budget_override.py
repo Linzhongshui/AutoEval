@@ -9,7 +9,7 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 from autoeval.billing_transport import budget_ignored, execution_route
-from autoeval.evaluation import service
+from autoeval.evaluation import submission as service
 from autoeval.evaluation_tasks import SubmitTask
 from autoeval.models import RunSnapshot
 from autoeval.planning import PlanInput

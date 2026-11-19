@@ -29,7 +29,9 @@ import {
   Trophy,
   Zap,
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { Card } from "../shared/ui/Card";
+import { Badge } from "../shared/ui/Badge";
+import { Note } from "../shared/ui/Note";
 import "../styles/index.css";
 
 const menus = [
@@ -41,36 +43,6 @@ const menus = [
   { id: "leaderboard", label: "测评榜单", icon: Trophy },
   { id: "data-workbench", label: "数据工作台", icon: Database },
 ];
-
-function Card({
-  title,
-  children,
-  className = "",
-}: {
-  title?: ReactNode;
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <section className={`card ${className}`}>
-      {title && <h2>{title}</h2>}
-      {children}
-    </section>
-  );
-}
-
-function Badge({ children, tone = "purple" }: { children: ReactNode; tone?: string }) {
-  return <span className={`badge ${tone}`}>{children}</span>;
-}
-
-function Notice({ children }: { children: ReactNode }) {
-  return (
-    <div className="notice">
-      <Info size={17} />
-      {children}
-    </div>
-  );
-}
 
 export function App() {
   const [page, setPage] = useState(location.hash.slice(1) || "console");
@@ -355,7 +327,7 @@ function Overview({ go }: { go: (path: string) => void }) {
           </div>
         </Card>
       </div>
-      <Notice>探索报告不代表全量成绩；只有真实且完整的报告才进入内部可比榜单。未采集的指标保持为空，不使用静态示例补齐。</Notice>
+      <Note><Info size={17} />探索报告不代表全量成绩；只有真实且完整的报告才进入内部可比榜单。未采集的指标保持为空，不使用静态示例补齐。</Note>
     </div>
   );
 }

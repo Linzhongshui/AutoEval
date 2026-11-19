@@ -13,7 +13,8 @@ from autoeval.case_history import CaseExecutionRecord
 from autoeval.config import get_settings
 from autoeval.db import create_database
 from autoeval.models import RunSnapshot
-from autoeval.planning import PlanningArtifact, PlanningJob, artifact, current_preflight
+from autoeval.planning.artifacts import artifact, current_preflight
+from autoeval.planning.models import PlanningArtifact, PlanningJob
 from autoeval.planning_transport import transport
 from autoeval.secrets import FileSecretStore
 from autoeval.targets import TargetBinding, validate_url

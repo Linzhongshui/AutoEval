@@ -21,7 +21,7 @@ RUNTIME = Path(__file__).with_name("planning_runtime.py")
 
 def runtime_files():
     """Ship exact calculation and validation source without importing the API in containers."""
-    source = RUNTIME.with_name("standard_inputs.py").read_text(encoding="utf-8")
+    source = (RUNTIME.parent / "catalog" / "standard_compilation.py").read_text(encoding="utf-8")
     names = {"COMMON", "ACCURACY", "AGENT", "digest", "leaves", "validate_config", "reject_secrets"}
     pieces = []
     for node in ast.parse(source).body:

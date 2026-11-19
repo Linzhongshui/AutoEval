@@ -30,7 +30,10 @@ async def test_tag_catalog_and_network_failure(monkeypatch, status):
         lambda **kwargs: original(transport=httpx.MockTransport(respond), **kwargs),
     )
     result = await standard_inputs.repository_tags(
-        SimpleNamespace(state=SimpleNamespace(request_id="test"))
+        SimpleNamespace(
+            app=SimpleNamespace(state=SimpleNamespace()),
+            state=SimpleNamespace(request_id="test"),
+        )
     )
     assert result["data"] == (
         {"status": "available", "tags": [{"name": "2026-RP0", "revision": revision}]}

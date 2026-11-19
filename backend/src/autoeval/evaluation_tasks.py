@@ -14,10 +14,10 @@ from autoeval.evaluation.service import (
     evaluation_run_report,
     planned_run_detail,
     planned_run_report,
-    submit_planned_run,
 )
+from autoeval.evaluation.submission import submit_planned_run
 from autoeval.models import EvaluationRun, RunSnapshot
-from autoeval.planning import PlanInput, ResourceRef, TaskInput
+from autoeval.planning.schemas import PlanInput, ResourceRef, TaskInput
 from autoeval.responses import Accepted, Envelope, SubmittedRun, TaskListEnvelope, envelope
 
 

@@ -26,7 +26,7 @@ from autoeval.infrastructure.config import Settings, get_settings
 from autoeval.infrastructure.db import create_database
 from autoeval.langfuse_integration import router as langfuse_router
 from autoeval.monitored_execution import router as monitored_router
-from autoeval.planning import router as planning_router
+from autoeval.planning.routes import router as planning_router
 from autoeval.reporting.case_history import router as case_history_router
 from autoeval.reporting.data_workbench import router as data_workbench_router
 from autoeval.reporting.leaderboards import router as leaderboard_router

@@ -135,7 +135,7 @@ async def test_final_form_concurrency_cannot_override_scoring_lock(monkeypatch):
     async def target(*args):
         return {"model": "TEST", "base_url": "https://fixture.invalid"}
 
-    monkeypatch.setattr("autoeval.evaluation.service.target_data", target)
+    monkeypatch.setattr("autoeval.evaluation.inputs.target_data", target)
     with pytest.raises(HTTPException, match="Standard lock conflicts") as exc:
         await resolve_inputs(Session(), get_settings(), body)
     assert exc.value.status_code == 422
@@ -216,8 +216,8 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                     },
                 )
 
-            monkeypatch.setattr("autoeval.orchestration.resolve_inputs", resolve)
-            monkeypatch.setattr("autoeval.orchestration.current_preflight", preflight)
+            monkeypatch.setattr("autoeval.evaluation.submission.resolve_inputs", resolve)
+            monkeypatch.setattr("autoeval.evaluation.submission.current_preflight", preflight)
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app), base_url="http://test"
             ) as c:

@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -21,6 +21,12 @@ class EvaluationReport(Record, Base):
     object_key: Mapped[str] = mapped_column(String(256))
     sha256: Mapped[str] = mapped_column(String(64))
     execution_origin: Mapped[str] = mapped_column(String(16), server_default="unverified")
+    __table_args__ = (
+        CheckConstraint(
+            "execution_origin IN ('real','simulation','unverified')",
+            name="ck_report_origin",
+        ),
+    )
 
 
 class ResultArchiveRevision(Record, Base):

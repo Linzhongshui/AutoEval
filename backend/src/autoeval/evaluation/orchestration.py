@@ -19,10 +19,10 @@ from autoeval.contracts import JobRef
 from autoeval.datasets import canonical_manifest, read_manifest, write_manifest
 from autoeval.db import create_database
 from autoeval.evaluation.models import DatasetExecution
-from autoeval.evaluation.resource_allocation import resource_for_task
-from autoeval.evaluation.service import acquire, artifact, demand_for, release
+from autoeval.evaluation.resource_allocation import acquire, demand_for, release, resource_for_task
 from autoeval.infrastructure.domain import DATASET_ACTIVE, DATASET_TERMINAL, RUN_TERMINAL
 from autoeval.models import EvaluationRun, RunEvent, RunSnapshot
+from autoeval.planning.artifacts import artifact
 from autoeval.planning.models import PlanningArtifact
 from autoeval.planning_transport import transport
 from autoeval.secrets import FileSecretStore

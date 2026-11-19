@@ -1,27 +1,6 @@
-"""Planning module package; router stays here, shared evaluation input services
-live in autoeval.evaluation.service and are re-exported for compatibility."""
+"""Compatibility exports for the planning package."""
 
-from autoeval.evaluation.service import (
-    artifact,
-    current_preflight,
-    manifest_dataset_matches,
-    resolve_inputs,
-    selection_identity,
-    target_data,
-)
-from autoeval.planning.models import PlanningArtifact, PlanningJob
-from autoeval.planning.routes import (
-    ApplyInput,
-    CloseProbe,
-    CurveInput,
-    PlanInput,
-    ProbeInput,
-    ResourceRef,
-    Strict,
-    TaskInput,
-    envelope,
-    router,
-)
+from importlib import import_module
 
 __all__ = [
     "ApplyInput",
@@ -43,3 +22,17 @@ __all__ = [
     "selection_identity",
     "target_data",
 ]
+
+
+def __getattr__(name):
+    if name not in __all__:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    if name in {"PlanningArtifact", "PlanningJob"}:
+        module = "autoeval.planning.models"
+    elif name in {"CloseProbe", "envelope", "router"}:
+        module = "autoeval.planning.routes"
+    elif name in {"ApplyInput", "CurveInput", "PlanInput", "ProbeInput", "ResourceRef", "Strict", "TaskInput"}:
+        module = "autoeval.planning.schemas"
+    else:
+        module = "autoeval.evaluation.service"
+    return getattr(import_module(module), name)

@@ -1,3 +1,4 @@
+import { datasetPriority, displayModelName, mergeReferenceGroups } from "./referenceGroups";
 import { formatScore } from "../../shared/format";
 import { ModelServices } from "../resources/ModelServices";
 import { datasetIdentity } from "../catalog/datasetIdentities";
@@ -118,15 +119,6 @@ function EntryHistory({ id, revision }: { id: string; revision: number }) {
   return <section><h3>评审与修改记录</h3><p>{message}</p>{events.map((event) => <details key={event.id}><summary>{new Date(event.created_at).toLocaleString("zh-CN")} · 版本 {event.details.revision} · {event.details.reason}</summary><pre className="snapshot">{JSON.stringify(event.details.entry, null, 2)}</pre></details>)}</section>;
 }
 
-const datasetPriority = (name: string) => {
- const value = name.toLowerCase().replace(/[^a-z0-9]/g, "");
- return value.includes("gpqadiamond") ? 0 : value.includes("deepswe") ? 1 : value.includes("terminalbench") ? 2 : value.includes("automationbench") ? 3 : value.includes("mmmupro") ? 4 : value.includes("gpqa") ? 5 : 6;
-};
-// 仅归一化平台服务别名，保留官方来源披露的模型标识。
-const MODEL_ALIASES: Record<string, string> = { "deepseek-flash": "deepseek-ai/DeepSeek-V4.1-Flash-1017" };
-const displayModelName = (name: string) => MODEL_ALIASES[name.trim().toLowerCase()] ?? name;
-const PUBLISHER_PERCENT_DATASETS = new Set(["AutomationBench", "GPQA-Diamond"]);
-const HIDDEN_REFERENCE_SOURCE = "official-ms-56a6dd9854fd8da9184dd928cbfa3af6";
 function LeaderboardChart({ group }: { group: { comparison: Record<string, unknown>; entries: CuratedRecord[] } }) {
   const models = new Map<string, CuratedRecord[]>();
   for (const row of group.entries) {
@@ -134,7 +126,7 @@ function LeaderboardChart({ group }: { group: { comparison: Record<string, unkno
     const model = group.comparison.dataset === "GPQA-Diamond"
       && row.entry.source_type === "official"
       && row.entry.source_key === "latest-official-2d57266c7c89598816090031cb873221"
-      && group.entries.some((item) => item.entry.source_type === "report" && item.entry.model_name === MODEL_ALIASES["deepseek-flash"])
+      && group.entries.some((item) => item.entry.source_type === "report" && item.entry.model_name === displayModelName("deepseek-flash"))
       ? "deepseek-ai/DeepSeek-V4.1-Flash-1017"
       : row.entry.model_name;
     models.set(model, [...(models.get(model) ?? []), row]);
@@ -167,47 +159,7 @@ export function PublishedLeaderboard() {
   const [metric, setMetric] = useState("");
   const [source, setSource] = useState("");
   const [query, setQuery] = useState("");
-  // Only align publisher scores with a unique platform metric in the same unit and direction.
-  const comparisonKey = (dataset: string, comparison: Record<string, unknown>) =>
-    JSON.stringify([dataset, comparison.unit, comparison.direction]);
-  const canonical = new Map<string, Set<string>>();
-  for (const original of groups) {
-    const metric = String(original.comparison.metric);
-    if (metric === "publisher_reported_score" || !original.entries.some((row) => row.entry.source_type === "report")) continue;
-    const key = comparisonKey(datasetIdentity(String(original.comparison.dataset)), original.comparison);
-    const metrics = canonical.get(key) ?? new Set<string>();
-    metrics.add(metric);
-    canonical.set(key, metrics);
-  }
-  const merged = new Map<string, { id: string; comparison: Record<string, unknown>; entries: CuratedRecord[] }>();
-  for (const original of groups) {
-    const dataset = datasetIdentity(String(original.comparison.dataset));
-    const rawMetric = String(original.comparison.metric);
-    // These publisher references use a 0–100 scale in the official imports.
-    const deepSwe = dataset === "DeepSWE";
-    const percentageReference = (deepSwe || PUBLISHER_PERCENT_DATASETS.has(dataset))
-      && rawMetric === "publisher_reported_score"
-      && original.comparison.unit === "points"
-      && original.entries.every((row) => row.entry.source_type === "official" && row.entry.value >= 0 && row.entry.value <= 100);
-    const referenceUnit = percentageReference ? "%" : original.comparison.unit;
-    const candidates = canonical.get(comparisonKey(dataset, { ...original.comparison, unit: referenceUnit }));
-    // DeepSWE uses a shared Pass@1 reference view even without platform results.
-    const compatibleMetric = percentageReference
-      ? (deepSwe && original.comparison.direction === "higher_is_better"
-        ? "pass@1"
-        : candidates?.has("accuracy") ? "accuracy" : undefined)
-      : (candidates?.size === 1 ? [...candidates][0] : undefined);
-    const metric = rawMetric === "publisher_reported_score" && compatibleMetric ? compatibleMetric : rawMetric;
-    const unit = metric !== rawMetric ? referenceUnit : original.comparison.unit;
-    const comparison = { ...original.comparison, dataset, metric, unit } as Record<string, unknown>;
-    const group = { ...original, comparison, entries: original.entries.filter((row) => row.entry.source_type !== "manual" && row.entry.source_key !== HIDDEN_REFERENCE_SOURCE) };
-    if (!group.entries.length) continue;
-    const entries = group.entries.map((row) => ({ ...row, entry: { ...row.entry, model_name: row.entry.source_type === "report" ? displayModelName(row.entry.model_name) : row.entry.model_name } }));
-    const key = JSON.stringify([comparison.dataset, comparison.metric, comparison.unit, comparison.direction]);
-    const existing = merged.get(key);
-    if (existing) existing.entries.push(...entries);
-    else merged.set(key, { id: key, comparison: { ...comparison, source_name: "平台实测与官方公开成绩", source_type: "mixed", scope: "各记录范围见模型说明" }, entries });
-  }
+  const merged = mergeReferenceGroups(groups);
   const filtered = [...merged.values()].sort((a,b) => datasetPriority(String(a.comparison.dataset))-datasetPriority(String(b.comparison.dataset))).filter((g) => (!dataset || g.comparison.dataset === dataset) && (!metric || g.comparison.metric === metric)).map((g) => ({ ...g, entries: g.entries.filter((r) => (!source || r.entry.source_type === source) && r.entry.model_name.toLowerCase().includes(query.toLowerCase())).sort((a,b) => (g.comparison.direction === "higher_is_better" ? b.entry.value-a.entry.value : a.entry.value-b.entry.value) || a.entry.model_name.localeCompare(b.entry.model_name)) })).filter((g) => g.entries.length);
 
   return <div className="stack" data-testid="published-leaderboard">

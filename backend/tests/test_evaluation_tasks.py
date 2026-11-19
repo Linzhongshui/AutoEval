@@ -219,7 +219,7 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                             **template,
                             "family": "harbor" if t["dataset"] == "DeepSWE" else "aisbench",
                         },
-                        samples=[{"sample_id": "0"}],
+                        samples=[{"sample_id": "0", "tool_case_id": "0"}],
                         manifest_sha256="a" * 64,
                         tool={},
                         subset_scope="lite",
@@ -527,6 +527,75 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                     )
                     assert run.state == child.state == "failed"
                     assert environment.state == "cleaned" and lease.released
+
+                import json
+                from pathlib import Path
+
+                from autoeval.reporting.models import CaseExecutionRecord, UnifiedCollection
+
+                accepted = await send("r13-harbor-archive-retry", harbor)
+                assert accepted.status_code == 202
+                retry_id = uuid.UUID(accepted.json()["data"]["run_id"])
+                fixture_path = Path(__file__).parent / "fixtures/unified_outputs/deepswe.json"
+                unified = json.loads(fixture_path.read_bytes())
+                case = next(case for case in unified["cases"] if case["status"] == "success")
+                unified["cases"] = [{**case, "case_id": "0", "dataset": "DeepSWE"}]
+                unified["case_count"] = 1
+                remote.ensure.reset_mock(side_effect=True, return_value=True)
+                remote.ensure.return_value = container_id
+                remote.status = AsyncMock(return_value=SimpleNamespace(state="succeeded"))
+                remote.collect = AsyncMock(
+                    return_value={"result": {"unified_result": unified, "tool_exit_code": 0}}
+                )
+                remote.remove.reset_mock()
+
+                objects = {}
+                failed_writes = []
+
+                def put_object(settings, key, raw):
+                    if key.startswith("unified-results/") and not failed_writes:
+                        failed_writes.append(key)
+                        raise OSError("Injected object store outage")
+                    objects[key] = raw
+
+                async def report_terminal_lease(*args):
+                    async with app.state.sessions() as session:
+                        child = await session.scalar(
+                            select(DatasetExecution).where(DatasetExecution.run_id == retry_id)
+                        )
+                        lease = await session.scalar(
+                            select(CapacityLease).where(CapacityLease.owner_id == child.id)
+                        )
+                        if failed_writes and remote.collect.await_count == 2:
+                            assert child.summary["archive_pending"] is True
+                            assert not lease.released
+                            remote.remove.assert_not_awaited()
+                    return {"result": {"unified_result": unified, "tool_exit_code": 0}}
+
+                remote.collect.side_effect = report_terminal_lease
+                for module in (
+                    "autoeval.planning.artifacts",
+                    "autoeval.reporting.unified_outputs",
+                    "autoeval.reporting.langfuse_integration",
+                ):
+                    monkeypatch.setattr(module + ".write_manifest", put_object)
+                async with asyncio.timeout(15):
+                    await orchestration.execute(app.state.sessions, settings, retry_id)
+
+                remote.submit.assert_awaited_once()
+                remote.remove.assert_awaited_once()
+                assert remote.collect.await_count == 2 and len(failed_writes) == 1
+                async with app.state.sessions() as session:
+                    run = await session.get(EvaluationRun, retry_id)
+                    evidence = await session.scalar(
+                        select(CaseExecutionRecord).where(CaseExecutionRecord.run_id == retry_id)
+                    )
+                    collection = await session.scalar(
+                        select(UnifiedCollection).where(UnifiedCollection.run_id == retry_id)
+                    )
+                    assert run.state == "completed"
+                    assert evidence.sample_id == "0" and evidence.object_key in objects
+                    assert collection.object_key in objects
     finally:
         await admin.execute(f'DROP DATABASE "{database}"')
         await admin.close()

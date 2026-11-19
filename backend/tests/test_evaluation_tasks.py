@@ -579,10 +579,32 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                     "autoeval.reporting.langfuse_integration",
                 ):
                     monkeypatch.setattr(module + ".write_manifest", put_object)
+                # Simulate Worker loss after the daemon accepted the first submission.
+                remote.submit.side_effect = asyncio.CancelledError
+                with pytest.raises(asyncio.CancelledError):
+                    await orchestration.execute(app.state.sessions, settings, retry_id)
+                async with app.state.sessions() as session:
+                    saved_child = await session.scalar(
+                        select(DatasetExecution).where(DatasetExecution.run_id == retry_id)
+                    )
+                    saved_environment = await session.get(
+                        DatasetExecutionEnvironment, saved_child.id
+                    )
+                    assert saved_child.state == saved_environment.state == "submitting"
+                    assert saved_environment.container_id == container_id
+                remote.remove.assert_not_awaited()
+                remote.submit.side_effect = None
+
                 async with asyncio.timeout(15):
                     await orchestration.execute(app.state.sessions, settings, retry_id)
 
                 remote.submit.assert_awaited_once()
+                remote.ensure.assert_awaited_once()
+                assert execution_transport.await_args.kwargs["container_id"] == container_id
+                assert all(
+                    call.args[0].submission_key == str(saved_child.id)
+                    for call in remote.status.await_args_list
+                )
                 remote.remove.assert_awaited_once()
                 assert remote.collect.await_count == 2 and len(failed_writes) == 1
                 async with app.state.sessions() as session:

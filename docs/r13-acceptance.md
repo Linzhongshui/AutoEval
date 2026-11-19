@@ -56,3 +56,7 @@
 ### Harbor 私有 Docker 能力探测
 
 历史 Harbor 固定镜像内含 Docker CLI 和 dockerd。隔离探测在不挂载宿主 Docker socket、断开外部网络的临时容器中进行。关闭默认 bridge 时私有 daemon 能响应，启用 bridge 时普通容器权限下出现 netlink `operation not permitted`。加入容器内网络管理能力后可成功创建和删除隔离 bridge，但向该 daemon 导入已预载 Alpine 镜像仍因 `unshare: operation not permitted` 失败。此结果尚不能证明可运行 trial。各探测容器已回收，未提交模型或 Harbor trial 作业。
+
+### 全量回归复验
+
+在 `100cfc8` 上使用独立 PostgreSQL 16.6 从空库迁移到最新版本。后端全量回归 392 项通过、132 项跳过。开启数据库专项后，容量测试 4 项通过，包括两个并发事务争抢最后一个名额。启用本机真实 Docker 后，R13 专项 20 项通过、4 项跳过。前端类型检查和生产构建通过。此前获得的真实 SSH 扩展工具与 AISBench 原生作业证据见上文。本轮尚未执行 Harbor 原生 trial。

@@ -411,3 +411,20 @@ async def test_unified_archive_can_retry_after_stored_evidence_read_failure(monk
         == summary
     )
     assert read.call_count == 2
+
+
+def test_ssh_pool_selects_first_compatible_node_within_configured_scope(monkeypatch):
+    from autoeval.planning import planning_transport
+
+    first, second, third = (uuid4() for _ in range(3))
+    template = {"revision": "fixed"}
+    monkeypatch.setattr(
+        planning_transport,
+        "execution_template",
+        lambda _, node, task: None if node == str(first) else template,
+    )
+    select = planning_transport.select_execution_template
+
+    assert select(None, [first, second, third], None, {}) == (str(second), template)
+    assert select(None, [first, second, third], [str(third)], {}) == (str(third), template)
+    assert select(None, [first], [str(third)], {}) is None

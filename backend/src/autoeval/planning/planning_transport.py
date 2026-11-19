@@ -577,6 +577,17 @@ def execution_template(settings, resource_id, task):
     }
 
 
+def select_execution_template(settings, candidates, supported, task):
+    for candidate in candidates:
+        resource_id = str(candidate)
+        if supported is not None and resource_id not in supported:
+            continue
+        template = execution_template(settings, resource_id, task)
+        if template is not None:
+            return resource_id, template
+    return None
+
+
 async def isolated_transport(session, settings, resource_id, owner, template, *, container_id=None):
     row = await session.get(SSHResourceBinding, resource_id)
     if row is None:

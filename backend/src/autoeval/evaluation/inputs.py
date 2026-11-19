@@ -58,7 +58,8 @@ async def resolve_inputs(session, settings, body):
         from autoeval.evaluation.resource_allocation import allocate_resource
 
         candidates = body.resource_ids or [body.resource_id]
-        allocate_resource(candidates, resource_ids)
+        if resource_ids is not None:
+            allocate_resource(candidates, resource_ids)
         if (
             not compiled.get("input_ready")
             or compiled.get("adaptor_revision") != "955089ab32ef696c231d628f5ad0d9da28f430c4"
@@ -88,16 +89,16 @@ async def resolve_inputs(session, settings, body):
             config["subcommand"] == "harbor_agent"
         ):
             raise HTTPException(422, "Dataset tool family mismatch")
-        from autoeval.planning.planning_transport import execution_template
+        from autoeval.planning.planning_transport import select_execution_template
 
-        templates = {
-            str(node): execution_template(settings, node, {"compilation": compiled, "tool": profile.contract})
-            for node in candidates if resource_ids is None or str(node) in resource_ids
-        }
-        compatible = [node for node, template in templates.items() if template]
-        if not compatible:
-            raise HTTPException(422, f"No selected SSH node has a matching execution template for {spec.dataset}")
-        assigned_resource = compatible[0]
+        assignment = select_execution_template(
+            settings, candidates, resource_ids, {"compilation": compiled, "tool": profile.contract}
+        )
+        if assignment is None:
+            raise HTTPException(
+                422, f"No selected SSH node has a matching execution template for {spec.dataset}"
+            )
+        assigned_resource, template = assignment
         full = await session.get(DatasetManifest, profile.full_manifest_id)
         source = await asyncio.to_thread(read_manifest, settings, full)
         samples = [
@@ -154,7 +155,7 @@ async def resolve_inputs(session, settings, body):
                 **spec.model_dump(mode="json"),
                 "assigned_resource_id": assigned_resource,
                 "assigned_resource_kind": body.resource_kind,
-                "execution_template": templates[assigned_resource],
+                "execution_template": template,
                 "compilation": compiled,
                 "compilation_sha256": compilation.sha256,
                 "standard_baseline_source": {

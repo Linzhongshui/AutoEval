@@ -15,7 +15,7 @@ from autoeval.infrastructure.models import RunSnapshot
 from autoeval.infrastructure.secrets import FileSecretStore
 from autoeval.planning.artifacts import artifact, current_preflight
 from autoeval.planning.models import PlanningArtifact, PlanningJob
-from autoeval.planning.planning_transport import transport
+from autoeval.planning.planning_transport import execution_template, isolated_transport, transport
 from autoeval.reporting.case_history import CaseExecutionRecord
 from autoeval.resources.models import TargetBinding
 from autoeval.resources.targets import validate_url
@@ -35,6 +35,42 @@ async def set_job(sessions, identifier, **values):
                 value = {**(row.result or {}), **value}
             setattr(row, key, value)
         row.updated_at = datetime.now(UTC)
+
+
+async def preflight_isolated_task(sessions, settings, job_id, item, check):
+    resource_id = item["assigned_resource_id"]
+    frozen = item["execution_template"]
+    if execution_template(settings, resource_id, item) != frozen:
+        reason = "ssh_execution_template_changed"
+        return {
+            "execution_ready": False,
+            "planner_ready": False,
+            "supported_datasets": [],
+            "blocking_reasons": [reason],
+            "dataset_checks": [{
+                "task_id": item["task_id"],
+                "dataset": item["dataset"],
+                "assigned_resource_id": resource_id,
+                "data_path": None,
+                "tool_revision": None,
+                "expected_tool_revision": item["tool"]["revision"],
+                "blocking_reasons": [reason],
+            }],
+        }
+
+    async with sessions() as session:
+        adapter = await isolated_transport(
+            session, settings, resource_id, uuid.uuid5(job_id, item["task_id"]), frozen
+        )
+    try:
+        await adapter.ensure()
+        result = await adapter.preflight([check])
+        for dataset_check in result["dataset_checks"]:
+            dataset_check["assigned_resource_id"] = resource_id
+        return result
+    finally:
+        if not await adapter.remove():
+            raise RuntimeError("Preflight container cleanup could not be confirmed")
 
 
 async def execute_job(sessions, settings, identifier):
@@ -58,24 +94,12 @@ async def execute_job(sessions, settings, identifier):
             for item in inputs["tasks"]
         ]
         if all(t.get("execution_template") for t in inputs["tasks"]):
-            from autoeval.planning.planning_transport import isolated_transport
-
-            task_resources = {}
-            for item, check in zip(inputs["tasks"], checks, strict=True):
-                async with sessions() as session:
-                    isolated = await isolated_transport(
-                        session, settings, item["assigned_resource_id"],
-                        uuid.uuid5(identifier, item["task_id"]), item["execution_template"],
-                    )
-                try:
-                    await isolated.ensure()
-                    result = await isolated.preflight([check])
-                    for dataset_check in result["dataset_checks"]:
-                        dataset_check["assigned_resource_id"] = item["assigned_resource_id"]
-                    task_resources[item["task_id"]] = result
-                finally:
-                    if not await isolated.remove():
-                        raise RuntimeError("Preflight container cleanup could not be confirmed")
+            task_resources = {
+                item["task_id"]: await preflight_isolated_task(
+                    sessions, settings, identifier, item, check
+                )
+                for item, check in zip(inputs["tasks"], checks, strict=True)
+            }
             snapshot = {
                 **next(iter(task_resources.values())),
                 "task_resources": task_resources,

@@ -574,3 +574,27 @@ async def test_harbor_preflight_blocks_daemon_without_image_import_permission(mo
     assert result["blocking_reasons"] == [reason]
     assert result["dataset_checks"][0]["blocking_reasons"] == [reason]
     assert adapter.command.call_args.args[0][-1] == adapter.owner
+
+
+@pytest.mark.asyncio
+async def test_queued_preflight_blocks_template_drift_before_starting_ssh(monkeypatch):
+    from unittest.mock import AsyncMock
+
+    from autoeval.planning import planning_worker
+
+    resource_id = str(uuid4())
+    item = {
+        "task_id": "GPQA",
+        "dataset": "GPQA",
+        "assigned_resource_id": resource_id,
+        "execution_template": {"image_id": "old"},
+        "tool": {"revision": "fixed"},
+    }
+    monkeypatch.setattr(planning_worker, "execution_template", lambda *_: {"image_id": "new"})
+    connect = AsyncMock()
+    monkeypatch.setattr(planning_worker, "isolated_transport", connect)
+    result = await planning_worker.preflight_isolated_task(None, None, uuid4(), item, None)
+    assert not result["execution_ready"]
+    assert result["blocking_reasons"] == ["ssh_execution_template_changed"]
+    assert result["dataset_checks"][0]["assigned_resource_id"] == resource_id
+    connect.assert_not_awaited()

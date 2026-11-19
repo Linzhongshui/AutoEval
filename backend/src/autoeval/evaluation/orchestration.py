@@ -378,6 +378,10 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
             if child.state != "pending":
                 continue
             async with sessions() as session, session.begin():
+                current_run = await session.get(EvaluationRun, run_id, with_for_update=True)
+                if current_run.cancel_requested_at is not None:
+                    cancelled = True
+                    break
                 if not await acquire(
                     session,
                     child.id,
@@ -428,9 +432,20 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                         continue
                     container_id = await adapter.ensure()
                     async with sessions() as session, session.begin():
+                        current_run = await session.get(EvaluationRun, run_id, with_for_update=True)
                         environment = await session.get(DatasetExecutionEnvironment, child.id)
                         environment.container_id = container_id
-                        environment.state = "submitting"
+                        cancelled = current_run.cancel_requested_at is not None
+                        if cancelled:
+                            stored = await session.get(DatasetExecution, child.id, with_for_update=True)
+                            stored.state = "cancelled"
+                            stored.finished_at = datetime.now(UTC)
+                            environment.state = "cleanup_pending"
+                        else:
+                            environment.state = "submitting"
+                    if cancelled:
+                        await reclaim_child(sessions, settings, child.id)
+                        break
                 await adapter.submit(
                     {
                         "kind": "adaptor",
@@ -448,7 +463,9 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
         async with sessions() as session, session.begin():
             run = await session.get(EvaluationRun, run_id, with_for_update=True)
             await advance_run(
-                session, run, "cancelling" if cancelled else "running" if active else "queued"
+                session, run,
+                "cancelling" if run.cancel_requested_at is not None else "running" if active else "queued",
+
             )
         await asyncio.sleep(2)
 

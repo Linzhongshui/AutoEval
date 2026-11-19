@@ -162,6 +162,7 @@ async def test_failed_removal_retains_lease_until_reconciled(monkeypatch):
     await isolated_cleanup.reclaim_child(sessions, None, owner)
     assert row.state == "cleanup_pending"
     release.assert_not_awaited()
+    assert row.cleanup_attempted_at is not None
 
     await isolated_cleanup.reclaim_child(sessions, None, owner)
     await isolated_cleanup.reclaim_child(sessions, None, owner)

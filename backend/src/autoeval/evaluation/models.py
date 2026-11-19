@@ -75,3 +75,5 @@ class DatasetExecutionEnvironment(Base):
     template: Mapped[dict] = mapped_column(JSONB)
     container_id: Mapped[str | None] = mapped_column(String(64))
     state: Mapped[str] = mapped_column(String(24), index=True)
+
+    cleanup_attempted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

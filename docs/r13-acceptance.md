@@ -30,3 +30,9 @@
 ### 已登记 SSH 节点的容器契约复验
 
 通过已有资源绑定和受保护凭据引用生成临时验收配置。节点旧版 Docker 不支持 `docker create --pull`，修复后会核验本地不可变镜像 ID 再创建容器。PEIR 和 AgentX 两项远程固定适配器契约测试通过，覆盖状态查询、取消、失败、经 SFTP 回收专属产物及容器回收。两项用例共耗时约 184 秒。
+
+### 原生工具预检
+
+已从现有登记取得 GPQA 编译和工具档案，用已登记历史镜像启动独立 AISBench 容器。通过固定指纹 SSH 调用预检，结果显示 `adaptor_revision_mismatch`、`tool_identity_mismatch` 和 `no_supported_datasets`。本轮未提交模型作业，临时容器回收已确认。
+
+历史 Harbor 镜像和验收目录仍可访问。镜像尚未证明具备 R13 所需的私有 Docker daemon。此前因轮询错过运行态而滞留的两个旧测试容器，已在核对容器 ID、归属标签和固定作业标识后回收，远端复查已确认不存在。

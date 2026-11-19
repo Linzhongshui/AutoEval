@@ -1,8 +1,10 @@
+# Frontend dependencies and build output
 node_modules/
 dist/
-*.local
+.vite/
 *.tsbuildinfo
-.env
+
+# Python environments and caches
 .venv/
 __pycache__/
 *.pyc
@@ -10,13 +12,19 @@ __pycache__/
 .ruff_cache/
 *.egg-info/
 
-.vite/
+# Local settings and credentials
+*.local
+.env
 .secrets/
 
-# Local browser artifacts and editor/share output; reusable checks live in backend/tests.
-/.screenshots/
+# Local editor drafts and share output
+/.claude/
 /.trae/
 /.trae-html-share-packages/
+/draft_b9845961_folder/
+
+# Browser and test artifacts
+/.screenshots/
 /backend/validation-*.xml
 /backend/test-results/
 /frontend/test-results/
@@ -27,8 +35,7 @@ __pycache__/
 /result/
 analysis_out/
 
-# Local editor plans, database backups and service restart diagnostics.
-/.claude/
+# Local database backups and restart logs
 /backend/local-backups/
 /backend/*.stdout.log
 /backend/*.stderr.log

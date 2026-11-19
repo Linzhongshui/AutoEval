@@ -515,3 +515,18 @@ def test_preflight_identity_changes_when_same_template_moves_to_another_node():
     updated = deepcopy(original)
     updated["tasks"][0]["execution_template"]["readonly_mounts"] = ["/new-dataset"]
     assert selection_identity(updated) != selection_identity(original)
+
+
+@pytest.mark.asyncio
+async def test_harbor_container_waits_for_private_daemon(monkeypatch):
+    from unittest.mock import Mock
+
+    adapter = object.__new__(IsolatedPlanningContainer)
+    adapter.template = {"family": "harbor"}
+    adapter._ensure = Mock(return_value="owned-container")
+    adapter.command = Mock(side_effect=RuntimeError("Private daemon unavailable"))
+    with pytest.raises(RuntimeError, match="Private daemon unavailable"):
+        await adapter.ensure()
+    command = adapter.command.call_args.args[0]
+    assert command[:4] == ["exec", "owned-container", "python3", "-c"]
+    assert "unix:///tmp/autoeval-docker.sock" in command[4]

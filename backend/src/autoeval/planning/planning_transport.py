@@ -506,7 +506,31 @@ class IsolatedPlanningContainer(PlanningRemoteContainer):
             return row["Id"]
 
     async def ensure(self):
-        return await asyncio.to_thread(self._ensure)
+        container_id = await asyncio.to_thread(self._ensure)
+        if self.template["family"] == "harbor":
+            # Wait for the in-container daemon before handing the runner to Harbor.
+            script = """
+import subprocess
+import time
+
+deadline = time.monotonic() + 9
+while time.monotonic() < deadline:
+    try:
+        probe = subprocess.run(
+            ["docker", "--host", "unix:///tmp/autoeval-docker.sock", "info"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2,
+        )
+        if probe.returncode == 0:
+            raise SystemExit(0)
+    except subprocess.TimeoutExpired:
+        pass
+    time.sleep(0.25)
+raise SystemExit(1)
+"""
+            await asyncio.to_thread(
+                self.command, ["exec", container_id, "python3", "-c", script]
+            )
+        return container_id
 
     async def validate(self, spec):
         row = await asyncio.to_thread(self._inspect_owned)

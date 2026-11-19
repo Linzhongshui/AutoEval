@@ -10,10 +10,10 @@ import uuid
 import pytest
 from pydantic import SecretStr
 
-from autoeval.config import get_settings
-from autoeval.secrets import FileSecretStore
-from autoeval.ssh_executor import SSHConnection, SSHExecutor
-from autoeval.ssh_native import SSHNativeTransport
+from autoeval.infrastructure.config import get_settings
+from autoeval.infrastructure.secrets import FileSecretStore
+from autoeval.resources.ssh_executor import SSHConnection, SSHExecutor
+from autoeval.resources.ssh_native import SSHNativeTransport
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("AE_SSH_SIM_TEST"), reason="Local OpenSSH simulator required"

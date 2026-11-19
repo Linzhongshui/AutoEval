@@ -14,21 +14,21 @@ from types import SimpleNamespace
 from sqlalchemy import select, text
 from temporalio import activity
 
-from autoeval.config import get_settings
-from autoeval.contracts import JobRef
-from autoeval.datasets import canonical_manifest, read_manifest, write_manifest
-from autoeval.db import create_database
+from autoeval.catalog.datasets import canonical_manifest, read_manifest, write_manifest
+from autoeval.catalog.standard_inputs import digest
 from autoeval.evaluation.models import DatasetExecution
 from autoeval.evaluation.resource_allocation import acquire, demand_for, release, resource_for_task
+from autoeval.infrastructure.config import get_settings
+from autoeval.infrastructure.contracts import JobRef
+from autoeval.infrastructure.db import create_database
 from autoeval.infrastructure.domain import DATASET_ACTIVE, DATASET_TERMINAL, RUN_TERMINAL
-from autoeval.models import EvaluationRun, RunEvent, RunSnapshot
+from autoeval.infrastructure.models import EvaluationRun, RunEvent, RunSnapshot
+from autoeval.infrastructure.secrets import FileSecretStore
 from autoeval.planning.artifacts import artifact
 from autoeval.planning.models import PlanningArtifact
-from autoeval.planning_transport import transport
-from autoeval.secrets import FileSecretStore
-from autoeval.standard_inputs import digest
-from autoeval.targets import TargetBinding
-from autoeval.unified_outputs import archive_output
+from autoeval.planning.planning_transport import transport
+from autoeval.reporting.unified_outputs import archive_output
+from autoeval.resources.models import TargetBinding
 
 
 async def keep_heartbeat(callback, awaitable, *, interval_seconds=30):
@@ -80,7 +80,7 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
         if not snapshot or snapshot.sha256 != digest(snapshot.canonical_body):
             raise ValueError("Frozen snapshot integrity mismatch")
         frozen = snapshot.canonical_body
-        from autoeval.billing_transport import budget_ignored
+        from autoeval.billing.transport import budget_ignored
 
         ignore_budget = budget_ignored(frozen)
         inputs = frozen["inputs"]
@@ -141,7 +141,7 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                 child.finished_at = datetime.now(UTC)
             if child.state not in DATASET_ACTIVE:
                 continue
-            from autoeval.billing_transport import execution_route
+            from autoeval.billing.transport import execution_route
 
             child_route = execution_route(
                 settings,
@@ -169,7 +169,7 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                 child.state = "unresolved"
                 continue
             if observation.state not in TERMINAL:
-                from autoeval.planning_observations import publish_lifecycle
+                from autoeval.planning.planning_observations import publish_lifecycle
 
                 await publish_lifecycle(sessions, settings, run_id, child, observation.state)
                 if observation.state == "running":
@@ -178,7 +178,7 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                         try:
                             progress = await progress_reader(job)
                             if progress:
-                                from autoeval.planning_observations import publish
+                                from autoeval.planning.planning_observations import publish
 
                                 await publish(sessions, settings, run_id, child.id, progress)
                                 await update_child(
@@ -187,12 +187,12 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                         except (OSError, ValueError, RuntimeError):
                             pass  # Observation failure never resubmits the model task.
                 continue
-            from autoeval.planning_observations import publish_lifecycle
+            from autoeval.planning.planning_observations import publish_lifecycle
 
             final_reader = getattr(adapter, "progress", None)
             if final_reader:
                 try:
-                    from autoeval.planning_observations import publish
+                    from autoeval.planning.planning_observations import publish
 
                     await publish(sessions, settings, run_id, child.id, await final_reader(job))
                 except (OSError, ValueError, RuntimeError):
@@ -204,7 +204,7 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
             state = observation.state
             log_reader = getattr(adapter, "collect_log", None)
             if log_reader and observation.state in TERMINAL:
-                from autoeval.unified_artifacts import UnifiedArtifact
+                from autoeval.reporting.models import UnifiedArtifact
 
                 log_key = "planning-log:" + str(child.id)
                 async with sessions() as session, session.begin():
@@ -252,7 +252,7 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                         )
             if state == "succeeded":
                 result = await adapter.collect(job)
-                from autoeval.planning_observations import archive_native, publish
+                from autoeval.planning.planning_observations import archive_native, publish
 
                 await archive_native(
                     sessions, settings, run_id, child, result["result"], child_secret
@@ -269,7 +269,7 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                         {"run_id": str(run_id), "task_id": child.task_id, "result": unified},
                     )
                 try:
-                    from autoeval.result_identity import normalize_result_identities
+                    from autoeval.reporting.result_identity import normalize_result_identities
 
                     unified = normalize_result_identities(
                         unified,
@@ -349,10 +349,10 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
             # The durable submitting intent precedes network I/O. A lost reply is reconciled
             # by lookup, never by issuing a new model-generating submission.
             try:
-                from autoeval.planning_observations import case_contract
+                from autoeval.planning.planning_observations import case_contract
 
                 contract = case_contract(child.payload)
-                from autoeval.billing_transport import execution_route, route_compilation
+                from autoeval.billing.transport import execution_route, route_compilation
 
                 route = execution_route(
                     settings,

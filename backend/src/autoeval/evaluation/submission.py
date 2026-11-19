@@ -5,6 +5,7 @@ from datetime import UTC, datetime, timedelta
 from fastapi import HTTPException
 from sqlalchemy import select, text
 
+from autoeval.catalog.standard_inputs import digest, leaves
 from autoeval.evaluation.inputs import resolve_inputs
 from autoeval.evaluation.models import DatasetExecution
 from autoeval.evaluation.resource_allocation import (
@@ -12,13 +13,10 @@ from autoeval.evaluation.resource_allocation import (
     fits,
     resource_for_task,
 )
-from autoeval.models import EvaluationRun, Outbox, RunSnapshot
+from autoeval.infrastructure.models import EvaluationRun, Outbox, RunSnapshot
 from autoeval.planning.artifacts import current_preflight
-from autoeval.standard_inputs import (
-    digest,
-    leaves,
-)
-from autoeval.targets import TargetBinding, validate_url
+from autoeval.resources.models import TargetBinding
+from autoeval.resources.targets import validate_url
 
 
 async def create_run(session, settings, body, execution_plan_id, key):
@@ -144,8 +142,8 @@ async def create_run(session, settings, body, execution_plan_id, key):
         from pathlib import Path
 
         budget_config = json.loads(Path(budget_config_path).read_text())
-        from autoeval.billing import BudgetAccount
-        from autoeval.billing_transport import execution_route, route_compilation
+        from autoeval.billing.models import BudgetAccount
+        from autoeval.billing.transport import execution_route, route_compilation
 
         expected = budget_config.get('expected_scope')
         if expected and ({t['dataset']: len(t.get('samples', [])) for t in inputs['tasks']} != expected
@@ -174,7 +172,7 @@ async def create_run(session, settings, body, execution_plan_id, key):
             sha256=digest(frozen),
         )
     )
-    from autoeval.task_monitor import MonitorBinding
+    from autoeval.evaluation.task_monitor import MonitorBinding
 
     for index, item in enumerate(inputs["tasks"], 1):
         child_id = uuid.uuid4()

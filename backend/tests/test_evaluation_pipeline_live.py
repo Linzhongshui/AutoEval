@@ -12,17 +12,18 @@ from sqlalchemy import select
 from temporalio.client import Client
 from temporalio.worker import Worker
 
-from autoeval import analysis_activity, evaluation_activity
 from autoeval.analysis import ReportAnalysis
-from autoeval.analysis_activity import execute_report_analysis
-from autoeval.api import create_app
-from autoeval.config import get_settings
-from autoeval.datasets import DatasetManifest
-from autoeval.dispatcher import deliver_once
-from autoeval.registry import Asset, AssetVersion
+from autoeval.analysis import activity as analysis_activity
+from autoeval.analysis.activity import execute_report_analysis
+from autoeval.catalog.datasets import DatasetManifest
+from autoeval.catalog.registry import Asset, AssetVersion
+from autoeval.entrypoints.api import create_app
+from autoeval.entrypoints.dispatcher import deliver_once
+from autoeval.evaluation import evaluation_activity
+from autoeval.evaluation.workflows import GpqaExplorationWorkflow, ReportAnalysisWorkflow
+from autoeval.infrastructure.config import get_settings
 from autoeval.resources import ResourceBinding
-from autoeval.targets import TargetBinding
-from autoeval.workflows import GpqaExplorationWorkflow, ReportAnalysisWorkflow
+from autoeval.resources.models import TargetBinding
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("AE_GPQA_PIPELINE_TEST"),
@@ -128,7 +129,7 @@ async def test_submit_deduplicate_partial_report_and_cancel(monkeypatch):
             resource = await session.scalar(select(ResourceBinding).limit(1))
             settings.analysis_target_id = target.id
             settings.analysis_resource_id = resource.id
-        from autoeval.datasets import read_manifest
+        from autoeval.catalog.datasets import read_manifest
 
         members = read_manifest(settings, full)["samples"][:2]
         prefix = "/api/autoeval/v1"

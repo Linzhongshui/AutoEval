@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from autoeval.standard_inputs import BENCHMARKS, FILES, Bundle, digest, discover
+from autoeval.catalog.standard_inputs import BENCHMARKS, FILES, Bundle, digest, discover
 
 
 def read_directory(root: Path, revision: str):

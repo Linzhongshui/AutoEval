@@ -3,7 +3,7 @@ import uuid
 import pytest
 from fastapi import HTTPException
 
-from autoeval.config import get_settings
+from autoeval.infrastructure.config import get_settings
 from autoeval.planning import PlanInput, resolve_inputs
 
 

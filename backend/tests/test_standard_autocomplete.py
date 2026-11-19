@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from autoeval.standard_inputs import (
+from autoeval.catalog.standard_inputs import (
     Bundle,
     CompileInput,
     autocomplete_template,
@@ -36,7 +36,7 @@ def test_completion_uses_pinned_constraints_and_preserves_original(filename):
 
 
 def test_repository_readiness_does_not_require_runtime_or_accept_fabricated_template():
-    from autoeval.standard_inputs import input_readiness
+    from autoeval.catalog.standard_inputs import input_readiness
 
     bundle = Bundle.model_validate_json(
         (Path(__file__).parent / "fixtures/standard_inputs/upstream.json").read_bytes()

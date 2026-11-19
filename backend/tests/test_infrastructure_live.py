@@ -8,9 +8,9 @@ import pytest
 from temporalio.client import Client, WorkflowFailureError
 from temporalio.worker import Worker
 
-from autoeval.activities import execution_not_configured
-from autoeval.config import get_settings
-from autoeval.workflows import RunWorkflow
+from autoeval.evaluation.activities import execution_not_configured
+from autoeval.evaluation.workflows import RunWorkflow
+from autoeval.infrastructure.config import get_settings
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("AE_INFRA_TEST"), reason="Live infrastructure required"

@@ -9,16 +9,16 @@ from pathlib import Path
 
 import pytest
 
-from autoeval.config import get_settings
-from autoeval.monitor_transport import SSHMonitorClient
-from autoeval.monitored_execution import (
+from autoeval.evaluation.monitored_execution import (
     Gateway,
     control_for,
     environment,
     validate_environment,
     verify_environment,
 )
-from autoeval.monitored_runtime import validate_budget
+from autoeval.infrastructure.config import get_settings
+from autoeval.resources.monitor_transport import SSHMonitorClient
+from autoeval_runtime.monitored_runtime import validate_budget
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("AE_MONITOR_CONTAINER_TEST"),
@@ -94,7 +94,7 @@ def container():
     control = control_for(settings, env)
     root = "/tmp/autoeval-monitor-tests-" + uuid.uuid4().hex
     runtime_name = Path(env["runtime"]).name
-    runtime_source = Path(__file__).resolve().parents[1] / "src/autoeval/monitored_runtime.py"
+    runtime_source = Path(__file__).resolve().parents[1] / "src/autoeval_runtime/monitored_runtime.py"
     runtime = root + "/" + runtime_name
     lock = json.loads(
         (Path(__file__).resolve().parents[1] / "tool-locks/aisbench-monitor.json").read_text()

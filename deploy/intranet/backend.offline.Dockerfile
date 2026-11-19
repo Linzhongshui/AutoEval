@@ -8,4 +8,4 @@ COPY backend/tool-locks /app/tool-locks
 COPY backend/tool-patches /app/tool-patches
 RUN ln -s /app/tool-locks /usr/local/lib/python3.12/tool-locks
 USER 10001:10001
-CMD ["uvicorn", "autoeval.api:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "autoeval.entrypoints.api:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -8,10 +8,11 @@ from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.schema import CreateTable
 
-from autoeval.benchmarks import BenchmarkBaseline, compare_baseline
-from autoeval.config import get_settings
-from autoeval.db import create_database
-from autoeval.import_benchmarks import BaselineConflictError, import_baselines
+from autoeval.catalog.benchmarks import compare_baseline
+from autoeval.catalog.import_benchmarks import BaselineConflictError, import_baselines
+from autoeval.catalog.models import BenchmarkBaseline
+from autoeval.infrastructure.config import get_settings
+from autoeval.infrastructure.db import create_database
 
 DATASET_KEY = "GPQA"
 MANIFEST_SHA256 = "a" * 64

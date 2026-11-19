@@ -4,7 +4,7 @@ import json
 import re
 from pathlib import PurePosixPath
 
-from autoeval.ssh_executor import SSHExecutor
+from autoeval.resources.ssh_executor import SSHExecutor
 
 
 class SSHMonitorClient:

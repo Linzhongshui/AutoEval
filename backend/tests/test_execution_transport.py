@@ -8,14 +8,14 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import DBAPIError
 
-from autoeval.case_history import AttemptEvidence
-from autoeval.config import get_settings
-from autoeval.db import create_database
-from autoeval.execution_transport import frozen_ssh_resource
-from autoeval.models import EvaluationRun, RunEvent
+from autoeval.evaluation.run_activities import record_unresolved
+from autoeval.infrastructure.config import get_settings
+from autoeval.infrastructure.db import create_database
+from autoeval.infrastructure.models import EvaluationRun, RunEvent
+from autoeval.reporting.case_history import AttemptEvidence
 from autoeval.resources import ResourceProvider
-from autoeval.run_activities import record_unresolved
-from autoeval.ssh_resources import SSHResourceBinding
+from autoeval.resources.execution_transport import frozen_ssh_resource
+from autoeval.resources.models import SSHResourceBinding
 
 
 def test_frozen_ssh_metadata_never_includes_credential_reference(tmp_path):

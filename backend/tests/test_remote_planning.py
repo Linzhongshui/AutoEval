@@ -4,17 +4,17 @@ import json
 
 import pytest
 
-from autoeval.planning_runtime import validate_spec
-from autoeval.planning_transport import runtime_files
-from autoeval.standard_inputs import digest, leaves, validate_config
+from autoeval.catalog.standard_inputs import digest, leaves, validate_config
+from autoeval.planning.planning_transport import runtime_files
+from autoeval_runtime.planning_runtime import validate_spec
 
 
 def test_transports_ship_the_standalone_runtime_after_package_refactor():
     import ast
     from types import SimpleNamespace
 
-    from autoeval.docker_executor import DockerExecutor
-    from autoeval.ssh_executor import SSHExecutor
+    from autoeval.resources.docker_executor import DockerExecutor
+    from autoeval.resources.ssh_executor import SSHExecutor
 
     adapters = (
         DockerExecutor("docker", "container", "image"),
@@ -44,7 +44,7 @@ def test_standalone_contract_matches_platform_without_api_dependencies():
     assert namespace["validate_config"](value) == validate_config(value)
     with pytest.raises(ValueError):
         namespace["validate_config"]({**value, "params": {"api_key": "fixture-secret"}})
-    assert b"from autoeval.standard_inputs" not in files["planning_calculation.py"]
+    assert b"from autoeval.catalog.standard_inputs" not in files["planning_calculation.py"]
 
 
 def test_plan_spec_has_no_arbitrary_command_or_extra_fields():
@@ -67,7 +67,7 @@ def test_probe_reports_real_level_boundaries_without_network(tmp_path, monkeypat
 
     from autoeval_planner import probe
 
-    from autoeval import planning_runtime as runtime
+    from autoeval_runtime import planning_runtime as runtime
 
     (tmp_path / "credential.json").write_text('{"value":"TEST-only"}')
     monkeypatch.setattr(runtime, "installed_revision", lambda _: runtime.PLANNER_REVISION)

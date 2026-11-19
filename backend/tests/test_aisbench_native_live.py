@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from autoeval.config import get_settings
+from autoeval.infrastructure.config import get_settings
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("AE_AISBENCH_NATIVE_TEST"), reason="Pinned native tool required in Docker"

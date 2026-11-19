@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from autoeval.standard_baselines import baseline_bundle
+from autoeval.catalog.standard_baselines import baseline_bundle
 
 
 def test_reference_preserves_source_and_is_immutable():

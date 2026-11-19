@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from autoeval.task_monitor import freshness, normalize
+from autoeval.evaluation.task_monitor import freshness, normalize
 
 
 def test_local_progress_mapping_and_missing_fields():
@@ -53,7 +53,7 @@ def test_foreign_task_is_rejected():
 
 
 def test_invalid_time_counts_and_filtered_archive():
-    from autoeval.task_monitor import safe_task
+    from autoeval.evaluation.task_monitor import safe_task
 
     task = {
         "task_name": "m/d",
@@ -86,7 +86,7 @@ def test_unknown_status_future_time_and_missing_local_values_are_explicit():
 
 
 def test_harbor_projection_is_bounded_and_nested_archive_is_sanitized():
-    from autoeval.task_monitor import safe_task
+    from autoeval.evaluation.task_monitor import safe_task
 
     task = {
         "task_name": "m/d",
@@ -134,11 +134,11 @@ async def test_postgres_monitor_ordering_and_immutable_s3_evidence():
     from sqlalchemy import delete, select, update
     from sqlalchemy.exc import DBAPIError
 
-    from autoeval.config import Settings
-    from autoeval.datasets import canonical_manifest, read_manifest, write_manifest
-    from autoeval.db import create_database
-    from autoeval.models import EvaluationRun
-    from autoeval.task_monitor import MonitorBinding, MonitorSnapshot, save_observation
+    from autoeval.catalog.datasets import canonical_manifest, read_manifest, write_manifest
+    from autoeval.evaluation.task_monitor import MonitorBinding, MonitorSnapshot, save_observation
+    from autoeval.infrastructure.config import Settings
+    from autoeval.infrastructure.db import create_database
+    from autoeval.infrastructure.models import EvaluationRun
 
     if os.getenv("AE_INFRA_TEST") != "1":
         pytest.skip("Requires real PostgreSQL and persistent S3")
@@ -233,8 +233,8 @@ async def test_postgres_monitor_ordering_and_immutable_s3_evidence():
 
         from fastapi import HTTPException
 
-        from autoeval import task_monitor
-        from autoeval.unified_artifacts import UnifiedArtifact
+        from autoeval.evaluation import task_monitor
+        from autoeval.reporting.models import UnifiedArtifact
 
         request = SimpleNamespace(
             app=SimpleNamespace(state=SimpleNamespace(sessions=sessions, settings=settings)),

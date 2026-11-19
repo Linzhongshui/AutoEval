@@ -16,7 +16,7 @@ from sqlalchemy import select
 
 from autoeval.catalog.adaptor_versions import CURRENT_ADAPTOR
 from autoeval.catalog.datasets import canonical_manifest, read_manifest, storage, write_manifest
-from autoeval.models import EvaluationRun
+from autoeval.infrastructure.models import EvaluationRun
 from autoeval.reporting.models import CaseExecutionRecord, UnifiedCollection
 
 
@@ -264,7 +264,7 @@ async def archive_output(
                 )
             )
             if json.loads(raw).get("subcommand") == "harbor_agent":
-                from autoeval.langfuse_integration import archive_trace
+                from autoeval.reporting.langfuse_integration import archive_trace
 
                 await session.flush()
                 await archive_trace(

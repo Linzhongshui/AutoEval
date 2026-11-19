@@ -4,7 +4,7 @@ import uuid
 
 import pytest
 
-from autoeval.native_case_evidence import native_content, prediction_records
+from autoeval.reporting.native_case_evidence import native_content, prediction_records
 
 
 def fixture():

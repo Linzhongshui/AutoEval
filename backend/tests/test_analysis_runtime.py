@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-from autoeval.analysis_runtime import analyze
+from autoeval.analysis.analysis_runtime import analyze
 
 
 def payload():
@@ -94,8 +94,8 @@ async def test_log_reader_uses_exact_owned_job_and_rejects_path_input():
     import json
     import uuid
 
-    from autoeval.contracts import JobRef
-    from autoeval.planning_transport import PlanningRemoteContainer
+    from autoeval.infrastructure.contracts import JobRef
+    from autoeval.planning.planning_transport import PlanningRemoteContainer
 
     adapter = object.__new__(PlanningRemoteContainer)
     adapter.container_id = "pinned-container"
@@ -121,7 +121,7 @@ async def test_analysis_dispatch_preserves_authorized_retry_number():
     from contextlib import asynccontextmanager
     from types import SimpleNamespace
 
-    from autoeval.dispatcher import deliver_once
+    from autoeval.entrypoints.dispatcher import deliver_once
 
     row = SimpleNamespace(
         id=uuid.uuid4(),

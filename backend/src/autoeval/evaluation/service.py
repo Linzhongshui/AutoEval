@@ -6,7 +6,7 @@ import asyncio
 from fastapi import HTTPException
 from sqlalchemy import select
 
-from autoeval.datasets import read_manifest
+from autoeval.catalog.datasets import read_manifest
 from autoeval.evaluation.inputs import manifest_dataset_matches as manifest_dataset_matches
 from autoeval.evaluation.inputs import resolve_inputs as resolve_inputs
 from autoeval.evaluation.inputs import selection_identity as selection_identity
@@ -19,7 +19,7 @@ from autoeval.evaluation.resource_allocation import release as release
 from autoeval.evaluation.submission import create_run as create_run
 from autoeval.evaluation.submission import submit_planned_run as submit_planned_run
 from autoeval.infrastructure.domain import RUN_TERMINAL
-from autoeval.models import EvaluationRun, RunEvent, RunSnapshot
+from autoeval.infrastructure.models import EvaluationRun, RunEvent, RunSnapshot
 from autoeval.planning.artifacts import artifact as artifact
 from autoeval.planning.artifacts import current_preflight as current_preflight
 
@@ -88,8 +88,8 @@ async def evaluation_run_detail(sessions, settings, run_id):
     """Read one evaluation run with events, snapshot, report and cleanup state."""
     from sqlalchemy.exc import SQLAlchemyError
 
-    from autoeval.cleanup import ExecutionCleanup, cleanup_view
     from autoeval.evaluation.models import EvaluationReport
+    from autoeval.infrastructure.cleanup import ExecutionCleanup, cleanup_view
 
     try:
         async with sessions() as session:
@@ -212,7 +212,7 @@ async def evaluation_run_report(sessions, settings, run_id):
 
 async def evaluation_retry_cleanup(sessions, settings, run_id):
     """Schedule resource reclamation for a terminal SSH run from this origin."""
-    from autoeval.cleanup import schedule_cleanup
+    from autoeval.infrastructure.cleanup import schedule_cleanup
 
     async with sessions() as session, session.begin():
         row = await session.scalar(

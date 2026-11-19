@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 
-from autoeval import standard_inputs
+from autoeval.catalog import standard_inputs
 
 
 @pytest.mark.asyncio

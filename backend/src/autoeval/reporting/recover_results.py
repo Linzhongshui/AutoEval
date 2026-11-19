@@ -13,9 +13,9 @@ from pathlib import Path
 from sqlalchemy import select
 
 from autoeval.catalog.datasets import canonical_manifest, read_manifest
-from autoeval.config import get_settings
-from autoeval.db import create_database
-from autoeval.models import RunSnapshot
+from autoeval.infrastructure.config import get_settings
+from autoeval.infrastructure.db import create_database
+from autoeval.infrastructure.models import RunSnapshot
 from autoeval.planning.models import PlanningArtifact
 from autoeval.reporting.task_reports import (
     archive_revision,

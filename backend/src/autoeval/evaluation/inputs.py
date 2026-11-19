@@ -4,13 +4,10 @@ import copy
 from fastapi import HTTPException
 from sqlalchemy import select
 
-from autoeval.datasets import DatasetManifest, read_manifest
-from autoeval.planning_engine import PLANNER_REVISION, apply_concurrency, selected_samples
-from autoeval.standard_inputs import (
-    StandardInputCompilation,
-    StandardInputVersion,
-)
-from autoeval.targets import TargetBinding
+from autoeval.catalog.datasets import DatasetManifest, read_manifest
+from autoeval.catalog.standard_inputs import StandardInputCompilation, StandardInputVersion
+from autoeval.planning.planning_engine import PLANNER_REVISION, apply_concurrency, selected_samples
+from autoeval.resources.models import TargetBinding
 
 
 async def target_data(session, target_id):
@@ -26,8 +23,8 @@ def manifest_dataset_matches(dataset, asset_key):
 
 
 async def resolve_inputs(session, settings, body):
-    from autoeval.profiles import EvaluationProfile
-    from autoeval.registry import Asset, AssetVersion
+    from autoeval.catalog.models import EvaluationProfile
+    from autoeval.catalog.registry import Asset, AssetVersion
 
     target = await target_data(session, body.target_id)
     tasks = []

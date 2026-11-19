@@ -13,10 +13,10 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from autoeval.catalog.datasets import canonical_manifest, read_manifest, write_manifest
-from autoeval.models import EvaluationRun
+from autoeval.infrastructure.models import EvaluationRun
+from autoeval.infrastructure.responses import Envelope, TotalPageEnvelope
 from autoeval.reporting.models import CaseExecutionRecord
 from autoeval.reporting.native_case_evidence import enrich_case
-from autoeval.responses import Envelope, TotalPageEnvelope
 
 
 class AttemptInput(BaseModel):
@@ -182,7 +182,7 @@ async def history(
                     .limit(limit + 1)
                 )
             ).all()
-            from autoeval.langfuse_integration import TraceImport, trace_view
+            from autoeval.reporting.langfuse_integration import TraceImport, trace_view
 
             imports = (
                 await session.scalars(
@@ -338,7 +338,7 @@ async def recovered_cases(
             )
         )
         by_identity = {(c.sample_id, c.attempt_no): c for c in originals}
-        from autoeval.langfuse_integration import TraceImport, trace_view
+        from autoeval.reporting.langfuse_integration import TraceImport, trace_view
 
         imports = list(
             await session.scalars(

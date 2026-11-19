@@ -9,10 +9,10 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from autoeval.api import create_app
-from autoeval.config import Settings
-from autoeval.datasets import canonical_manifest
-from autoeval.models import EvaluationRun, RunSnapshot
+from autoeval.catalog.datasets import canonical_manifest
+from autoeval.entrypoints.api import create_app
+from autoeval.infrastructure.config import Settings
+from autoeval.infrastructure.models import EvaluationRun, RunSnapshot
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("AE_TEST_DATABASE_URL"), reason="PostgreSQL required"

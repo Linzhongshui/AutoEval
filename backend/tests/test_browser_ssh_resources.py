@@ -5,8 +5,8 @@ import uuid
 import pytest
 from playwright.sync_api import expect, sync_playwright
 
-from autoeval.config import get_settings
-from autoeval.secrets import FileSecretStore
+from autoeval.infrastructure.config import get_settings
+from autoeval.infrastructure.secrets import FileSecretStore
 
 
 @pytest.mark.skipif(

@@ -10,7 +10,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from autoeval.api import create_app
+from autoeval.entrypoints.api import create_app
 
 
 def _router_endpoints() -> dict[str, set[str]]:
@@ -23,7 +23,7 @@ def _router_endpoints() -> dict[str, set[str]]:
             if endpoint is None:
                 continue
             module = endpoint.__module__
-            if module.startswith("autoeval.") and module != "autoeval.api":
+            if module.startswith("autoeval.") and module != "autoeval.entrypoints.api":
                 endpoints.setdefault(module, set()).add(endpoint.__name__)
     return endpoints
 
@@ -57,7 +57,7 @@ def test_planning_worker_import_does_not_register_planning_routes():
         [
             sys.executable,
             "-c",
-            ("import sys; import autoeval.planning_worker; "
+            ("import sys; import autoeval.planning.planning_worker; "
             "assert 'autoeval.planning.routes' not in sys.modules"),
         ],
         check=True,

@@ -11,8 +11,8 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 from sqlalchemy import select
 
 from autoeval.catalog.models import BenchmarkBaseline
-from autoeval.config import get_settings
-from autoeval.db import create_database
+from autoeval.infrastructure.config import get_settings
+from autoeval.infrastructure.db import create_database
 
 
 class BaselineInput(BaseModel):

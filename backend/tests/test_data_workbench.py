@@ -11,10 +11,10 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 from sqlalchemy import select
 
-from autoeval.api import create_app
-from autoeval.audit import AuditEvent
-from autoeval.config import Settings
-from autoeval.data_workbench import EntryInput, development, validate_report
+from autoeval.entrypoints.api import create_app
+from autoeval.infrastructure.audit import AuditEvent
+from autoeval.infrastructure.config import Settings
+from autoeval.reporting.data_workbench import EntryInput, development, validate_report
 
 
 def payload():
@@ -178,7 +178,7 @@ async def test_review_edit_history_and_duplicate_source_transactions():
 
 
 def test_best_score_preserves_models_zero_and_newest_ties():
-    from autoeval.data_workbench import best_per_model
+    from autoeval.reporting.data_workbench import best_per_model
 
     rows = [
         {"id": "new-low", "model_id": "m1", "entry": {"model_name": "same-name", "value": 0}},

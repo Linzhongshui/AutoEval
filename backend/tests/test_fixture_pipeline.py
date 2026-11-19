@@ -7,14 +7,14 @@ import httpx
 import pytest
 from sqlalchemy import select
 
-from autoeval.api import create_app
-from autoeval.config import get_settings
-from autoeval.configuration import TestConfigVersion as ConfigVersion
-from autoeval.evaluations import EvaluationReport
-from autoeval.fixture_pipeline import execute_unified_fixture
-from autoeval.models import EvaluationRun, RunSnapshot
-from autoeval.unified_artifacts import UnifiedArtifact
-from autoeval.unified_outputs import read_raw_output
+from autoeval.catalog.models import TestConfigVersion as ConfigVersion
+from autoeval.entrypoints.api import create_app
+from autoeval.evaluation.evaluations import EvaluationReport
+from autoeval.evaluation.fixture_pipeline import execute_unified_fixture
+from autoeval.infrastructure.config import get_settings
+from autoeval.infrastructure.models import EvaluationRun, RunSnapshot
+from autoeval.reporting.models import UnifiedArtifact
+from autoeval.reporting.unified_outputs import read_raw_output
 
 
 @pytest.mark.asyncio
@@ -49,7 +49,7 @@ async def test_submission_idempotency_failure_and_cancel_without_model(monkeypat
             cancelled = await client.post(f"/api/autoeval/v1/runs/{run_id}/cancel")
             assert cancelled.status_code == 202, cancelled.text
             monkeypatch.setattr(
-                "autoeval.fixture_pipeline.fetch_remote",
+                "autoeval.evaluation.fixture_pipeline.fetch_remote",
                 lambda *args: pytest.fail("Cancelled run must not connect"),
             )
             result = await execute_unified_fixture(run_id)
@@ -63,7 +63,7 @@ async def test_submission_idempotency_failure_and_cancel_without_model(monkeypat
     os.getenv("AE_INFRA_TEST") != "1", reason="Requires existing fixture evidence and PostgreSQL/S3"
 )
 async def test_upload_failure_then_retry_without_remote_reexecution(monkeypatch):
-    from autoeval import fixture_pipeline as module
+    from autoeval.evaluation import fixture_pipeline as module
 
     settings = get_settings()
     app = create_app(settings)

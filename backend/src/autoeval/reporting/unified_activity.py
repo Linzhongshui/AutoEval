@@ -9,9 +9,9 @@ from temporalio import activity
 
 from autoeval.catalog.adaptor_versions import CURRENT_ADAPTOR
 from autoeval.catalog.datasets import canonical_manifest
-from autoeval.config import get_settings
-from autoeval.db import create_database
-from autoeval.models import RunSnapshot
+from autoeval.infrastructure.config import get_settings
+from autoeval.infrastructure.db import create_database
+from autoeval.infrastructure.models import RunSnapshot
 from autoeval.reporting.models import UnifiedArtifact
 from autoeval.reporting.unified_outputs import archive_output, read_raw_output
 

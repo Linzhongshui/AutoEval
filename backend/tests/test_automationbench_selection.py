@@ -2,9 +2,9 @@ import json
 from types import SimpleNamespace
 from uuid import uuid4
 
+from autoeval.catalog.standard_inputs import Bundle, CompileInput, compile_config, discover
 from autoeval.planning import TaskInput
-from autoeval.planning_engine import DATASETS
-from autoeval.standard_inputs import Bundle, CompileInput, compile_config, discover
+from autoeval.planning.planning_engine import DATASETS
 
 
 def test_automationbench_is_a_supported_selection():

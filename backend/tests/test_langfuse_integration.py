@@ -4,8 +4,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from autoeval.config import Settings
-from autoeval.langfuse_integration import build_plan, import_one, trace_view
+from autoeval.infrastructure.config import Settings
+from autoeval.reporting.langfuse_integration import build_plan, import_one, trace_view
 
 
 def artifact():
@@ -71,7 +71,7 @@ def test_full_content_is_preserved_with_separate_stable_identity(tmp_path):
 
 @pytest.mark.asyncio
 async def test_new_import_freezes_full_mode_before_configuration_changes(monkeypatch):
-    from autoeval.langfuse_integration import archive_trace
+    from autoeval.reporting.langfuse_integration import archive_trace
 
     settings = Settings(
         langfuse_host="https://internal.example",
@@ -84,7 +84,7 @@ async def test_new_import_freezes_full_mode_before_configuration_changes(monkeyp
     assert settings.langfuse_content_mode == "full"
     saved = []
     session = SimpleNamespace(add=saved.append)
-    monkeypatch.setattr("autoeval.langfuse_integration.write_manifest", lambda *args: None)
+    monkeypatch.setattr("autoeval.reporting.langfuse_integration.write_manifest", lambda *args: None)
     await archive_trace(session, settings, uuid.uuid4(), uuid.uuid4(), artifact())
     settings.langfuse_content_mode = "structural"
     assert saved[0].content_mode == "full"
@@ -109,7 +109,7 @@ def test_link_requires_confirmation():
 
 
 def test_import_configuration_requires_all_backend_fields():
-    from autoeval.langfuse_integration import import_configured
+    from autoeval.reporting.langfuse_integration import import_configured
 
     fields = {
         "langfuse_project_id": "project",

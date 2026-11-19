@@ -154,10 +154,10 @@ async def test_postgres_append_only_recovery(monkeypatch):
         pytest.skip("Set AE_REPORT_RECOVERY_PG for a disposable PostgreSQL transaction")
     from sqlalchemy import func, select
 
-    from autoeval.config import get_settings
-    from autoeval.db import create_database
     from autoeval.evaluation.models import EvaluationReport, ResultArchiveRevision
-    from autoeval.models import EvaluationRun, RunSnapshot
+    from autoeval.infrastructure.config import get_settings
+    from autoeval.infrastructure.db import create_database
+    from autoeval.infrastructure.models import EvaluationRun, RunSnapshot
     from autoeval.reporting.models import UnifiedCollection
 
     task, original, native = inputs()
@@ -252,7 +252,7 @@ async def test_postgres_append_only_recovery(monkeypatch):
                 )
                 assert run.state == "failed" and parent.payload == parent_payload
                 from autoeval.evaluation.models import DatasetExecution
-                from autoeval.models import RunEvent
+                from autoeval.infrastructure.models import RunEvent
 
                 child = DatasetExecution(
                     run_id=run.id,

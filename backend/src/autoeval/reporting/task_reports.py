@@ -13,10 +13,10 @@ from sqlalchemy import select
 
 from autoeval.catalog.datasets import canonical_manifest, read_manifest, write_manifest
 from autoeval.evaluation.models import DatasetExecution, EvaluationReport, ResultArchiveRevision
-from autoeval.models import EvaluationRun, RunSnapshot
+from autoeval.infrastructure.models import EvaluationRun, RunSnapshot
 from autoeval.reporting.models import UnifiedCollection
+from autoeval.reporting.result_identity import normalize_result_identities
 from autoeval.reporting.unified_outputs import parse_output
-from autoeval.result_identity import normalize_result_identities
 
 
 def checksum(value):
@@ -173,7 +173,7 @@ async def archive_revision(session, settings, run_id, dataset, raw, *, reason, s
             raise ValueError("Native recovery identity mismatch")
         check = copy.deepcopy(case)
         check["score"] = None
-        from autoeval.result_identity import apply_automationbench_accuracy
+        from autoeval.reporting.result_identity import apply_automationbench_accuracy
 
         apply_automationbench_accuracy(check)
         if check.get("score") != case.get("score"):
@@ -345,9 +345,9 @@ async def apply_recovered_state(session, settings, report):
     """Append recovery event, then update current projections; never erase failure history."""
     from datetime import UTC, datetime
 
-    from autoeval.models import RunEvent
+    from autoeval.evaluation.task_monitor import MonitorBinding, MonitorSnapshot
+    from autoeval.infrastructure.models import RunEvent
     from autoeval.reporting.report_integrity import report_evidence_status
-    from autoeval.task_monitor import MonitorBinding, MonitorSnapshot
 
     run = await session.get(EvaluationRun, report.run_id, with_for_update=True)
     snapshot = await session.scalar(select(RunSnapshot).where(RunSnapshot.run_id == run.id))

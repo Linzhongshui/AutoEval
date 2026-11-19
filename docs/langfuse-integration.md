@@ -19,7 +19,7 @@ AE_LANGFUSE_CONTENT_MODE=full
 
 HOST 为 worker 可达地址，BROWSER_URL 为用户浏览器可达地址；跨主机部署需配置受控网络入口。生产或远程入口使用 HTTPS。项目 ID 必须与 API keys 所属项目一致。
 
-在 backend 执行 `uv sync --frozen` 和 `uv run alembic upgrade head`，重启 API、任务执行 worker 与 dispatcher，新增启动 `uv run python -m autoeval.worker langfuse`。现有 dispatcher 负责持久化任务投递。
+在 backend 执行 `uv sync --frozen` 和 `uv run alembic upgrade head`，重启 API、任务执行 worker 与 dispatcher，新增启动 `uv run python -m autoeval.entrypoints.worker langfuse`。现有 dispatcher 负责持久化任务投递。
 
 ## 行为与排障
 

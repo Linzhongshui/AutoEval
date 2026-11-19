@@ -156,3 +156,11 @@ the locked commit, run `python deploy/prepare_r13_aisbench_source.py <checkout>`
 from the repository root before packaging the image. The command reconstructs
 CRLF bytes only when the result exactly matches the recorded SHA-256 and stops
 on any other discrepancy.
+
+Build the Harbor private-daemon image with `deploy/r13-harbor.Dockerfile` from
+the repository root, passing the locally available historical runner as
+`HARBOR_BASE`. Pin the resulting image ID in the SSH resource template. The
+recipe keeps the daemon socket and image storage inside the runner. The base
+image must also contain the tool and adaptor revisions required for the job.
+Provision the node with its approved container runtime policy and preloaded
+trial images before running the Harbor preflight.

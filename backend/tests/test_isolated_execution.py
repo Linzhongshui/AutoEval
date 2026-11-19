@@ -229,14 +229,46 @@ async def test_tool_dispatch_contract_with_real_docker(family, transport_kind):
             await asyncio.sleep(0.1)
         pytest.fail(f"{family} fixture did not enter {desired}")
 
+    from autoeval_runtime.planning_runtime import ADAPTOR_REVISION
+
+    fixture_runtime = b"""
+import time
+
+
+def validate_spec(spec):
+    assert spec["kind"] == "adaptor"
+    assert spec["tool"]["family"] in {"peir", "agentx"}
+
+
+def controlled_failure_reason(spec, exc):
+    return spec["tool"]["family"] + "_fixture_failed"
+
+
+def execute(folder, spec):
+    tool = spec["tool"]
+    time.sleep(tool["delay"])
+    if tool["fail"]:
+        raise RuntimeError("fixture failure")
+    return {"family": tool["family"], "child_id": folder.name, "model_called": False}
+"""
+
+    def spec(delay, *, fail=False):
+        return {
+            "kind": "adaptor",
+            "compilation": {"adaptor_revision": ADAPTOR_REVISION},
+            "tool": {"family": family, "delay": delay, "fail": fail},
+            "credential": "fixture-only",
+        }
+
     left, left_key = executor()
     right, right_key = executor()
+    failed, failed_key = executor()
+    for adapter in (left, right, failed):
+        adapter.files["planning_runtime.py"] = fixture_runtime
     try:
         assert await left.ensure() != await right.ensure()
-        running = {"kind": "framework_smoke", "duration_seconds": 20}
-        quick = {"kind": "framework_smoke", "duration_seconds": 5}
-        left_job = await left.submit(running, left_key)
-        right_job = await right.submit(quick, right_key)
+        left_job = await left.submit(spec(25), left_key)
+        right_job = await right.submit(spec(8), right_key)
         await wait_for(left, left_job, "running")
         await wait_for(right, right_job, "running")
         await left.cancel(left_job, "fixture-cancel")
@@ -251,9 +283,20 @@ async def test_tool_dispatch_contract_with_real_docker(family, transport_kind):
             if ssh_config
             else await DockerExecutor.collect(right, right_job)
         )
-        assert result["result"]["model_called"] is False
+        assert result["result"] == {
+            "family": family,
+            "child_id": right_key,
+            "model_called": False,
+        }
+
+        await failed.ensure()
+        failed_job = await failed.submit(spec(1, fail=True), failed_key)
+        await wait_for(failed, failed_job, "failed")
+        assert (await failed.status(failed_job)).reason == family + "_fixture_failed"
+        assert await failed.remove()
+        assert (await right.status(right_job)).state == "succeeded"
     finally:
-        await asyncio.gather(left.remove(), right.remove())
+        await asyncio.gather(left.remove(), right.remove(), failed.remove())
 
 
 @pytest.mark.asyncio

@@ -297,3 +297,66 @@ def test_recovered_container_rejects_replacement_with_same_labels():
 
     with pytest.raises(ValueError, match="ownership mismatch"):
         adapter._find(None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("family", "subcommand"),
+    [
+        ("aisbench", "llm_accuracy"),
+        ("harbor", "harbor_agent"),
+    ],
+)
+async def test_native_tool_isolated_over_ssh(family, subcommand):
+    import asyncio
+    import json
+    import os
+    from pathlib import Path
+
+    from pydantic import SecretStr
+
+    from autoeval.infrastructure.config import get_settings
+    from autoeval.infrastructure.secrets import FileSecretStore
+    from autoeval.resources.ssh_executor import SSHConnection
+
+    config_path = os.getenv("AE_ISOLATED_NATIVE_SSH_CONFIG")
+    if not config_path:
+        pytest.skip("Approved native SSH fixtures required")
+    fixture = json.loads(Path(config_path).read_text(encoding="utf-8"))[family]
+    store = FileSecretStore(get_settings().secret_store_path)
+    owner = uuid4()
+    connection_fields = dict(fixture["connection"])
+    ssh_credential = store.get(connection_fields.pop("credential_ref"))
+    connection = SSHConnection(
+        **connection_fields, owner_id=owner, credential=SecretStr(ssh_credential)
+    )
+    template = fixture["template"]
+    spec = fixture["spec"]
+    assert template["family"] == family
+    assert template["revision"] == spec["tool"]["revision"]
+    assert spec["kind"] == "adaptor"
+    assert spec["compilation"]["config"]["subcommand"] == subcommand
+    assert "credential" not in spec
+    spec["credential"] = store.get(fixture["model_credential_ref"])
+    adapter = IsolatedPlanningContainer(connection, owner, template)
+    try:
+        await adapter.ensure()
+        check = {key: spec[key] for key in ("compilation", "tool")}
+        check.update(task_id=str(owner), dataset=fixture["dataset"])
+        preflight = await adapter.preflight([check])
+        assert preflight["execution_ready"], preflight["blocking_reasons"]
+
+        job = await adapter.submit(spec, str(owner))
+        async with asyncio.timeout(300):
+            while True:
+                observed = await adapter.status(job)
+                if observed.state in {"succeeded", "failed", "cancelled", "unknown"}:
+                    break
+                await asyncio.sleep(1)
+        assert observed.state == "succeeded", observed.reason
+        result = (await adapter.collect(job))["result"]
+        assert result.get("tool_exit_code", 0) == 0
+        cases = result["unified_result"]["cases"]
+        assert {case["sample_id"] for case in cases} == set(fixture["expected_sample_ids"])
+    finally:
+        assert await adapter.remove()

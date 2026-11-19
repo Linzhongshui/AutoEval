@@ -140,3 +140,12 @@ Provide `host`, `port`, `username`, `fingerprint`, `workdir`, `auth_kind`,
 `credential_ref` from the secret store, and the full `image_id` of a preloaded
 Python image. The SSH variants exercise remote Docker and SFTP using fixed
 framework jobs with no model calls.
+
+Use `AE_ISOLATED_NATIVE_SSH_CONFIG` to opt in to the AISBench and Harbor native
+smoke tests. The protected JSON has `aisbench` and `harbor` entries. Each entry
+provides `connection` fields from the SSH fixture above excluding `image_id`,
+the resolved execution `template`, an adaptor `spec` without credentials,
+`model_credential_ref`, `dataset`, and `expected_sample_ids`. Use a bounded
+AISBench fixture configured for a controlled model response and a Harbor
+fixture configured for a no-model trial. Both tests exercise preflight,
+native execution, SSH result retrieval, and removal on the configured node.

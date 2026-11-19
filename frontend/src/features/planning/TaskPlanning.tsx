@@ -43,11 +43,10 @@ function StrategyChoice({ label, parallel, disabled = false, onChange }: { label
 
 export function TaskPlanning() {
   const targets = useOptions<Target>("/target-bindings");
-  const docker = useOptions<Resource>("/resources");
   const ssh = useOptions<Resource>("/ssh-resources");
   const [target, setTarget] = useState("");
   const [addingService, setAddingService] = useState(false);
-  const [resourceKind, setResourceKind] = useState("customer_ssh");
+  const resourceKind = "customer_ssh";
   const [resource, setResource] = useState("");
   const [resourceIds, setResourceIds] = useState<string[]>([]);
   const [options, setOptions] = useState<Options>({ compilations: [], manifests: [], curves: [] });
@@ -77,7 +76,7 @@ export function TaskPlanning() {
   const [estimating, setEstimating] = useState(false);
   const probeIntent = useRef<{ body: string; key: string } | null>(null);
   const pending = useRef<{ body: string; key: string } | null>(null);
-  const resources = resourceKind === "customer_ssh" ? ssh : docker;
+  const resources = ssh;
   const refresh = async () => {
     const collected: Options = { compilations: [], manifests: [], curves: [] };
     let offset: number | null = 0;
@@ -247,7 +246,6 @@ export function TaskPlanning() {
     <p className="planning-intro">支持 GPQA、MMMU-Pro、DeepSWE、AutomationBench 的全量或已绑定 Lite 清单。Agent 工作流通过 AISBench Harbor 执行，需绑定配置与清单并通过环境检查。</p>
     <div className="planning-fields">
       <div className="planning-service-field"><div className="planning-service-heading"><label htmlFor="planning-service">模型服务</label><ManagementDrawer title="管理服务" onDismiss={targets.retry}><ModelServices /></ManagementDrawer></div><PlanningSelect id="planning-service" label="规划模型服务" value={target} options={targets.rows.map(t => ({ id: t.id, label: t.service_name || t.remote_model, detail: `${t.remote_model} · ${t.base_url} · ${t.id.slice(0, 8)}` }))} onChange={id => { setTarget(id); setSelection({}); }} onAdd={() => setAddingService(true)} /><ManagementDrawer title="新增模型服务" hideTrigger open={addingService} onOpenChange={setAddingService} onDismiss={targets.retry}><ServiceBindings /></ManagementDrawer></div>
-      <div className="planning-environment-field"><span>执行环境</span><PlanningSelect label="执行环境" value={resourceKind} options={[{ id: "docker_local", label: "Docker" }, { id: "customer_ssh", label: "客户 SSH" }]} onChange={id => { setResourceKind(id); setResource(""); setResourceIds([]); }} /></div>
       <ResourceMultiSelect options={resources.rows} value={resourceIds} onChange={ids => { setResourceIds(ids); setResource(ids[0] || ""); }} />
     </div>
     <p className="muted">展开下拉框勾选多个执行资源；平台按配置绑定自动分配，每个数据集分别预检。</p>
@@ -275,7 +273,7 @@ export function TaskPlanning() {
     {enabled.map(dataset => {
       const bound = options.compilations.filter(c => c.target_id === target && c.input_ready && c.dataset === dataset);
       if (!bound.length || bound.some(c => !Array.isArray(c.runtime_config?.resource_ids) || resourceIds.some(id => (c.runtime_config!.resource_ids as string[]).includes(id)))) return null;
-      const names = [...new Set(bound.flatMap(c => (c.runtime_config?.resource_ids as string[]).map(id => [...ssh.rows, ...docker.rows].find(r => r.id === id)?.binding_key || id)))];
+      const names = [...new Set(bound.flatMap(c => (c.runtime_config?.resource_ids as string[]).map(id => ssh.rows.find(r => r.id === id)?.binding_key || id)))];
       return <p className="notice" key={dataset}>{dataset} 配置需使用执行资源：{names.join("、")}。请切换资源后选择配置。</p>;
     })}
     <details className="planning-management"><summary>管理配置与清单 · 缺少配置时在此维护</summary>

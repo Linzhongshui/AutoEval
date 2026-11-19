@@ -59,6 +59,7 @@ export type RunSnapshot = {
 };
 
 export type DatasetResult = {
+  execution_environment?: { resource_id: string; tool: string; revision: string; container_id: string | null; state: string } | null;
   id: string;
   dataset: string;
   state: string;

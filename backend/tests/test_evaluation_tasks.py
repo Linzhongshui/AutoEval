@@ -618,6 +618,41 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                     assert run.state == "completed"
                     assert evidence.sample_id == "0" and evidence.object_key in objects
                     assert collection.object_key in objects
+
+                accepted = await send("r13-cancel-during-container-start", harbor)
+                assert accepted.status_code == 202
+                cancelled_id = uuid.UUID(accepted.json()["data"]["run_id"])
+                remote.submit.reset_mock()
+                remote.status.reset_mock()
+                remote.remove.reset_mock()
+
+                async def cancel_during_start():
+                    response = await c.post(
+                        f"/api/autoeval/v1/evaluation-tasks/{cancelled_id}/cancel"
+                    )
+                    assert response.status_code == 202
+                    assert response.json()["data"]["accepted"] is True
+                    return container_id
+
+                remote.ensure.side_effect = cancel_during_start
+                async with asyncio.timeout(10):
+                    await orchestration.execute(app.state.sessions, settings, cancelled_id)
+                remote.submit.assert_not_awaited()
+                remote.status.assert_not_awaited()
+                remote.remove.assert_awaited_once()
+
+                async with app.state.sessions() as session:
+                    run = await session.get(EvaluationRun, cancelled_id)
+                    child = await session.scalar(
+                        select(DatasetExecution).where(DatasetExecution.run_id == cancelled_id)
+                    )
+                    environment = await session.get(DatasetExecutionEnvironment, child.id)
+                    lease = await session.scalar(
+                        select(CapacityLease).where(CapacityLease.owner_id == child.id)
+                    )
+                    assert run.state == child.state == "cancelled"
+                    assert environment.container_id == container_id
+                    assert environment.state == "cleaned" and lease.released
     finally:
         await admin.execute(f'DROP DATABASE "{database}"')
         await admin.close()

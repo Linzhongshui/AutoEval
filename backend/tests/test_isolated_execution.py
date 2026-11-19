@@ -368,3 +368,46 @@ async def test_unified_archive_reports_invalid_source_before_opening_transaction
 
     with pytest.raises(InvalidUnifiedOutput):
         await archive_output(None, None, uuid4(), "fixture", b"{}", {"GPQA": ["case-1"]}, "GPQA")
+
+
+@pytest.mark.asyncio
+async def test_unified_archive_can_retry_after_stored_evidence_read_failure(monkeypatch):
+    import hashlib
+    from contextlib import asynccontextmanager
+    from unittest.mock import AsyncMock, Mock
+
+    from autoeval.reporting import unified_outputs
+
+    raw = b"fixture"
+    expected = {"GPQA": ["case-1"]}
+    summary = {"validity": "complete"}
+    existing = SimpleNamespace(
+        sha256=hashlib.sha256(raw).hexdigest(),
+        payload={"expected": expected, "summary": summary},
+    )
+    read = Mock(side_effect=[ValueError("Stored evidence checksum mismatch"), raw])
+
+    @asynccontextmanager
+    async def transaction():
+        yield
+
+    def sessions():
+        @asynccontextmanager
+        async def connect():
+            yield SimpleNamespace(
+                begin=transaction, scalar=AsyncMock(side_effect=[object(), existing])
+            )
+
+        return connect()
+
+    monkeypatch.setattr(unified_outputs, "parse_output", Mock(return_value=([], summary)))
+    monkeypatch.setattr(unified_outputs, "read_manifest", read)
+    run_id = uuid4()
+    with pytest.raises(ValueError, match="Stored evidence checksum mismatch") as exc:
+        await unified_outputs.archive_output(sessions, None, run_id, "fixture", raw, expected)
+    assert not isinstance(exc.value, unified_outputs.InvalidUnifiedOutput)
+    assert (
+        await unified_outputs.archive_output(sessions, None, run_id, "fixture", raw, expected)
+        == summary
+    )
+    assert read.call_count == 2

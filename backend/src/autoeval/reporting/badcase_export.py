@@ -386,6 +386,7 @@ def readme(data, body, count):
             "scores.csv             每个 case 的当前/历史得分与可疑度",
             "cases/<case>/case.json          当前与历史的判定、得分、差异",
             "cases/<case>/current/inference.json  LLM prompt/messages/模型输出",
+            "cases/<case>/current/inference.txt   模型原始输出字符串（LLM）",
             "cases/<case>/current/trajectory/     Agent 轨迹、工具调用与验证器文件",
             "cases/<case>/current/evidence.json   归档 case 证据",
             "cases/<case>/history/<report>/       同配置历史推理与轨迹",
@@ -573,6 +574,7 @@ async def build_package(session, settings, run_id, body):
                         "delta": case["delta"],
                         "verdict": case["verdict"],
                         "inference": "current/inference.json",
+                        "raw_output": "current/inference.txt",
                         "trajectory": "current/trajectory/",
                     },
                 )
@@ -604,19 +606,22 @@ async def build_package(session, settings, run_id, body):
                     ),
                 )
                 writer.add_json(base + "/current/evidence.json", current_evidence)
-                writer.add_json(
-                    base + "/current/inference.json",
-                    inference_view(
-                        sample_id=sample_id,
-                        dataset_key=dataset["dataset_key"],
-                        run_id=str(run_id),
-                        report_id=data["report_id"],
-                        model=data["report"]["remote_model"],
-                        attempt_no=case["current"].get("attempt_no"),
-                        evidence=current_evidence,
-                        case=current_raw,
-                    ),
+                current_inference = inference_view(
+                    sample_id=sample_id,
+                    dataset_key=dataset["dataset_key"],
+                    run_id=str(run_id),
+                    report_id=data["report_id"],
+                    model=data["report"]["remote_model"],
+                    attempt_no=case["current"].get("attempt_no"),
+                    evidence=current_evidence,
+                    case=current_raw,
                 )
+                writer.add_json(base + "/current/inference.json", current_inference)
+                if isinstance(current_inference.get("response"), str) and current_inference["response"]:
+                    writer.add(
+                        base + "/current/inference.txt",
+                        current_inference["response"].encode("utf-8"),
+                    )
                 writer.add_json(
                     base + "/current/trace.json",
                     {key: item for key, item in current_trace.items() if key != "files"},
@@ -654,19 +659,22 @@ async def build_package(session, settings, run_id, body):
                         ),
                     )
                     writer.add_json(history_base + "/evidence.json", history_evidence)
-                    writer.add_json(
-                        history_base + "/inference.json",
-                        inference_view(
-                            sample_id=sample_id,
-                            dataset_key=dataset["dataset_key"],
-                            run_id=entry["run_id"],
-                            report_id=entry["report_id"],
-                            model=data["report"]["remote_model"],
-                            attempt_no=(history_raw or {}).get("attempt_no"),
-                            evidence=history_evidence,
-                            case=history_raw,
-                        ),
+                    history_inference = inference_view(
+                        sample_id=sample_id,
+                        dataset_key=dataset["dataset_key"],
+                        run_id=entry["run_id"],
+                        report_id=entry["report_id"],
+                        model=data["report"]["remote_model"],
+                        attempt_no=(history_raw or {}).get("attempt_no"),
+                        evidence=history_evidence,
+                        case=history_raw,
                     )
+                    writer.add_json(history_base + "/inference.json", history_inference)
+                    if isinstance(history_inference.get("response"), str) and history_inference["response"]:
+                        writer.add(
+                            history_base + "/inference.txt",
+                            history_inference["response"].encode("utf-8"),
+                        )
                     writer.add_json(
                         history_base + "/trace.json",
                         {key: item for key, item in history_trace.items() if key != "files"},

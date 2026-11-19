@@ -81,6 +81,9 @@ def test_recover_created_container_and_remove_only_selected_child():
         if action == "ps":
             name = args[-1].removeprefix("name=^/").removesuffix("$")
             return name.encode() if name in rows else b""
+        if action == "image":
+            assert args[-1] == image
+            return image.encode()
         if action == "create":
             name = args[args.index("--name") + 1]
             assert name not in rows
@@ -224,8 +227,11 @@ async def test_tool_dispatch_contract_with_real_docker(family, transport_kind):
 
     async def wait_for(adapter, job, desired):
         for _ in range(50):
-            if (await adapter.status(job)).state == desired:
+            observed = await adapter.status(job)
+            if observed.state == desired:
                 return
+            if observed.state in {"failed", "succeeded", "cancelled"}:
+                pytest.fail(f"{family} fixture reached {observed.state} before {desired}")
             await asyncio.sleep(0.1)
         pytest.fail(f"{family} fixture did not enter {desired}")
 
@@ -267,8 +273,8 @@ def execute(folder, spec):
         adapter.files["planning_runtime.py"] = fixture_runtime
     try:
         assert await left.ensure() != await right.ensure()
-        left_job = await left.submit(spec(25), left_key)
-        right_job = await right.submit(spec(8), right_key)
+        left_job = await left.submit(spec(90 if ssh_config else 25), left_key)
+        right_job = await right.submit(spec(30 if ssh_config else 8), right_key)
         await wait_for(left, left_job, "running")
         await wait_for(right, right_job, "running")
         await left.cancel(left_job, "fixture-cancel")

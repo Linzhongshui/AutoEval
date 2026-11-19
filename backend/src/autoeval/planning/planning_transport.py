@@ -474,8 +474,13 @@ class IsolatedPlanningContainer(PlanningRemoteContainer):
         with self.control.connect() as client:
             row = self._find(client)
             if row is None:
+                image_id = self.control.command(
+                    client, ["docker", "image", "inspect", "--format", "{{.Id}}", self.image_id]
+                ).decode().strip()
+                if image_id != self.image_id:
+                    raise ValueError("Pinned execution image is unavailable")
                 argv = [
-                    "docker", "create", "--pull=never", "--name", self.name,
+                    "docker", "create", "--name", self.name,
                     "--label", "autoeval.dataset_execution=" + self.owner,
                     "--workdir", "/tmp",
                 ]
@@ -512,9 +517,12 @@ class IsolatedPlanningContainer(PlanningRemoteContainer):
             validate_spec(spec)
 
     async def lookup(self, submission_key):
-        # Validate ownership before writing the runtime or inspecting a job.
-        await self.validate({"kind": "framework_smoke"})
-        return await super().lookup(submission_key)
+        # Submission installs the runtime. Inspecting an existing job is read-only.
+        from autoeval.infrastructure.contracts import JobObservation, JobRef
+
+        job = JobRef(external_job_id=submission_key, submission_key=submission_key)
+        result = await self._invoke("status", submission_key)
+        return JobObservation(job=job, state=result["state"], reason=result.get("reason"))
 
     async def collect(self, job):
         await self.validate({"kind": "framework_smoke"})

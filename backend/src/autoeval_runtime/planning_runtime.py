@@ -112,8 +112,6 @@ def inspect_dataset(task, *, networks, validated):
         else params.get("path")
     )
     reasons = []
-    if task["dataset"] not in validated:
-        reasons.append("dataset_not_validated")
     if not data_path:
         reasons.append("dataset_path_missing")
     elif not Path(data_path).is_dir():
@@ -133,6 +131,9 @@ def inspect_dataset(task, *, networks, validated):
                 reasons.append("task_selection_preflight_failed")
         except (OSError, ValueError, subprocess.SubprocessError):
             reasons.append("tool_environment_preflight_unavailable")
+    # The admission gate must not hide failures in read-only environment checks.
+    if task["dataset"] not in validated:
+        reasons.insert(0, "dataset_not_validated")
     return {
         "task_id": task["task_id"],
         "dataset": task["dataset"],

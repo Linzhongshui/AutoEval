@@ -16,7 +16,7 @@ from temporalio import activity
 
 from autoeval.catalog.datasets import canonical_manifest, read_manifest, write_manifest
 from autoeval.infrastructure.models import Base, EvaluationRun, Outbox, Record
-from autoeval.reporting.harbor_trace import FILES, build_plan  # noqa: F401
+from autoeval.reporting.harbor_trace import FILES, apply_trial_timing, build_plan  # noqa: F401
 
 REVISION = "a62c1be62888e2cb5c89f92aa2dc00731f4f5ed1"
 

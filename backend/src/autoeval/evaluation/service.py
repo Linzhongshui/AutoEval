@@ -11,7 +11,7 @@ from autoeval.evaluation.inputs import manifest_dataset_matches as manifest_data
 from autoeval.evaluation.inputs import resolve_inputs as resolve_inputs
 from autoeval.evaluation.inputs import selection_identity as selection_identity
 from autoeval.evaluation.inputs import target_data as target_data
-from autoeval.evaluation.models import DatasetExecution
+from autoeval.evaluation.models import DatasetExecution, DatasetExecutionEnvironment
 from autoeval.evaluation.resource_allocation import acquire as acquire
 from autoeval.evaluation.resource_allocation import demand_for as demand_for
 from autoeval.evaluation.resource_allocation import fits as fits
@@ -50,6 +50,14 @@ async def planned_run_detail(sessions, run_id):
         report_id = await session.scalar(
             select(EvaluationReport.id).where(EvaluationReport.run_id == run_id)
         )
+        environments = {
+            row.dataset_execution_id: row
+            for row in await session.scalars(
+                select(DatasetExecutionEnvironment).where(
+                    DatasetExecutionEnvironment.dataset_execution_id.in_([c.id for c in children])
+                )
+            )
+        }
         from autoeval.evaluation.orchestration import child_view
 
         return {
@@ -57,7 +65,19 @@ async def planned_run_detail(sessions, run_id):
             "id": str(run.id),
             "state": run.state,
             "estimate": snapshot.canonical_body.get("estimate"),
-            "datasets": [child_view(c) for c in children],
+            "datasets": [
+                {
+                    **child_view(child),
+                    "execution_environment": {
+                        "resource_id": str(environment.resource_id),
+                        "tool": environment.template["family"],
+                        "revision": environment.template["revision"],
+                        "container_id": (environment.container_id or "")[:12] or None,
+                        "state": environment.state,
+                    } if (environment := environments.get(child.id)) else None,
+                }
+                for child in children
+            ],
             "report": reports[0].payload if reports else None,
             "execution_origin": snapshot.canonical_body.get("execution_origin"),
         }

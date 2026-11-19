@@ -227,6 +227,9 @@ async def serve():
         while True:
             from autoeval.infrastructure.cleanup import ExecutionCleanup, reclaim
 
+            from autoeval.evaluation.isolated_cleanup import reclaim_pending
+
+            await reclaim_pending(sessions, settings)
             async with sessions() as session:
                 cleanup_ids = list(await session.scalars(
                     select(ExecutionCleanup.run_id)

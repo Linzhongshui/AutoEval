@@ -57,7 +57,8 @@ async def resolve_inputs(session, settings, body):
         resource_ids = compiled.get("runtime_config", {}).get("resource_ids")
         from autoeval.evaluation.resource_allocation import allocate_resource
 
-        assigned_resource = allocate_resource(body.resource_ids or [body.resource_id], resource_ids)
+        candidates = body.resource_ids or [body.resource_id]
+        allocate_resource(candidates, resource_ids)
         if (
             not compiled.get("input_ready")
             or compiled.get("adaptor_revision") != "955089ab32ef696c231d628f5ad0d9da28f430c4"
@@ -87,6 +88,16 @@ async def resolve_inputs(session, settings, body):
             config["subcommand"] == "harbor_agent"
         ):
             raise HTTPException(422, "Dataset tool family mismatch")
+        from autoeval.planning.planning_transport import execution_template
+
+        templates = {
+            str(node): execution_template(settings, node, {"compilation": compiled, "tool": profile.contract})
+            for node in candidates if resource_ids is None or str(node) in resource_ids
+        }
+        compatible = [node for node, template in templates.items() if template]
+        if not compatible:
+            raise HTTPException(422, f"No selected SSH node has a matching execution template for {spec.dataset}")
+        assigned_resource = compatible[0]
         full = await session.get(DatasetManifest, profile.full_manifest_id)
         source = await asyncio.to_thread(read_manifest, settings, full)
         samples = [
@@ -127,7 +138,9 @@ async def resolve_inputs(session, settings, body):
             params["dataset_test_range"] = (
                 f"[{chosen[0]['tool_case_id']}:{int(chosen[-1]['tool_case_id']) + 1}]"
             )
-        field = "batch_size" if config["subcommand"] == "llm_accuracy" else "n_concurrent_trials"
+        from autoeval.evaluation.tool_dispatch import tool_for
+
+        field = tool_for({"compilation": compiled}).concurrency_field
         attempts = (
             int(params.get("n_attempts", 1))
             if spec.dataset in {"DeepSWE", "AutomationBench"}
@@ -139,7 +152,9 @@ async def resolve_inputs(session, settings, body):
         tasks.append(
             {
                 **spec.model_dump(mode="json"),
-                **({"assigned_resource_id": assigned_resource, "assigned_resource_kind": body.resource_kind} if body.resource_ids else {}),
+                "assigned_resource_id": assigned_resource,
+                "assigned_resource_kind": body.resource_kind,
+                "execution_template": templates[assigned_resource],
                 "compilation": compiled,
                 "compilation_sha256": compilation.sha256,
                 "standard_baseline_source": {

@@ -50,6 +50,10 @@ async def create_run(session, settings, body, execution_plan_id, key):
     fresh = await current_preflight(session, inputs)
     if not fresh or not fresh.payload.get("execution_ready"):
         raise HTTPException(409, "Fresh resource preflight required")
+    if fresh.payload.get("execution_templates") != {
+        task["task_id"]: task["execution_template"] for task in inputs["tasks"]
+    }:
+        raise HTTPException(409, "SSH execution templates changed; run preflight again")
     report = None
     if execution_plan_id:
         execution = await session.get(PlanningArtifact, execution_plan_id)

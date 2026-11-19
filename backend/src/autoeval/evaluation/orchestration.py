@@ -16,7 +16,7 @@ from temporalio import activity
 
 from autoeval.catalog.datasets import canonical_manifest, read_manifest, write_manifest
 from autoeval.catalog.standard_inputs import digest
-from autoeval.evaluation.models import DatasetExecution
+from autoeval.evaluation.models import DatasetExecution, DatasetExecutionEnvironment
 from autoeval.evaluation.resource_allocation import acquire, demand_for, release, resource_for_task
 from autoeval.infrastructure.config import get_settings
 from autoeval.infrastructure.contracts import JobRef
@@ -26,7 +26,7 @@ from autoeval.infrastructure.models import EvaluationRun, RunEvent, RunSnapshot
 from autoeval.infrastructure.secrets import FileSecretStore
 from autoeval.planning.artifacts import artifact
 from autoeval.planning.models import PlanningArtifact
-from autoeval.planning.planning_transport import transport
+from autoeval.planning.planning_transport import execution_template, isolated_transport, transport
 from autoeval.reporting.unified_outputs import archive_output
 from autoeval.resources.models import TargetBinding
 
@@ -58,6 +58,10 @@ TERMINAL = set(DATASET_TERMINAL)
 async def update_child(sessions, child_id, **values):
     async with sessions() as session, session.begin():
         child = await session.get(DatasetExecution, child_id, with_for_update=True)
+        if values.get("state") in TERMINAL:
+            environment = await session.get(DatasetExecutionEnvironment, child_id)
+            if environment is not None:
+                environment.state = "cleanup_pending"
         for key, value in values.items():
             setattr(child, key, value)
 
@@ -84,9 +88,19 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
 
         ignore_budget = budget_ignored(frozen)
         inputs = frozen["inputs"]
-        adapter = await transport(session, settings, inputs)
+        isolated = all(t.get("execution_template") for t in inputs["tasks"])
+        adapter = None if isolated else await transport(session, settings, inputs)
+        child_ids = dict((await session.execute(
+            select(DatasetExecution.task_id, DatasetExecution.id).where(DatasetExecution.run_id == run_id)
+        )).all())
         adapters = {}
         for item in inputs["tasks"]:
+            if isolated:
+                adapters[item["task_id"]] = await isolated_transport(
+                    session, settings, item["assigned_resource_id"],
+                    child_ids[item["task_id"]], item["execution_template"],
+                )
+                continue
             adapters[item["task_id"]] = (
                 await transport(
                     session,
@@ -141,6 +155,17 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                 child.finished_at = datetime.now(UTC)
             if child.state not in DATASET_ACTIVE:
                 continue
+            if isolated:
+                async with sessions() as session:
+                    environment = await session.get(DatasetExecutionEnvironment, child.id)
+                if environment and environment.state == "creating":
+                    await update_child(
+                        sessions, child.id,
+                        state="cancelled" if cancelled else "pending",
+                        **({"finished_at": datetime.now(UTC)} if cancelled else {}),
+                    )
+                    child.state = "cancelled" if cancelled else "pending"
+                    continue
             from autoeval.billing.transport import execution_route
 
             child_route = execution_route(
@@ -152,11 +177,21 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
             )
             child_secret = child_route["api_key"] if child_route else secret
             job = JobRef(external_job_id=str(child.id), submission_key=str(child.id))
-            observation = (
-                await adapter.cancel(job, "cancel:" + str(child.id))
-                if cancelled
-                else await adapter.status(job)
-            )
+            try:
+                observation = (
+                    await adapter.cancel(job, "cancel:" + str(child.id))
+                    if cancelled
+                    else await adapter.status(job)
+                )
+            except (OSError, ValueError, RuntimeError):
+                if not isolated:
+                    raise
+                await update_child(
+                    sessions, child.id, state="unresolved",
+                    summary={"reason": "SSH execution state could not be verified"},
+                )
+                child.state = "unresolved"
+                continue
             if observation.state in {"unknown", "cleaned"}:
                 await update_child(
                     sessions,
@@ -318,6 +353,8 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
             child.finished_at = datetime.now(UTC)
             # Release capacity only after the transport confirms cleanup. Harbor cancellation
             # can leave daemon-owned trial containers; retain ownership instead of overbooking.
+            if isolated:
+                continue
             cleanup = await adapter.cleanup(job)
             if cleanup.get("cleaned"):
                 async with sessions() as session, session.begin():
@@ -344,6 +381,13 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                 ):
                     continue
                 stored = await session.get(DatasetExecution, child.id, with_for_update=True)
+                if isolated and await session.get(DatasetExecutionEnvironment, child.id) is None:
+                    session.add(DatasetExecutionEnvironment(
+                        dataset_execution_id=child.id,
+                        resource_id=uuid.UUID(child.payload["assigned_resource_id"]),
+                        template=child.payload["execution_template"],
+                        state="creating",
+                    ))
                 stored.state = "submitting"
                 stored.started_at = datetime.now(UTC)
             # The durable submitting intent precedes network I/O. A lost reply is reconciled
@@ -370,6 +414,18 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
 
                 compilation = execution_compilation(compilation)
                 execution_secret = route["api_key"] if route else secret
+                if isolated:
+                    if execution_template(settings, child.payload["assigned_resource_id"], child.payload) != child.payload["execution_template"]:
+                        await update_child(
+                            sessions, child.id, state="failed", finished_at=datetime.now(UTC),
+                            summary={"reason": "SSH execution template changed"},
+                        )
+                        continue
+                    container_id = await adapter.ensure()
+                    async with sessions() as session, session.begin():
+                        environment = await session.get(DatasetExecutionEnvironment, child.id)
+                        environment.container_id = container_id
+                        environment.state = "submitting"
                 await adapter.submit(
                     {
                         "kind": "adaptor",

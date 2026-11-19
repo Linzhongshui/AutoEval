@@ -48,6 +48,7 @@ class TaskInput(Strict):
 
 
 class PlanInput(ResourceRef):
+    resource_kind: Literal["customer_ssh"]
     resource_ids: list[uuid.UUID] = Field(default_factory=list, max_length=16)
     ignore_budget: bool = Field(default=False, strict=True)
 

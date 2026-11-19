@@ -113,3 +113,23 @@ uv export --frozen --no-dev --no-emit-project --format requirements-txt --output
 - [存储与恢复](../docs/development-recovery.md)、[内网发布操作](../deploy/intranet/README.md)。
 
 原按时间追加的模块说明与早期探索命令保留在[后端 README 历史快照](../docs/backend-readme-history-2026-11-17.md)，仅作追溯，不作为当前启动步骤。
+
+### R13 remote execution templates
+
+Unified evaluation accepts SSH resources. Configure the protected
+`AE_PLANNING_CONTAINER_CONFIG` mapping by SSH binding UUID. Each binding's
+`executors` object maps tool names to execution templates with `revision`,
+`image_id` (a full local Docker image ID on the remote host), and optional
+`readonly_mounts` (same absolute path inside and outside the container). Set
+`environment.AE_VALIDATED_DATASETS` only for validated datasets.
+
+Harbor templates require `private_docker: true` and an image whose entrypoint
+runs a private Docker daemon at `/tmp/autoeval-docker.sock`. The runner sets
+`DOCKER_HOST` to that socket. Prepare and validate this image on the target
+node before enabling Harbor there. Its trial resources belong to that private
+daemon. Keep the existing fixed runner binding for planning and in-flight
+snapshots. Apply migration `0037_execution_environment` before starting the
+updated worker and reconciler.
+
+PEIR and AgentX currently have tool identifiers and template matching tests.
+Production submission and native output adapters require their tool contracts.

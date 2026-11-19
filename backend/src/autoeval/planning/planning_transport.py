@@ -440,3 +440,134 @@ async def transport(session, settings, inputs):
     if row is None:
         raise ValueError("Docker binding missing")
     return PlanningDocker(settings.docker_executable, row.container_id, row.image_id)
+
+
+class IsolatedPlanningContainer(PlanningRemoteContainer):
+    """An execution container whose Docker identity is scoped to one subtask."""
+
+    def __init__(self, connection, owner, template):
+        self.owner = str(__import__("uuid").UUID(str(owner)))
+        self.template = template
+        self.name = "autoeval-task-" + self.owner
+        super().__init__(connection, self.name, template["image_id"])
+
+    def _find(self, client):
+        raw = self.control.command(
+            client, ["docker", "ps", "-aq", "--no-trunc", "--filter", "name=^/" + self.name + "$"]
+        ).decode().splitlines()
+        if not raw:
+            return None
+        if len(raw) != 1:
+            raise ValueError("Ambiguous task container")
+        row = json.loads(self.control.command(client, ["docker", "inspect", raw[0]]))[0]
+        if (
+            row["Name"] != "/" + self.name
+            or row["Image"] != self.image_id
+            or row["Config"]["Labels"].get("autoeval.dataset_execution") != self.owner
+        ):
+            raise ValueError("Task container ownership mismatch")
+        return row
+
+    def _ensure(self):
+        with self.control.connect() as client:
+            row = self._find(client)
+            if row is None:
+                argv = [
+                    "docker", "create", "--pull=never", "--name", self.name,
+                    "--label", "autoeval.dataset_execution=" + self.owner,
+                    "--workdir", "/tmp",
+                ]
+                for mount in self.template.get("readonly_mounts", []):
+                    argv += ["--mount", "type=bind,src=" + mount + ",dst=" + mount + ",readonly"]
+                for key, value in self.template.get("environment", {}).items():
+                    argv += ["--env", key + "=" + value]
+                if self.template["family"] == "harbor":
+                    # The image entrypoint owns a private, in-container Docker daemon.
+                    argv += ["--env", "DOCKER_HOST=unix:///tmp/autoeval-docker.sock", self.image_id]
+                else:
+                    argv += ["--entrypoint", "python3", self.image_id, "-c", "import time; time.sleep(10**8)"]
+                self.control.command(client, argv)
+                row = self._find(client)
+                if row is None:
+                    raise RuntimeError("Task container creation could not be confirmed")
+            if row["State"]["Status"] == "created":
+                self.control.command(client, ["docker", "start", row["Id"]])
+            elif not row["State"]["Running"]:
+                raise ValueError("Task container stopped")
+            self.container_id = row["Id"]
+            return row["Id"]
+
+    async def ensure(self):
+        return await asyncio.to_thread(self._ensure)
+
+    async def validate(self, spec):
+        row = await asyncio.to_thread(self._inspect_owned)
+        if not row or not row["State"]["Running"]:
+            raise ValueError("Owned task container is unavailable")
+        self.container_id = row["Id"]
+        if spec.get("kind") != "framework_smoke":
+            validate_spec(spec)
+
+    async def lookup(self, submission_key):
+        # Validate ownership before writing the runtime or inspecting a job.
+        await self.validate({"kind": "framework_smoke"})
+        return await super().lookup(submission_key)
+
+    def _inspect_owned(self):
+        with self.control.connect() as client:
+            return self._find(client)
+
+    def _remove(self):
+        with self.control.connect() as client:
+            row = self._find(client)
+            if row:
+                self.control.command(client, ["docker", "rm", "-fv", row["Id"]])
+            return self._find(client) is None
+
+    async def remove(self):
+        return await asyncio.to_thread(self._remove)
+
+
+def executor_templates(settings, resource_id):
+    path = settings.planning_container_config
+    if not path:
+        return {}
+    return json.loads(Path(path).read_text(encoding="utf-8")).get(str(resource_id), {}).get(
+        "executors", {}
+    )
+
+
+def execution_template(settings, resource_id, task):
+    import re
+
+    from autoeval.evaluation.tool_dispatch import tool_for
+
+    family = tool_for(task).name
+    entry = executor_templates(settings, resource_id).get(family)
+    if not entry or entry.get("revision") != task["tool"]["revision"]:
+        return None
+    if family == "harbor" and entry.get("private_docker") is not True:
+        return None
+    image = entry.get("image_id", "")
+    mounts = entry.get("readonly_mounts", [])
+    if not re.fullmatch(r"sha256:[a-f0-9]{64}", image) or any(
+        not mount.startswith("/") or "," in mount or ".." in PurePosixPath(mount).parts
+        or mount in {"/", "/run", "/var", "/var/run"} or mount.endswith(".sock")
+        for mount in mounts
+    ):
+        raise ValueError("Invalid execution image or read-only mount")
+    return {
+        "family": family, "revision": entry["revision"], "image_id": image,
+        "readonly_mounts": mounts,
+        "environment": {
+            key: value for key, value in entry.get("environment", {}).items()
+            if key in {"AE_VALIDATED_DATASETS", "AE_HARBOR_NETWORK_CAPACITY"}
+        },
+    }
+
+
+async def isolated_transport(session, settings, resource_id, owner, template):
+    row = await session.get(SSHResourceBinding, resource_id)
+    if row is None:
+        raise ValueError("SSH binding missing")
+    return IsolatedPlanningContainer(connection_for(row, settings), owner, template)

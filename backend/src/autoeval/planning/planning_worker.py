@@ -46,7 +46,10 @@ async def execute_job(sessions, settings, identifier):
         if cancelled and previous == "pending":
             await set_job(sessions, identifier, state="cancelled")
             return
-        adapter = await transport(session, settings, inputs)
+        isolated_preflight = kind == "preflight" and all(
+            t.get("execution_template") for t in inputs["tasks"]
+        )
+        adapter = None if isolated_preflight else await transport(session, settings, inputs)
     if kind != "probe" or previous != "pending":
         await set_job(sessions, identifier, state="running")
     if kind == "preflight":
@@ -54,7 +57,32 @@ async def execute_job(sessions, settings, identifier):
             {key: item[key] for key in ("task_id", "dataset", "compilation", "tool")}
             for item in inputs["tasks"]
         ]
-        if inputs.get("resource_ids"):
+        if all(t.get("execution_template") for t in inputs["tasks"]):
+            from autoeval.planning.planning_transport import isolated_transport
+
+            task_resources = {}
+            for item, check in zip(inputs["tasks"], checks, strict=True):
+                async with sessions() as session:
+                    isolated = await isolated_transport(
+                        session, settings, item["assigned_resource_id"],
+                        uuid.uuid5(identifier, item["task_id"]), item["execution_template"],
+                    )
+                try:
+                    await isolated.ensure()
+                    task_resources[item["task_id"]] = await isolated.preflight([check])
+                finally:
+                    if not await isolated.remove():
+                        raise RuntimeError("Preflight container cleanup could not be confirmed")
+            snapshot = {
+                **next(iter(task_resources.values())),
+                "task_resources": task_resources,
+                "execution_templates": {t["task_id"]: t["execution_template"] for t in inputs["tasks"]},
+                "dataset_checks": [c for r in task_resources.values() for c in r["dataset_checks"]],
+                "supported_datasets": sorted({d for r in task_resources.values() for d in r["supported_datasets"]}),
+                "execution_ready": all(r["execution_ready"] for r in task_resources.values()),
+                "blocking_reasons": sorted({b for r in task_resources.values() for b in r["blocking_reasons"]}),
+            }
+        elif inputs.get("resource_ids"):
             task_resources = {}
             for item in inputs["tasks"]:
                 async with sessions() as session:

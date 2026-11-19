@@ -133,3 +133,10 @@ updated worker and reconciler.
 
 PEIR and AgentX currently have tool identifiers and template matching tests.
 Production submission and native output adapters require their tool contracts.
+
+The optional lifecycle fixtures in `tests/test_isolated_execution.py` accept
+`AE_ISOLATED_SSH_CONFIG`, a protected JSON file for an approved test node.
+Provide `host`, `port`, `username`, `fingerprint`, `workdir`, `auth_kind`,
+`credential_ref` from the secret store, and the full `image_id` of a preloaded
+Python image. The SSH variants exercise remote Docker and SFTP using fixed
+framework jobs with no model calls.

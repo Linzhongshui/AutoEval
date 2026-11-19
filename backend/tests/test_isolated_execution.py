@@ -176,14 +176,18 @@ async def test_failed_removal_retains_lease_until_reconciled(monkeypatch):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("family", ["peir", "agentx"])
-async def test_tool_dispatch_contract_with_real_docker(family):
+@pytest.mark.parametrize("transport_kind", ["local", "ssh"])
+async def test_tool_dispatch_contract_with_real_docker(family, transport_kind):
     import asyncio
     import os
     import subprocess
     from contextlib import nullcontext
 
-    image = os.getenv("AE_ISOLATED_TEST_IMAGE")
-    if not image:
+    ssh_config = os.getenv("AE_ISOLATED_SSH_CONFIG") if transport_kind == "ssh" else None
+    if transport_kind == "ssh" and not ssh_config:
+        pytest.skip("Set AE_ISOLATED_SSH_CONFIG to an approved test node configuration")
+    image = os.getenv("AE_ISOLATED_TEST_IMAGE") if transport_kind == "local" else None
+    if transport_kind == "local" and not image:
         pytest.skip("Set AE_ISOLATED_TEST_IMAGE to a local Python image ID")
 
     def command(_, argv, payload=None):
@@ -193,6 +197,24 @@ async def test_tool_dispatch_contract_with_real_docker(family):
 
     def executor():
         owner = uuid4()
+        if ssh_config:
+            import json
+            from pathlib import Path
+
+            from pydantic import SecretStr
+
+            from autoeval.infrastructure.config import get_settings
+            from autoeval.infrastructure.secrets import FileSecretStore
+            from autoeval.resources.ssh_executor import SSHConnection
+
+            config = json.loads(Path(ssh_config).read_text(encoding="utf-8"))
+            remote_image = config.pop("image_id")
+            credential_ref = config.pop("credential_ref")
+            credential = FileSecretStore(get_settings().secret_store_path).get(credential_ref)
+            connection = SSHConnection(**config, owner_id=owner, credential=SecretStr(credential))
+            return IsolatedPlanningContainer(
+                connection, owner, {"family": family, "image_id": remote_image}
+            ), str(owner)
         connection = SimpleNamespace(workdir="/tmp", owner_id=owner)
         adapter = IsolatedPlanningContainer(
             connection, owner, {"family": family, "image_id": image}
@@ -212,7 +234,7 @@ async def test_tool_dispatch_contract_with_real_docker(family):
     try:
         assert await left.ensure() != await right.ensure()
         running = {"kind": "framework_smoke", "duration_seconds": 20}
-        quick = {"kind": "framework_smoke", "duration_seconds": 2}
+        quick = {"kind": "framework_smoke", "duration_seconds": 5}
         left_job = await left.submit(running, left_key)
         right_job = await right.submit(quick, right_key)
         await wait_for(left, left_job, "running")
@@ -224,7 +246,11 @@ async def test_tool_dispatch_contract_with_real_docker(family):
         await wait_for(right, right_job, "succeeded")
         from autoeval.resources.docker_executor import DockerExecutor
 
-        result = await DockerExecutor.collect(right, right_job)
+        result = (
+            await right.collect(right_job)
+            if ssh_config
+            else await DockerExecutor.collect(right, right_job)
+        )
         assert result["result"]["model_called"] is False
     finally:
         await asyncio.gather(left.remove(), right.remove())

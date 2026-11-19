@@ -18,12 +18,12 @@ from sqlalchemy.engine import make_url
 from autoeval.catalog.registry import Asset, AssetVersion
 from autoeval.entrypoints.api import create_app
 from autoeval.evaluation.evaluation_tasks import SubmitTask
-from autoeval.evaluation.models import DatasetExecution
+from autoeval.evaluation.models import DatasetExecution, DatasetExecutionEnvironment
 from autoeval.infrastructure.config import get_settings
 from autoeval.infrastructure.models import Base, EvaluationRun, Outbox, RunSnapshot
 from autoeval.planning import PlanningJob
 from autoeval.planning.planning_transport import PlanningRemoteContainer
-from autoeval.resources.models import TargetBinding
+from autoeval.resources.models import ResourceProvider, SSHResourceBinding, TargetBinding
 
 
 def submission(datasets=("GPQA", "MMMU-Pro")):
@@ -187,12 +187,35 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                 session.add(target)
                 await session.flush()
                 target_id = str(target.id)
+                provider = ResourceProvider(name="R13 PostgreSQL fixture", kind="customer_ssh")
+                session.add(provider)
+                await session.flush()
+                resource = SSHResourceBinding(
+                    provider_id=provider.id,
+                    binding_key="r13-fixture",
+                    version=1,
+                    host="fixture.invalid",
+                    port=22,
+                    username="tester",
+                    fingerprint="SHA256:" + "a" * 43,
+                    workdir="/work",
+                    auth_kind="private_key",
+                    credential_ref="0" * 32,
+                )
+                session.add(resource)
+                await session.flush()
+                resource_id = str(resource.id)
+
+            template = {"family": "aisbench", "revision": "test", "image_id": "sha256:" + "a" * 64}
 
             async def resolve(session, settings, body):
                 inputs = body.model_dump(mode="json")
                 for t in inputs["tasks"]:
                     t.update(
                         concurrency=t.get("concurrency") or 1,
+                        assigned_resource_id=inputs["resource_id"],
+                        assigned_resource_kind=inputs["resource_kind"],
+                        execution_template=template,
                         samples=[{"sample_id": "0"}],
                         manifest_sha256="a" * 64,
                         tool={},
@@ -203,11 +226,14 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                     )
                 return inputs
 
-            async def preflight(*args, **kwargs):
+            async def preflight(session, inputs, **kwargs):
                 return SimpleNamespace(
                     sha256="b" * 64,
                     payload={
                         "execution_ready": True,
+                        "execution_templates": {
+                            task["task_id"]: template for task in inputs["tasks"]
+                        },
                         "planner_ready": False,
                         "supported_datasets": ["GPQA", "MMMU-Pro"],
                         "cpu_cores": 16,
@@ -222,7 +248,7 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                 transport=httpx.ASGITransport(app), base_url="http://test"
             ) as c:
                 body = submission()
-                body["target_id"] = target_id
+                body.update(target_id=target_id, resource_id=resource_id)
 
                 async def send(key, value):
                     return await c.post(
@@ -239,7 +265,7 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                 changed["tasks"][0]["concurrency"] = 3
                 assert (await send("same-intent", changed)).status_code == 409
                 single = submission(("GPQA",))
-                single["target_id"] = target_id
+                single.update(target_id=target_id, resource_id=resource_id)
                 assert (await send("single", single)).status_code == 202
                 async with app.state.sessions() as session:
                     assert (
@@ -269,6 +295,16 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                             )
                         )
                     ).all()
+                    for index, child in enumerate(children):
+                        session.add(
+                            DatasetExecutionEnvironment(
+                                dataset_execution_id=child.id,
+                                resource_id=uuid.UUID(resource_id),
+                                template=template,
+                                container_id=str(index + 1) * 64,
+                                state="cleanup_pending",
+                            )
+                        )
                     children[0].state = "succeeded"
                     children[1].state = "failed"
                     children[1].summary = {"reason": "TEST-partial-failure"}
@@ -277,6 +313,11 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                 ).status_code == 202
                 async with app.state.sessions() as session:
                     assert (await session.get(EvaluationRun, uuid.UUID(rid))).cancel_requested_at
+                detail = (await c.get(f"/api/autoeval/v1/evaluation-tasks/{rid}")).json()["data"]
+                environments = [row["execution_environment"] for row in detail["datasets"]]
+                assert {row["resource_id"] for row in environments} == {resource_id}
+                assert {row["container_id"] for row in environments} == {"1" * 12, "2" * 12}
+                assert {row["state"] for row in environments} == {"cleanup_pending"}
                 # Historical tasks normalize to one dataset without rewriting snapshots.
                 async with app.state.sessions() as session, session.begin():
                     legacy = EvaluationRun(

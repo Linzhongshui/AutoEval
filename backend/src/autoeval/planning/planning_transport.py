@@ -485,7 +485,8 @@ class IsolatedPlanningContainer(PlanningRemoteContainer):
                     "--workdir", "/tmp",
                 ]
                 for mount in self.template.get("readonly_mounts", []):
-                    argv += ["--mount", "type=bind,src=" + mount + ",dst=" + mount + ",readonly"]
+                    source, target = readonly_mount_paths(mount)
+                    argv += ["--mount", f"type=bind,src={source},dst={target},readonly"]
                 for key, value in self.template.get("environment", {}).items():
                     argv += ["--env", key + "=" + value]
                 if self.template["family"] == "harbor":
@@ -580,6 +581,30 @@ def executor_templates(settings, resource_id):
     )
 
 
+def readonly_mount_paths(mount):
+    if isinstance(mount, str):
+        paths = mount, mount
+    elif isinstance(mount, dict) and set(mount) == {"source", "target"}:
+        paths = mount["source"], mount["target"]
+    else:
+        raise ValueError("Invalid read-only execution mount")
+    for path in paths:
+        if (
+            not isinstance(path, str)
+            or not path.startswith("/")
+            or "," in path
+            or str(PurePosixPath(path)) != path
+            or ".." in PurePosixPath(path).parts
+            or path in {"/", "//", "/run", "/var", "/var/run"}
+            or path.endswith(".sock")
+        ):
+            raise ValueError("Invalid read-only execution mount")
+    target = PurePosixPath(paths[1])
+    if target.is_relative_to("/tmp") or target.is_relative_to("/var/lib/docker"):
+        raise ValueError("Execution mount overlaps writable runner state")
+    return paths
+
+
 def execution_template(settings, resource_id, task):
     import re
 
@@ -593,12 +618,11 @@ def execution_template(settings, resource_id, task):
         return None
     image = entry.get("image_id", "")
     mounts = entry.get("readonly_mounts", [])
-    if not re.fullmatch(r"sha256:[a-f0-9]{64}", image) or any(
-        not mount.startswith("/") or "," in mount or ".." in PurePosixPath(mount).parts
-        or mount in {"/", "/run", "/var", "/var/run"} or mount.endswith(".sock")
-        for mount in mounts
-    ):
-        raise ValueError("Invalid execution image or read-only mount")
+    if not re.fullmatch(r"sha256:[a-f0-9]{64}", image):
+        raise ValueError("Invalid execution image")
+    targets = [readonly_mount_paths(mount)[1] for mount in mounts]
+    if len(set(targets)) != len(targets):
+        raise ValueError("Duplicate execution mount target")
     return {
         "family": family, "revision": entry["revision"], "image_id": image,
         "readonly_mounts": mounts,

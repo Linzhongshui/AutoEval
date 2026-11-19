@@ -120,7 +120,8 @@ Unified evaluation accepts SSH resources. Configure the protected
 `AE_PLANNING_CONTAINER_CONFIG` mapping by SSH binding UUID. Each binding's
 `executors` object maps tool names to execution templates with `revision`,
 `image_id` (a full local Docker image ID on the remote host), and optional
-`readonly_mounts` (same absolute path inside and outside the container). Set
+`readonly_mounts`. Each entry is either one absolute path for both sides or
+an object with separate absolute `source` and `target` paths. Set
 `environment.AE_VALIDATED_DATASETS` only for validated datasets.
 
 Harbor templates require `private_docker: true` and an image whose entrypoint

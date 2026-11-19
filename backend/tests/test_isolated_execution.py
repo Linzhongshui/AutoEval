@@ -530,3 +530,16 @@ async def test_harbor_container_waits_for_private_daemon(monkeypatch):
     command = adapter.command.call_args.args[0]
     assert command[:4] == ["exec", "owned-container", "python3", "-c"]
     assert "unix:///tmp/autoeval-docker.sock" in command[4]
+
+
+def test_readonly_mount_accepts_explicit_host_and_container_paths():
+    from autoeval.planning.planning_transport import readonly_mount_paths
+
+    assert readonly_mount_paths("/data/benchmark") == ("/data/benchmark", "/data/benchmark")
+    assert readonly_mount_paths({"source": "/host/datasets", "target": "/work/datasets"}) == (
+        "/host/datasets",
+        "/work/datasets",
+    )
+    for target in ("/tmp", "/tmp/autoeval-planning-runtime", "/var/lib/docker", "/run/docker.sock"):
+        with pytest.raises(ValueError):
+            readonly_mount_paths({"source": "/data", "target": target})

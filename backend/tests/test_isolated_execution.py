@@ -439,3 +439,30 @@ def test_ssh_pool_selects_first_compatible_node_within_configured_scope(monkeypa
     assert select(None, [first, second, third], None, {}) == (str(second), template)
     assert select(None, [first, second, third], [str(third)], {}) == (str(third), template)
     assert select(None, [first], [str(third)], {}) is None
+
+
+def test_preflight_identity_changes_when_same_template_moves_to_another_node():
+    from copy import deepcopy
+
+    from autoeval.evaluation.inputs import selection_identity
+
+    original = {
+        "tasks": [
+            {
+                "task_id": "GPQA",
+                "dataset": "GPQA",
+                "compilation_id": str(uuid4()),
+                "manifest_id": str(uuid4()),
+                "assigned_resource_kind": "customer_ssh",
+                "assigned_resource_id": str(uuid4()),
+                "execution_template": {"revision": "fixed"},
+            }
+        ]
+    }
+    reassigned = deepcopy(original)
+    reassigned["tasks"][0]["assigned_resource_id"] = str(uuid4())
+    assert selection_identity(reassigned) != selection_identity(original)
+
+    updated = deepcopy(original)
+    updated["tasks"][0]["execution_template"]["readonly_mounts"] = ["/new-dataset"]
+    assert selection_identity(updated) != selection_identity(original)

@@ -193,6 +193,9 @@ def selection_identity(inputs):
                 },
                 "profile_sha256": task.get("profile_sha256"),
                 "concurrency": task.get("concurrency"),
+                "assigned_resource_id": task.get("assigned_resource_id"),
+                "assigned_resource_kind": task.get("assigned_resource_kind"),
+                "execution_template": task.get("execution_template"),
             }
             for task in inputs.get("tasks", [])
         ),

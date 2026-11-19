@@ -360,3 +360,11 @@ async def test_native_tool_isolated_over_ssh(family, subcommand):
         assert {case["sample_id"] for case in cases} == set(fixture["expected_sample_ids"])
     finally:
         assert await adapter.remove()
+
+
+@pytest.mark.asyncio
+async def test_unified_archive_reports_invalid_source_before_opening_transaction():
+    from autoeval.reporting.unified_outputs import InvalidUnifiedOutput, archive_output
+
+    with pytest.raises(InvalidUnifiedOutput):
+        await archive_output(None, None, uuid4(), "fixture", b"{}", {"GPQA": ["case-1"]}, "GPQA")

@@ -28,7 +28,7 @@ from autoeval.infrastructure.secrets import FileSecretStore
 from autoeval.planning.artifacts import artifact
 from autoeval.planning.models import PlanningArtifact
 from autoeval.planning.planning_transport import execution_template, isolated_transport, transport
-from autoeval.reporting.unified_outputs import archive_output
+from autoeval.reporting.unified_outputs import InvalidUnifiedOutput, archive_output
 from autoeval.resources.models import TargetBinding
 
 
@@ -447,12 +447,15 @@ async def archive_terminal_child(
         try:
             from autoeval.reporting.result_identity import normalize_result_identities
 
-            unified = normalize_result_identities(
-                unified,
-                child.payload["dataset"],
-                child.payload["compilation"]["config"],
-                child.payload["samples"],
-            )
+            try:
+                unified = normalize_result_identities(
+                    unified,
+                    child.payload["dataset"],
+                    child.payload["compilation"]["config"],
+                    child.payload["samples"],
+                )
+            except ValueError as exc:
+                raise InvalidUnifiedOutput(str(exc)) from exc
             raw = canonical_manifest(unified)
             summary = await keep_heartbeat(
                 heartbeat,
@@ -470,7 +473,7 @@ async def archive_terminal_child(
                     child.payload["dataset"],
                 ),
             )
-        except ValueError:
+        except InvalidUnifiedOutput:
             summary = {
                 "validity": "failed",
                 "reason": "Result identity or evidence validation failed; raw result preserved",

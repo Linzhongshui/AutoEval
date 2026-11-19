@@ -541,7 +541,15 @@ def test_readonly_mount_accepts_explicit_host_and_container_paths():
         "/host/datasets",
         "/work/datasets",
     )
-    for target in ("/tmp", "/tmp/autoeval-planning-runtime", "/var/lib/docker", "/run/docker.sock"):
+    for target in (
+        "/tmp",
+        "/tmp/autoeval-planning-runtime",
+        "/var/lib",
+        "/var/lib/autoeval-private-docker",
+        "/var/lib/autoeval-private-docker/image",
+        "/var/lib/docker",
+        "/run/docker.sock",
+    ):
         with pytest.raises(ValueError):
             readonly_mount_paths({"source": "/data", "target": target})
 

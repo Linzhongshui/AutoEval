@@ -651,7 +651,9 @@ def readonly_mount_paths(mount):
         ):
             raise ValueError("Invalid read-only execution mount")
     target = PurePosixPath(paths[1])
-    if target.is_relative_to("/tmp") or target.is_relative_to("/var/lib/docker"):
+    writable = ("/tmp", "/var/lib/docker", "/var/lib/autoeval-private-docker")
+    if any(target.is_relative_to(root) or PurePosixPath(root).is_relative_to(target)
+           for root in writable):
         raise ValueError("Execution mount overlaps writable runner state")
     return paths
 

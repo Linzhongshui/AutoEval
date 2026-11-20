@@ -1521,6 +1521,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/autoeval/v1/evaluation-tasks/{run_id}/resume-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Resume Preview */
+        get: operations["resume_preview_api_autoeval_v1_evaluation_tasks__run_id__resume_preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/autoeval/v1/evaluation-tasks/{run_id}/case-retry-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Case Retry Preview */
+        get: operations["case_retry_preview_api_autoeval_v1_evaluation_tasks__run_id__case_retry_preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/autoeval/v1/evaluation-tasks/{run_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume Task */
+        post: operations["resume_task_api_autoeval_v1_evaluation_tasks__run_id__resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/autoeval/v1/evaluation-tasks/{run_id}/case-retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Retry Case */
+        post: operations["retry_case_api_autoeval_v1_evaluation_tasks__run_id__case_retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/autoeval/v1/evaluation-tasks/{run_id}/rounds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Task Rounds */
+        get: operations["task_rounds_api_autoeval_v1_evaluation_tasks__run_id__rounds_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2755,6 +2840,83 @@ export interface components {
             /** Context */
             ctx?: Record<string, never>;
         };
+        /** CaseRetryConfirmation */
+        CaseRetryConfirmation: {
+            /** Source Round */
+            source_round: number;
+            /** Scope Sha256 */
+            scope_sha256: string;
+            /** Dataset Key */
+            dataset_key: string;
+            /** Sample Id */
+            sample_id: string;
+        };
+        /** Envelope[FollowUpAccepted] */
+        Envelope_FollowUpAccepted_: {
+            data: components["schemas"]["FollowUpAccepted"];
+            /** Request Id */
+            request_id: string;
+        };
+        /** Envelope[FollowUpPreview] */
+        Envelope_FollowUpPreview_: {
+            data: components["schemas"]["FollowUpPreview"];
+            /** Request Id */
+            request_id: string;
+        };
+        /** FollowUpAccepted */
+        FollowUpAccepted: {
+            /** Run Id */
+            run_id: string;
+            /** Round */
+            round: number;
+            /** Target */
+            target: {
+                [key: string]: string;
+            };
+        };
+        /** FollowUpConfirmation */
+        FollowUpConfirmation: {
+            /** Source Round */
+            source_round: number;
+            /** Scope Sha256 */
+            scope_sha256: string;
+        };
+        /** FollowUpPreview */
+        FollowUpPreview: {
+            /** Source Round */
+            source_round: number;
+            /** Operation */
+            operation: string;
+            /** Target */
+            target: {
+                [key: string]: string;
+            };
+            /** Samples */
+            samples: components["schemas"]["FollowUpSample"][];
+            /** Blockers */
+            blockers: string[];
+            /** Sample Count */
+            sample_count: number;
+            /** Scope Sha256 */
+            scope_sha256: string;
+        };
+        /** FollowUpSample */
+        FollowUpSample: {
+            /** Dataset Key */
+            dataset_key: string;
+            /** Sample Id */
+            sample_id: string;
+            /** Sample Sha256 */
+            sample_sha256: string;
+            /** Has Attempts */
+            has_attempts: boolean;
+            /** Category */
+            category: string;
+            /** Reason */
+            reason: string;
+            /** Attempt Ids */
+            attempt_ids: string[];
+        };
     };
     responses: never;
     parameters: never;
@@ -3405,7 +3567,11 @@ export interface operations {
     };
     archived_log_api_autoeval_v1_runs__run_id__monitor_log_get: {
         parameters: {
-            query?: never;
+            query?: {
+                dataset_key?: string | null;
+                round_number?: number | null;
+                shard_id?: string | null;
+            };
             header?: never;
             path: {
                 run_id: string;
@@ -5919,6 +6085,176 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+        };
+    };
+    resume_preview_api_autoeval_v1_evaluation_tasks__run_id__resume_preview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_FollowUpPreview_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    case_retry_preview_api_autoeval_v1_evaluation_tasks__run_id__case_retry_preview_get: {
+        parameters: {
+            query: {
+                dataset_key: string;
+                sample_id: string;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_FollowUpPreview_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_task_api_autoeval_v1_evaluation_tasks__run_id__resume_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FollowUpConfirmation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_FollowUpAccepted_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_case_api_autoeval_v1_evaluation_tasks__run_id__case_retry_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaseRetryConfirmation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_FollowUpAccepted_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    task_rounds_api_autoeval_v1_evaluation_tasks__run_id__rounds_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

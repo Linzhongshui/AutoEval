@@ -45,7 +45,11 @@ const STATUS: Record<string, { label: string; tone: string }> = {
 };
 const caseScore = (metadata?: ToolMetadata | null) => typeof metadata?.score === "number" && Number.isFinite(metadata.score) ? String(metadata.score) : "未提供评分";
 
-export function CaseHistory({ initialRun = "", datasets = [] }: { initialRun?: string; datasets?: string[] }) {
+export function CaseHistory({ initialRun = "", datasets = [], onRetry }: {
+  initialRun?: string;
+  datasets?: string[];
+  onRetry?: (datasetKey: string, sampleId: string) => void;
+}) {
   const [dataset, setDataset] = useState("");
   const [revision, setRevision] = useState("");
   const [revisions, setRevisions] = useState<{id: string; dataset_key: string; created_at: string}[]>([]);
@@ -176,6 +180,7 @@ export function CaseHistory({ initialRun = "", datasets = [] }: { initialRun?: s
                   <td className="case-evidence-cell">
                     <div className="case-evidence-actions">
                       <button className="case-evidence-button" type="button" disabled={!row.evidence_available} aria-label={`查看第${row.attempt_no}次证据`} onClick={() => openEvidence(row)}><FileCheck2 size={14} aria-hidden="true" />查看证据</button>
+                      {onRetry && <button type="button" onClick={() => onRetry(row.dataset_key, row.sample_id)}>重试此 Case</button>}
                       {row.trace_url && <a className="case-trace-button" href={row.trace_url} target="_blank" rel="noopener noreferrer" title="在新标签页查看本次执行的 Agent 轨迹">查看 Trace<ArrowUpRight size={14} aria-hidden="true" /></a>}
                     </div>
                     <small className="case-evidence-note">{row.trace_url ? row.trace_content_mode === "full" ? "正文轨迹已导入" : "轨迹已导入" : {pending: "Trace 等待导入", failed: "Trace 导入失败", missing: "缺少轨迹", disabled: "Langfuse 未配置", unsupported: "暂不支持 Trace"}[row.trace_status ?? "unsupported"]}<span aria-hidden="true"> · </span>{row.evidence_available ? "证据已校验" : "证据尚未归档"}</small>

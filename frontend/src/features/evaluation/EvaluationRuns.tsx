@@ -16,11 +16,14 @@ import { useExplorationSubmission } from "./submitIntent";
 import { usePolling } from "../../shared/hooks/usePolling";
 import { cleanupStatus, datasetStatus, taskStatus, toneClass } from "../../shared/status";
 import { CaseHistory } from "../reporting/CaseHistory";
+import { FollowUpConfirmation, type CaseTarget } from "./FollowUpConfirmation";
+import { ExecutionRounds } from "./ExecutionRounds";
 
 const terminal = (state: string) => isTerminal(state);
 const time = formatTime;
 
 export function EvaluationRuns({ runId = "", initialTarget = "", allowSubmit = false }: { runId?: string; initialTarget?: string; allowSubmit?: boolean }) {
+  const [followUp, setFollowUp] = useState<{ runId: string; target?: CaseTarget }>();
   const configs = useOptions<Config>("/test-configs", allowSubmit);
   const targets = useOptions<Target>("/target-bindings", allowSubmit);
   const docker = useOptions<Resource>("/resources", allowSubmit);
@@ -190,7 +193,19 @@ export function EvaluationRuns({ runId = "", initialTarget = "", allowSubmit = f
             {!!detail.datasets?.length && <section className="card stack" aria-label="数据集执行结果"><h3>数据集执行结果</h3><TableWrap><table><thead><tr><th>数据集</th><th>状态</th><th>已归档样本</th><th>准确率</th><th>耗时</th><th>失败原因</th></tr></thead><tbody>{detail.datasets.map(d => <tr key={d.id}><td>{d.dataset}</td><td>{datasetStatus(d.state).label}<small>{datasetProgress(d.summary)}</small></td><td>{String(d.summary?.observed_cases ?? "—")} / {String(d.summary?.expected_cases ?? "—")}</td><td>{typeof d.summary?.accuracy === "number" ? `${formatScore(d.summary.accuracy)}%` : "—"}</td><td>{formatDuration(d.actual_duration_sec)}</td><td>{String(d.summary?.diagnostic ?? d.summary?.reason ?? "—")}</td></tr>)}</tbody></table></TableWrap><p className="muted">各数据集历史执行摘要独立展示，不生成跨数据集综合分；成绩有效性以归档证据核验为准。</p>{detail.dataset_report && <ManagementDrawer title="数据集报告与证据"><p>读取归档对象时核验哈希；不能读取时不以历史摘要替代。</p><button onClick={() => void apiGet(`/evaluation-tasks/${detail.id}/report`).then(setReportEvidence).catch(() => setMessage("报告证据读取或完整性校验失败"))}>读取归档报告</button>{reportEvidence != null && <pre className="snapshot">{JSON.stringify(reportEvidence, null, 2)}</pre>}</ManagementDrawer>}</section>}
             {detail.datasets?.some(d => d.summary?.recovery_report_id) && <p className="notice">本任务已从同次执行的原始产物恢复评分与归档；原失败历史保留，未重新调用模型。正式成绩见关联报告。</p>}
             <section id="case-detail" data-testid="case-detail">
-              <CaseHistory key={`${detail.id}:${terminal(detail.state)}`} initialRun={detail.id} datasets={detail.datasets?.map(d => d.dataset) ?? []} />
+              {detail.follow_up_enabled && detail.state === "cancelled" && <button type="button" onClick={() => setFollowUp({ runId: detail.id })}>续跑测评</button>}
+              {detail.follow_up_enabled && <ExecutionRounds key={detail.id} runId={detail.id} state={detail.state} />}
+              <CaseHistory key={`${detail.id}:${terminal(detail.state)}`} initialRun={detail.id} datasets={detail.datasets?.map(d => d.dataset) ?? []}
+                onRetry={detail.follow_up_enabled && terminal(detail.state) ? (dataset_key, sample_id) => setFollowUp({
+                  runId: detail.id, target: { dataset_key, sample_id },
+                }) : undefined} />
+              {followUp?.runId === detail.id && <FollowUpConfirmation
+                key={JSON.stringify([followUp.runId, followUp.target])} {...followUp}
+                onSelectCase={target => setFollowUp({ runId: detail.id, target })}
+                onClose={() => setFollowUp(undefined)} onAccepted={() => {
+                setFollowUp(undefined);
+                setMessage("执行请求已受理，任务详情将显示本轮状态。");
+              }} />}
             </section>
             <div className="detail-bottom-meta"><span data-testid="cleanup-state">资源清理：{cleanupStatus(detail.cleanup.state).label}</span>{["failed", "not_scheduled"].includes(detail.cleanup.state) && detail.report && <button disabled={busy} onClick={() => void action("cleanup")}>重试资源清理</button>}<ManagementDrawer title="任务标识与归档记录"><h3>状态记录</h3><ol>{detail.events?.map((event) => <li key={event.seq}>{time(event.created_at)} · {({ results_recovered: "结果恢复完成（未重跑）", accepted: "已接收", queued: "排队", preparing: "准备环境", running: "开始执行", aggregating: "汇总结果", completed: "执行完成", failed: "执行失败", cancelled: "取消确认", cancelling: "取消中", execution_unresolved: "结果待查证", execution_cleaned: "清理确认", execution_cleanup_pending: "等待清理" } as Record<string, string>)[event.type] || "状态变更"}</li>)}</ol><p>运行 ID：{detail.id}</p><CopyIdentifier value={detail.id} /><p>清理尝试：{detail.cleanup.attempt_count} 次</p><p data-testid="evaluation-validity">历史报告状态：{detail.report?.validity || "未归档"}</p><p>历史摘要不代表当前证据完整，成绩以报告核验结果为准。</p><pre className="snapshot" data-testid="evaluation-summary">{JSON.stringify(detail.report?.summary || {}, null, 2)}</pre></ManagementDrawer></div>
           </>}

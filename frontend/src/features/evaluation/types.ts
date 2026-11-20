@@ -67,6 +67,7 @@ export type DatasetResult = {
 };
 
 export type RunDetail = Omit<Run, "datasets"> & {
+  follow_up_enabled?: boolean;
   datasets?: DatasetResult[];
   dataset_report?: { datasets?: DatasetResult[] } | null;
   updated_at?: string;

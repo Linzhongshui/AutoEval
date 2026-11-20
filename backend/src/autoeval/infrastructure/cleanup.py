@@ -91,7 +91,7 @@ async def reclaim(sessions, settings, run_id, *, force=False):
     try:
         async with sessions() as session:
             report = await session.scalar(
-                select(EvaluationReport).where(EvaluationReport.run_id == run_id)
+                select(EvaluationReport).where(EvaluationReport.run_id == run_id, EvaluationReport.is_current)
             )
             if (
                 report is None

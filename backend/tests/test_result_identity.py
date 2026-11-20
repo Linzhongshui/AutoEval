@@ -1,6 +1,87 @@
 from autoeval.reporting.result_identity import allowed_result_datasets
 
 
+def test_cancelled_harbor_native_capture_and_scoring(tmp_path):
+    import json
+
+    from autoeval.reporting.result_identity import recover_cancelled_harbor_cases
+    from autoeval_runtime.planning_runtime import collect_terminal_harbor_trials
+
+    task = {
+        "dataset": "AutomationBench",
+        "attempts": 1,
+        "samples": [{"tool_case_id": "q1", "sample_id": "case-1"}],
+    }
+
+    def write_trial(name, sample, reward):
+        trial = tmp_path / name
+        (trial / "verifier").mkdir(parents=True)
+        (trial / "result.json").write_text(
+            json.dumps(
+                {
+                    "trial_name": name,
+                    "task_name": sample,
+                    "finished_at": "2026-11-20T01:00:00Z",
+                    "verifier_result": {"rewards": {"accuracy": 0}},
+                }
+            ),
+            encoding="utf-8",
+        )
+        (trial / "verifier/reward.json").write_text(
+            json.dumps({"accuracy": reward}), encoding="utf-8"
+        )
+
+    write_trial("unknown-trial", "outside-manifest", 0)
+    write_trial("q1-trial", "automationbench/q1", 0)
+    captured = collect_terminal_harbor_trials(tmp_path, "fixture-credential")
+    recovered = recover_cancelled_harbor_cases(task, captured)
+    assert [(case["case_id"], case["score"]) for case in recovered["cases"]] == [("case-1", 0)]
+    assert recover_cancelled_harbor_cases({**task, "attempts": 2}, captured) is None
+    assert recover_cancelled_harbor_cases(task, [*captured, *captured]) is None
+    (tmp_path / "q1-trial/verifier/reward.json").write_text('{"accuracy":1}', encoding="utf-8")
+    assert (
+        recover_cancelled_harbor_cases(
+            task, collect_terminal_harbor_trials(tmp_path, "fixture-credential")
+        )
+        is None
+    )
+
+
+def test_cancelled_deepswe_restores_only_complete_journalled_group():
+    import json
+
+    from autoeval.reporting.result_identity import recover_cancelled_harbor_cases
+
+    task = {
+        "dataset": "DeepSWE",
+        "attempts": 2,
+        "samples": [{"tool_case_id": "q1", "sample_id": "case-1"}],
+    }
+    trials = [
+        {
+            "trial_name": name,
+            "files": {
+                "result.json": json.dumps(
+                    {
+                        "trial_name": name,
+                        "task_name": "datacurve/q1",
+                        "finished_at": "2026-11-20T01:00:00Z",
+                        "verifier_result": {"rewards": {"reward": score}},
+                    }
+                )
+            },
+        }
+        for name, score in [("z-trial", 0), ("a-trial", 1)]
+    ]
+    dispatch = {
+        "trials": [{"tool_case_id": "q1", "trial_name": trial["trial_name"]} for trial in trials]
+    }
+    result = recover_cancelled_harbor_cases(task, trials, dispatch)
+    assert [(case["attempt"], case["score"]) for case in result["cases"]] == [(1, 1), (2, 0)]
+    assert recover_cancelled_harbor_cases(task, trials[:1], dispatch) is None
+    assert recover_cancelled_harbor_cases(task, trials, {"trials": []}) is None
+
+
 def test_automationbench_native_accuracy_requires_matching_evidence():
     import json
 

@@ -112,6 +112,7 @@ async def leaderboard(
                         EvaluationRun.trigger_scope.in_(
                             ["local-operator:evaluation", "local-operator:orchestration"]
                         ),
+                        EvaluationReport.is_current,
                         EvaluationReport.execution_origin == "real",
                         EvaluationReport.validity.in_(["complete", "partial"]),
                     )

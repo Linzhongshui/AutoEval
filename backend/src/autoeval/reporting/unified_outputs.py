@@ -192,7 +192,15 @@ def parse_output(raw: bytes, expected: dict[str, list[str]], default_dataset=Non
 
 
 async def archive_output(
-    sessions, settings, run_id, collection_key, raw, expected, default_dataset=None
+    sessions,
+    settings,
+    run_id,
+    collection_key,
+    raw,
+    expected,
+    default_dataset=None,
+    *,
+    append_attempts=False,
 ):
     cases, summary = parse_output(raw, expected, default_dataset)
     sha = hashlib.sha256(raw).hexdigest()
@@ -212,10 +220,18 @@ async def archive_output(
             )
         )
         if existing:
-            if existing.sha256 != sha or existing.payload["expected"] != expected:
+            if (
+                existing.sha256 != sha
+                or existing.payload["expected"] != expected
+                or existing.payload.get("append_attempts", False) != append_attempts
+            ):
                 raise ValueError("Collection identity conflicts with archived content")
             await asyncio.to_thread(read_manifest, settings, existing)
             return existing.payload["summary"]
+        if append_attempts:
+            await number_follow_up_attempts(session, run_id, cases)
+            for case in cases:
+                case["execution_collection_key"] = collection_key
         pending = []
         for case in cases:
             evidence = canonical_manifest({"schema_version": "unified-case.v1", **case})
@@ -276,10 +292,36 @@ async def archive_output(
                 collection_key=collection_key,
                 object_key=key,
                 sha256=sha,
-                payload={"expected": expected, "summary": summary},
+                payload={
+                    "expected": expected,
+                    "summary": summary,
+                    **({"append_attempts": True} if append_attempts else {}),
+                },
             )
         )
     return summary
+
+
+async def number_follow_up_attempts(session, run_id, cases):
+    """Allocate platform attempt numbers while the caller holds the run lock."""
+    from sqlalchemy import func
+
+    offsets = {}
+    for case in cases:
+        identity = (case["dataset_key"], case["sample_id"])
+        if identity not in offsets:
+            offsets[identity] = (
+                await session.scalar(
+                    select(func.max(CaseExecutionRecord.attempt_no)).where(
+                        CaseExecutionRecord.run_id == run_id,
+                        CaseExecutionRecord.dataset_key == identity[0],
+                        CaseExecutionRecord.sample_id == identity[1],
+                    )
+                )
+                or 0
+            )
+        case["native_attempt_no"] = case["attempt_no"]
+        case["attempt_no"] += offsets[identity]
 
 
 router = APIRouter(prefix="/api/autoeval/v1", tags=["unified output evidence"])

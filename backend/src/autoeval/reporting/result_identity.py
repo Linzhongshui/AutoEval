@@ -31,15 +31,16 @@ def allowed_result_datasets(dataset, config):
 def result_case_aliases(dataset, samples):
     """Harbor filters local directory IDs, but the official adapter names results.
 
-    Only the pinned AutomationBench namespace is accepted; arbitrary prefixes
+    Only the pinned benchmark namespaces are accepted; arbitrary prefixes
     and unknown sample IDs remain invalid.
     """
     aliases = {s["tool_case_id"]: s["sample_id"] for s in samples}
-    if dataset == "AutomationBench":
+    namespace = {"AutomationBench": "automationbench/", "DeepSWE": "datacurve/"}.get(dataset)
+    if namespace:
         for sample in samples:
             native = sample["tool_case_id"]
-            if not native.startswith("automationbench/"):
-                aliases["automationbench/" + native] = sample["sample_id"]
+            if not native.startswith(namespace):
+                aliases[namespace + native] = sample["sample_id"]
     return aliases
 
 
@@ -111,3 +112,87 @@ def apply_automationbench_accuracy(case):
     case["score"] = accuracy
     case["score_name"] = "accuracy"
     case["score_source"] = "harbor_native_verifier"
+
+
+def recover_cancelled_harbor_cases(task, trials, dispatch=None):
+    """Use the pinned adaptor's trial-directory ordering for complete attempt groups."""
+    if task["dataset"] not in {"AutomationBench", "DeepSWE"}:
+        return None
+    aliases = result_case_aliases(task["dataset"], task["samples"])
+    dispatched = {}
+    for entry in (dispatch or {}).get("trials", []):
+        sample_id = aliases.get(entry["tool_case_id"])
+        if sample_id is not None:
+            dispatched.setdefault(sample_id, set()).add(entry["trial_name"])
+    groups = {}
+    for artifact in trials:
+        try:
+            native = json.loads(artifact["files"]["result.json"])
+            sample_id = aliases.get(native["task_name"])
+            if (
+                sample_id is None
+                or native["trial_name"] != artifact["trial_name"]
+                or not native.get("finished_at")
+            ):
+                continue
+            groups.setdefault(sample_id, []).append(
+                {
+                    "case_id": sample_id,
+                    "attempt": 1,
+                    "status": "success",
+                    "score": None,
+                    "trial_name": native["trial_name"],
+                    "trial_dir": native["trial_name"],
+                    "finished_at": native["finished_at"],
+                    "harbor_artifact": artifact,
+                    "native": native,
+                }
+            )
+        except (KeyError, TypeError, ValueError):
+            continue
+    cases = []
+    for sample_id, group in groups.items():
+        names = {case["trial_name"] for case in group}
+        if len(names) != len(group) or len(group) != task["attempts"]:
+            continue
+        if dispatch is not None and names != dispatched.get(sample_id):
+            continue
+        if dispatch is None and task["attempts"] != 1:
+            continue
+        scored = []
+        for attempt, case in enumerate(sorted(group, key=lambda value: value["trial_name"]), 1):
+            native = case.pop("native")
+            case["attempt"] = attempt
+            if native.get("exception_info"):
+                case["status"] = "failed"
+            elif task["dataset"] == "AutomationBench":
+                try:
+                    apply_automationbench_accuracy(case)
+                except ValueError:
+                    break
+                if case["score"] is None:
+                    break
+            else:
+                verifier = native.get("verifier_result")
+                rewards = verifier.get("rewards") if isinstance(verifier, dict) else None
+                score = rewards.get("reward") if isinstance(rewards, dict) else None
+                if type(score) not in (int, float) or not math.isfinite(score):
+                    break
+                case["score"] = score
+            scored.append(case)
+        if len(scored) == len(group):
+            cases.extend(scored)
+    if not cases:
+        return None
+    return {
+        "schema_version": 1,
+        "tool": "ais_bench",
+        "subcommand": "harbor_agent",
+        "case_count": len(cases),
+        "cases": cases,
+        "score_source": (
+            "harbor_native_verifier_accuracy"
+            if task["dataset"] == "AutomationBench"
+            else "harbor_native_verifier_reward"
+        ),
+    }

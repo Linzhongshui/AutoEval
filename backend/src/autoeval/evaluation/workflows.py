@@ -102,6 +102,20 @@ class PlannedEvaluationWorkflow:
 
 
 @workflow.defn
+class EvaluationFollowUpWorkflow:
+    @workflow.run
+    async def run(self, request: dict) -> None:
+        await workflow.execute_activity(
+            "execute_planned_evaluation",
+            args=[request["run_id"], request["round_id"]],
+            task_queue="demo.planning-execution.v1",
+            start_to_close_timeout=timedelta(days=30),
+            heartbeat_timeout=timedelta(minutes=2),
+            retry_policy=RetryPolicy(maximum_attempts=0),
+        )
+
+
+@workflow.defn
 class MonitoredGpqaWorkflow:
     @workflow.run
     async def run(self, run_id: str) -> dict:

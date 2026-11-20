@@ -59,12 +59,16 @@ async def test_remote_collect_is_bounded_and_shell_quoted(oversize):
     )
     client = SimpleNamespace(open_sftp=lambda: nullcontext(sftp))
 
-    def command(client, args):
+    def command(client, args, payload=None):
+        if args[:2] == ["docker", "exec"]:
+            return "[]"
         assert args[:2] == ["sh", "-c"]
         commands.append(args[2])
         assert args[2].startswith("umask 077; set -C; ")
         pieces = shlex.split(args[2].split("; ", 2)[2])
-        assert "PYTHONPATH=" + adapter.remote_dir + "/deps" in pieces
+        shell = pieces.index("sh")
+        assert pieces[shell + 2] == 'export PYTHONPATH="$1${PYTHONPATH:+:$PYTHONPATH}"; shift; exec "$@"'
+        assert pieces[shell + 4] == adapter.remote_dir + "/deps"
         paths.append(pieces[-1])
         return ""
 

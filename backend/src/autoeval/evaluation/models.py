@@ -1,9 +1,9 @@
-"""Evaluation ORM models; table names, columns and constraints stay unchanged."""
+"""Evaluation ORM models."""
 
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -12,9 +12,9 @@ from autoeval.infrastructure.models import Base, Record
 
 class EvaluationReport(Record, Base):
     __tablename__ = "evaluation_report"
-    run_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("evaluation_run.id", ondelete="RESTRICT"), unique=True
-    )
+    run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("evaluation_run.id", ondelete="RESTRICT"))
+    version: Mapped[int] = mapped_column(server_default="1")
+    is_current: Mapped[bool] = mapped_column(server_default=text("true"))
     validity: Mapped[str] = mapped_column(String(24))
     snapshot_sha256: Mapped[str] = mapped_column(String(64))
     summary: Mapped[dict] = mapped_column(JSONB)
@@ -22,6 +22,13 @@ class EvaluationReport(Record, Base):
     sha256: Mapped[str] = mapped_column(String(64))
     execution_origin: Mapped[str] = mapped_column(String(16), server_default="unverified")
     __table_args__ = (
+        UniqueConstraint("run_id", "version", name="uq_evaluation_report_run_version"),
+        Index(
+            "uq_evaluation_report_current",
+            "run_id",
+            unique=True,
+            postgresql_where=text("is_current"),
+        ),
         CheckConstraint(
             "execution_origin IN ('real','simulation','unverified')",
             name="ck_report_origin",
@@ -63,3 +70,49 @@ class CapacityLease(Record, Base):
     node_id: Mapped[str] = mapped_column(String(128), index=True)
     demand: Mapped[dict] = mapped_column(JSONB)
     released: Mapped[bool] = mapped_column(default=False)
+
+
+class ExecutionRound(Record, Base):
+    __tablename__ = "evaluation_execution_round"
+    run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("evaluation_run.id", ondelete="RESTRICT"))
+    number: Mapped[int]
+    source_number: Mapped[int]
+    operation: Mapped[str] = mapped_column(String(16))
+    actor: Mapped[str] = mapped_column(String(256))
+    snapshot_sha256: Mapped[str] = mapped_column(String(64))
+    scope_sha256: Mapped[str] = mapped_column(String(64))
+    selection: Mapped[dict] = mapped_column(JSONB)
+    state: Mapped[str] = mapped_column(String(24), server_default="queued")
+    cancel_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        UniqueConstraint("run_id", "number"),
+        UniqueConstraint("run_id", "source_number"),
+        CheckConstraint("source_number >= 1 AND number = source_number + 1"),
+        CheckConstraint("operation IN ('resume', 'case_retry')"),
+    )
+
+
+class RoundRequest(Record, Base):
+    __tablename__ = "evaluation_round_request"
+    run_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("evaluation_run.id"))
+    round_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("evaluation_execution_round.id"))
+    idempotency_key: Mapped[str] = mapped_column(String(256))
+    request_sha256: Mapped[str] = mapped_column(String(64))
+    __table_args__ = (UniqueConstraint("run_id", "idempotency_key"),)
+
+
+class ExecutionShard(Record, Base):
+    __tablename__ = "evaluation_execution_shard"
+    round_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("evaluation_execution_round.id"))
+    task_id: Mapped[str] = mapped_column(String(64))
+    position: Mapped[int]
+    payload: Mapped[dict] = mapped_column(JSONB)
+    state: Mapped[str] = mapped_column(String(24), server_default="pending")
+    summary: Mapped[dict | None] = mapped_column(JSONB)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    __table_args__ = (
+        UniqueConstraint("round_id", "position"),
+        CheckConstraint("position >= 0"),
+    )

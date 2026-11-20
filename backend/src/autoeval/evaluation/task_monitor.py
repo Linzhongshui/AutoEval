@@ -425,13 +425,36 @@ async def evidence(run_id: uuid.UUID, snapshot_id: uuid.UUID, request: Request):
 
 
 @router.get("/{run_id}/monitor/log")
-async def archived_log(run_id: uuid.UUID, request: Request, dataset_key: str | None = None):
+async def archived_log(
+    run_id: uuid.UUID,
+    request: Request,
+    dataset_key: str | None = None,
+    round_number: int | None = None,
+    shard_id: uuid.UUID | None = None,
+):
     import asyncio
 
     from autoeval.reporting.models import UnifiedArtifact
 
     async with request.app.state.sessions() as session:
-        if dataset_key:
+        if shard_id is not None or round_number is not None:
+            from autoeval.evaluation.models import ExecutionRound, ExecutionShard
+
+            if shard_id is None or round_number is None or dataset_key is not None:
+                raise HTTPException(422, "Select a round and shard together")
+            shard = await session.scalar(
+                select(ExecutionShard.id)
+                .join(ExecutionRound, ExecutionRound.id == ExecutionShard.round_id)
+                .where(
+                    ExecutionRound.run_id == run_id,
+                    ExecutionRound.number == round_number,
+                    ExecutionShard.id == shard_id,
+                )
+            )
+            if shard is None:
+                raise HTTPException(404, "Shard not found in this task and round")
+            log_filter = UnifiedArtifact.collection_key == f"planning-log:{shard_id}"
+        elif dataset_key:
             from autoeval.evaluation.models import DatasetExecution
 
             child = await session.scalar(
@@ -453,9 +476,8 @@ async def archived_log(run_id: uuid.UUID, request: Request, dataset_key: str | N
             )
             if len(children) > 1:
                 raise HTTPException(409, "Select a dataset to read its log")
-            log_filter = (
-                UnifiedArtifact.collection_key == "cli-native-v1"
-            ) | UnifiedArtifact.collection_key.startswith("planning-log:")
+            keys = ["cli-native-v1", *(f"planning-log:{child}" for child in children)]
+            log_filter = UnifiedArtifact.collection_key.in_(keys)
         artifact = await session.scalar(
             select(UnifiedArtifact).where(
                 UnifiedArtifact.run_id == run_id,
@@ -471,6 +493,8 @@ async def archived_log(run_id: uuid.UUID, request: Request, dataset_key: str | N
         files = [row for row in bundle["files"] if row["path"] == "job.log"]
         if len(files) != 1:
             raise HTTPException(404, "Archived run log unavailable")
+        if shard_id is not None and bundle.get("child_id") != str(shard_id):
+            raise HTTPException(503, "Archived log shard identity mismatch")
         return {
             "data": {
                 "content": files[0]["content"],

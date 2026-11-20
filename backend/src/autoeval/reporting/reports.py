@@ -65,6 +65,7 @@ async def catalog(request: Request, offset: int = 0, limit: int = 20, summary_on
                         EvaluationRun.trigger_scope.in_(
                             ["local-operator:evaluation", "local-operator:orchestration"]
                         ),
+                        EvaluationReport.is_current,
                         EvaluationReport.execution_origin == "real",
                     )
                     .order_by(EvaluationReport.created_at.desc(), EvaluationReport.id.desc())

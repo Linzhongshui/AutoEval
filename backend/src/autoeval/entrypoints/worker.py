@@ -14,6 +14,7 @@ from autoeval.evaluation.run_activities import execute_docker_diagnostic
 from autoeval.evaluation.workflows import (
     AnalysisWorkflow,
     DockerDiagnosticWorkflow,
+    EvaluationFollowUpWorkflow,
     GpqaExplorationWorkflow,
     LangfuseImportWorkflow,
     MonitoredGpqaWorkflow,
@@ -56,6 +57,7 @@ def role_options(settings):
             "task_queue": settings.gpqa_workflow_queue,
             "workflows": [
                 PlannedEvaluationWorkflow,
+                EvaluationFollowUpWorkflow,
                 RunWorkflow,
                 AnalysisWorkflow,
                 MonitoredGpqaWorkflow,

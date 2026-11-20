@@ -48,7 +48,7 @@ async def planned_run_detail(sessions, run_id):
             )
         )
         report_id = await session.scalar(
-            select(EvaluationReport.id).where(EvaluationReport.run_id == run_id)
+            select(EvaluationReport.id).where(EvaluationReport.run_id == run_id, EvaluationReport.is_current)
         )
         from autoeval.evaluation.orchestration import child_view
 
@@ -105,7 +105,7 @@ async def evaluation_run_detail(sessions, settings, run_id):
                 )
             ).all()
             report = await session.scalar(
-                select(EvaluationReport).where(EvaluationReport.run_id == run_id)
+                select(EvaluationReport).where(EvaluationReport.run_id == run_id, EvaluationReport.is_current)
             )
             cleanup = await session.scalar(
                 select(ExecutionCleanup).where(ExecutionCleanup.run_id == run_id)
@@ -197,7 +197,7 @@ async def evaluation_run_report(sessions, settings, run_id):
     try:
         async with sessions() as session:
             report = await session.scalar(
-                select(EvaluationReport).where(EvaluationReport.run_id == run_id)
+                select(EvaluationReport).where(EvaluationReport.run_id == run_id, EvaluationReport.is_current)
             )
             if report is None:
                 raise HTTPException(404, "Report not available")

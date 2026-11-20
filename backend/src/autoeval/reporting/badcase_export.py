@@ -128,7 +128,7 @@ def selected_cases(data, body):
             raise HTTPException(422, "Some sample identifiers were not found")
     if not rows:
         raise HTTPException(422, "No matching cases")
-    if body.scope != "all" and len(rows) > MAX_CASES:
+    if body.scope == "selected" and len(rows) > MAX_CASES:
         raise HTTPException(422, f"At most {MAX_CASES} cases can be selected")
     return rows
 

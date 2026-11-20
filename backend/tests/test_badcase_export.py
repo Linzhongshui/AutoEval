@@ -73,8 +73,16 @@ def test_all_scope_exports_beyond_selected_limit():
     }
     rows = selected_cases(data, ExportInput(scope="all"))
     assert len(rows) == 120
+    high = selected_cases(data, ExportInput(scope="high"))
+    assert len(high) == 120
+    oversized = ExportInput.model_construct(
+        scope="selected",
+        sample_ids=[f"gpqa_diamond:{index}" for index in range(101)],
+        dataset_key=None,
+        include_traces=True,
+    )
     with pytest.raises(HTTPException):
-        selected_cases(data, ExportInput(scope="high"))
+        selected_cases(data, oversized)
 
 
 def test_redact_removes_credentials_and_base_url():

@@ -33,6 +33,9 @@ type CaseRow = {
     attempt_no: number;
     error_code: string | null;
     has_evidence: boolean;
+    missing?: boolean;
+    evidence_status?: string;
+    score_status?: string;
     trace_status?: string;
   };
   history: { n: number; k: number; mean: number | null; scores: HistoryScore[] };
@@ -40,11 +43,34 @@ type CaseRow = {
   verdict: Verdict;
 };
 
+type CaseDetail = {
+  sample_id: string;
+  dataset_key: string;
+  current: {
+    score: number | null;
+    state: string;
+    missing: boolean;
+    evidence_status: string | null;
+    available: boolean;
+    prompt: string | null;
+    response: string | null;
+  };
+  history: {
+    report_id: string;
+    run_id: string;
+    created_at: string;
+    score: number;
+    available: boolean;
+    prompt: string | null;
+    response: string | null;
+  }[];
+};
+
 type Dataset = {
   dataset_key: string;
   config: Record<string, unknown>;
   history: { approved_reports: number; report_ids: string[] };
-  summary: { total: number; high: number; low: number; non_badcase: number };
+  summary: { total: number; high: number; low: number; non_badcase: number; missing?: number };
   cases: CaseRow[];
 };
 
@@ -103,9 +129,13 @@ export function BadcaseComparison({
   const [message, setMessage] = useState("");
   const [dataset, setDataset] = useState("");
   const [band, setBand] = useState("");
+  const [scoreFilter, setScoreFilter] = useState("");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState("");
+  const [detail, setDetail] = useState<CaseDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailMessage, setDetailMessage] = useState("");
   const [exporting, setExporting] = useState("");
   const [reviewing, setReviewing] = useState(false);
 
@@ -116,6 +146,7 @@ export function BadcaseComparison({
     setMessage("");
     setDataset("");
     setBand("");
+    setScoreFilter("");
     setQuery("");
     setSelected(new Set());
     setExpanded("");
@@ -134,6 +165,35 @@ export function BadcaseComparison({
     return () => controller.abort();
   }, [runId]);
 
+  useEffect(() => {
+    if (!expanded) {
+      setDetail(null);
+      setDetailMessage("");
+      return;
+    }
+    const split = expanded.indexOf("|");
+    const datasetKey = expanded.slice(0, split);
+    const sampleId = expanded.slice(split + 1);
+    const controller = new AbortController();
+    setDetail(null);
+    setDetailMessage("");
+    setDetailLoading(true);
+    apiGet<CaseDetail>(
+      `/runs/${runId}/badcase-case?sample_id=${encodeURIComponent(sampleId)}&dataset_key=${encodeURIComponent(datasetKey)}`,
+      controller.signal,
+    )
+      .then(setDetail)
+      .catch((error) => {
+        if (!controller.signal.aborted) {
+          setDetailMessage(error instanceof Error ? error.message : "推理内容读取失败");
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setDetailLoading(false);
+      });
+    return () => controller.abort();
+  }, [expanded, runId]);
+
   const activeDatasets = useMemo(
     () => (data ? data.datasets.filter((item) => !dataset || item.dataset_key === dataset) : []),
     [data, dataset],
@@ -149,10 +209,11 @@ export function BadcaseComparison({
     () =>
       rows.filter(({ row }) => {
         if (band && row.verdict.band !== band) return false;
+        if (scoreFilter === "zero" && row.current.score !== 0) return false;
         const term = query.trim().toLowerCase();
         return !term || row.sample_id.toLowerCase().includes(term);
       }),
-    [rows, band, query],
+    [rows, band, scoreFilter, query],
   );
   const selectedRows = rows.filter(({ dataset: item, row }) => selected.has(keyOf(item, row)));
   const summary = useMemo(
@@ -163,9 +224,10 @@ export function BadcaseComparison({
           high: total.high + item.summary.high,
           low: total.low + item.summary.low,
           non_badcase: total.non_badcase + item.summary.non_badcase,
+          missing: total.missing + (item.summary.missing ?? 0),
           reports: Math.max(total.reports, item.history.approved_reports),
         }),
-        { total: 0, high: 0, low: 0, non_badcase: 0, reports: 0 },
+        { total: 0, high: 0, low: 0, non_badcase: 0, missing: 0, reports: 0 },
       ),
     [activeDatasets],
   );
@@ -198,7 +260,7 @@ export function BadcaseComparison({
   };
 
   const download = async (
-    scope: "high" | "suspicious" | "selected",
+    scope: "high" | "suspicious" | "selected" | "all",
     overrides?: { sampleIds?: string[]; datasetKey?: string },
   ) => {
     if (!data) return;
@@ -361,7 +423,11 @@ export function BadcaseComparison({
         </div>
         <div>
           <span>非 badcase</span>
-          <strong>{summary.non_badcase}</strong>
+          <strong>{summary.non_badcase - summary.missing}</strong>
+        </div>
+        <div>
+          <span>缺测</span>
+          <strong>{summary.missing}</strong>
         </div>
         <div>
           <span>有效历史报告</span>
@@ -389,6 +455,13 @@ export function BadcaseComparison({
               <option value="non_badcase">非 badcase</option>
             </select>
           </label>
+          <label className="select-field">
+            <span>得分</span>
+            <select value={scoreFilter} onChange={(event) => setScoreFilter(event.target.value)}>
+              <option value="">全部得分</option>
+              <option value="zero">得分为 0</option>
+            </select>
+          </label>
           <input
             aria-label="搜索样本"
             placeholder="搜索 sample id"
@@ -412,12 +485,16 @@ export function BadcaseComparison({
             >
               <Download size={15} /> 导出选中 ({selectedRows.length})
             </button>
+            <button onClick={() => download("all")} disabled={!summary.total || !!exporting}>
+              <Download size={15} /> 导出全部 Case ({summary.total})
+            </button>
           </div>
         </div>
         {message && <p role="status">{message}</p>}
         {summary.reports === 0 && (
           <p className="notice">
             暂无同配置已审核历史。失败 case 仅按“失败即复盘”的降级口径标为低可疑，不能推断本不该失败。
+            可先录入有效历史，或通过 API 测评建立同模型服务、同数据集、同清单、同工具版本、同参数的基准。
           </p>
         )}
         <div className="table-wrap">
@@ -462,13 +539,27 @@ export function BadcaseComparison({
                       <button className="link" onClick={() => setExpanded(expandedRow ? "" : keyOf(item, row))}>
                         {row.sample_id}
                       </button>
-                      <small>第 {row.current.attempt_no} 次</small>
+                      <small>
+                        {row.current.missing ? "清单内缺测" : `第 ${row.current.attempt_no} 次`}
+                      </small>
                     </td>
                     <td>{scoreText(row.current.score)}</td>
                     <td>
-                      <span className={`case-status ${row.current.state === "succeeded" ? "passed" : "error"}`}>
-                        {row.current.state}
-                      </span>
+                      {row.current.missing ? (
+                        <span className="badge neutral">缺测</span>
+                      ) : (
+                        <div className="badcase-statuses">
+                          <span className={`case-status ${row.current.state === "succeeded" ? "passed" : "error"}`}>
+                            {row.current.state}
+                          </span>
+                          {row.current.score_status === "missing" && (
+                            <span className="badge orange">评分失败</span>
+                          )}
+                          {row.current.evidence_status === "unavailable" && (
+                            <span className="badge orange">证据不可用</span>
+                          )}
+                        </div>
+                      )}
                       {row.current.error_code && <small>{row.current.error_code}</small>}
                     </td>
                     <td>{numberText(row.history.mean)}</td>
@@ -506,6 +597,45 @@ export function BadcaseComparison({
                         </div>
                         <p className="muted">{row.verdict.reasons.join("；")}</p>
                         {row.verdict.why_not_badcase && <p className="muted">{row.verdict.why_not_badcase}</p>}
+                        {detailLoading && <p role="status">正在读取当前与历史推理内容…</p>}
+                        {detailMessage && <p role="alert">{detailMessage}</p>}
+                        {detail && (
+                          <div className="badcase-answer-diff">
+                            <div>
+                              <h4>当前回答（本次）</h4>
+                              <p className="muted">
+                                得分 {scoreText(detail.current.score)} ·{" "}
+                                {detail.current.missing ? "缺测" : detail.current.state} · 证据{" "}
+                                {detail.current.evidence_status || "—"}
+                              </p>
+                              <pre>{detail.current.response || "推理内容未归档"}</pre>
+                            </div>
+                            <div>
+                              <h4>历史正确回答</h4>
+                              {detail.history
+                                .filter((item) => item.score >= 1)
+                                .map((item) => (
+                                  <div key={item.report_id}>
+                                    <p className="muted">
+                                      得分 {item.score} · 报告 {item.report_id.slice(0, 8)} ·{" "}
+                                      {time(item.created_at)}
+                                    </p>
+                                    <pre>{item.response || "推理内容未归档"}</pre>
+                                  </div>
+                                ))}
+                              {!detail.history.some((item) => item.score >= 1) && (
+                                <p className="muted">暂无历史正确回答。</p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        {!detail && !detailLoading && row.history.n === 0 && (
+                          <div className="notice">
+                            暂无同配置已审核历史，无法进行同口径差异对比。请先在报告中把历史执行录入为有效历史；
+                            或通过 API 测评创建基准，基准的模型服务、数据集、清单、工具版本和执行参数必须与当前完全一致。
+                            <a className="primary button" href="#console">前往新建测评</a>
+                          </div>
+                        )}
                         <div className="table-wrap">
                           <table>
                             <thead>

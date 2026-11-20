@@ -106,9 +106,18 @@ def same_config(left, right):
     )
     if any(left.get(key) != right.get(key) for key in keys):
         return False
-    if left.get("target_id") and right.get("target_id"):
-        return left["target_id"] == right["target_id"]
-    return True
+    # A frozen target identity is required: the same model name on another
+    # endpoint is not comparable history.
+    if not left.get("target_id") or not right.get("target_id"):
+        return False
+    return left["target_id"] == right["target_id"]
+
+
+def dataset_keys_for(dataset_key):
+    """Physical dataset spellings accepted for one canonical dataset."""
+    if dataset_key == "GPQA-Diamond":
+        return {"GPQA", "GPQA_diamond", "GPQA-Diamond"}
+    return {dataset_key} if dataset_key else set()
 
 
 def section_task(context):
@@ -158,6 +167,9 @@ def record_view(row, trace_status="unsupported"):
         "attempt_no": row.attempt_no,
         "error_code": row.error_code,
         "has_evidence": row.sha256 is not None,
+        "evidence_status": "available" if row.sha256 is not None else "unavailable",
+        "score_status": "scored" if score is not None else "missing",
+        "missing": False,
         "trace_status": trace_status,
         "input_tokens": metadata.get("input_tokens"),
         "output_tokens": metadata.get("output_tokens"),
@@ -168,17 +180,38 @@ def record_view(row, trace_status="unsupported"):
     }
 
 
-async def latest_records(session, run_id, sample_ids):
+def missing_case():
+    return {
+        "score": None,
+        "state": "missing",
+        "attempt_no": 0,
+        "error_code": None,
+        "has_evidence": False,
+        "evidence_status": "unavailable",
+        "score_status": "missing",
+        "missing": True,
+        "trace_status": "unsupported",
+        "input_tokens": None,
+        "output_tokens": None,
+        "duration_sec": None,
+        "tool_started_at": None,
+        "tool_finished_at": None,
+        "status": "missing",
+    }
+
+
+async def latest_records(session, run_id, sample_ids, dataset_keys=None):
     if not sample_ids:
         return {}
+    query = select(CaseExecutionRecord).where(
+        CaseExecutionRecord.run_id == run_id,
+        CaseExecutionRecord.sample_id.in_(sample_ids),
+    )
+    if dataset_keys:
+        query = query.where(CaseExecutionRecord.dataset_key.in_(sorted(dataset_keys)))
     rows = (
         await session.scalars(
-            select(CaseExecutionRecord)
-            .where(
-                CaseExecutionRecord.run_id == run_id,
-                CaseExecutionRecord.sample_id.in_(sample_ids),
-            )
-            .order_by(CaseExecutionRecord.attempt_no)
+            query.order_by(CaseExecutionRecord.attempt_no)
         )
     ).all()
     latest = {}
@@ -200,13 +233,15 @@ async def trace_statuses(session, rows):
     return {row.attempt_id: row.status for row in imports}
 
 
-async def dataset_cases(session, settings, run_id, context, archive):
+async def dataset_cases(session, settings, run_id, context, archive, dataset_key):
     sample_ids = section_samples(context)
     try:
         cases, from_archive = await _section_cases_async(settings, context, archive)
     except (ValueError, KeyError, TypeError, OSError):
         cases, from_archive = {}, False
-    records = await latest_records(session, run_id, sample_ids)
+    records = await latest_records(
+        session, run_id, sample_ids, dataset_keys_for(dataset_key)
+    )
     statuses = await trace_statuses(session, list(records.values()))
     result = {}
     for sample_id in sample_ids:
@@ -217,6 +252,10 @@ async def dataset_cases(session, settings, run_id, context, archive):
                 current["score"] = cases[sample_id]["score"]
                 current["attempt_no"] = cases[sample_id]["attempt_no"]
                 current["has_evidence"] = True
+                current["evidence_status"] = "available"
+                current["score_status"] = (
+                    "scored" if cases[sample_id]["score"] is not None else "missing"
+                )
             result[sample_id] = current
         elif sample_id in cases:
             case = cases[sample_id]
@@ -226,6 +265,9 @@ async def dataset_cases(session, settings, run_id, context, archive):
                 "attempt_no": case["attempt_no"],
                 "error_code": None,
                 "has_evidence": True,
+                "evidence_status": "available",
+                "score_status": "scored" if case["score"] is not None else "missing",
+                "missing": False,
                 "trace_status": "unsupported",
                 "input_tokens": case["input_tokens"],
                 "output_tokens": case["output_tokens"],
@@ -234,8 +276,8 @@ async def dataset_cases(session, settings, run_id, context, archive):
                 "tool_finished_at": case["tool_finished_at"],
                 "status": case["status"],
             }
-    if not result and not from_archive:
-        return {}, False
+        else:
+            result[sample_id] = missing_case()
     return result, from_archive or bool(cases)
 
 
@@ -283,6 +325,20 @@ def soft_signals(current, subcommand):
 
 def verdict(current, stats, signals, subcommand):
     multiplier = round(min(SOFT_CAP, 1.0 + SOFT_WEIGHT * len(signals)), 4)
+    if current.get("missing"):
+        return {
+            "is_badcase": False,
+            "band": "non_badcase",
+            "suspicion": 0.0,
+            "method": "missing",
+            "confidence": "missing",
+            "p_hat": None,
+            "hard_signals": [],
+            "soft_signals": [],
+            "multiplier": 1.0,
+            "why_not_badcase": "missing_execution：清单内没有执行记录，不纳入模型能力判定",
+            "reasons": ["清单内缺测，不纳入模型能力判定"],
+        }
     hard = []
     if current["state"] == "failed":
         hard.append("execution-failed")
@@ -477,7 +533,7 @@ async def comparison(session, settings, run_id):
                     history_cases = {}
                 if not history_cases:
                     history_cases, _ = await _fallback_cases(
-                        session, history_report.run_id, history_context
+                        session, history_report.run_id, history_context, dataset_key
                     )
                 history_reports.append(str(history_report.id))
                 for sample_id, case in history_cases.items():
@@ -493,10 +549,12 @@ async def comparison(session, settings, run_id):
                     )
 
         current_cases, _ = await dataset_cases(
-            session, settings, run_id, context, section.get("archive")
+            session, settings, run_id, context, section.get("archive"), dataset_key
         )
         if not current_cases:
-            current_cases, _ = await _fallback_cases(session, run_id, context)
+            current_cases, _ = await _fallback_cases(
+                session, run_id, context, dataset_key
+            )
         subcommand = section_subcommand(context)
         rows = []
         for sample_id, current in current_cases.items():
@@ -518,9 +576,17 @@ async def comparison(session, settings, run_id):
                 }
             )
         rows = sort_cases(rows)
-        counts = {"total": len(rows), "high": 0, "low": 0, "non_badcase": 0}
+        counts = {
+            "total": len(rows),
+            "high": 0,
+            "low": 0,
+            "non_badcase": 0,
+            "missing": 0,
+        }
         for row in rows:
             counts[row["verdict"]["band"]] += 1
+            if row["current"].get("missing"):
+                counts["missing"] += 1
         datasets.append(
             {
                 "dataset_key": dataset_key,
@@ -556,9 +622,11 @@ async def comparison(session, settings, run_id):
     }
 
 
-async def _fallback_cases(session, run_id, context):
+async def _fallback_cases(session, run_id, context, dataset_key):
     sample_ids = section_samples(context)
-    records = await latest_records(session, run_id, sample_ids)
+    records = await latest_records(
+        session, run_id, sample_ids, dataset_keys_for(dataset_key)
+    )
     statuses = await trace_statuses(session, list(records.values()))
     cases = {}
     for sample_id, record in records.items():
@@ -588,7 +656,9 @@ async def report_case(session, settings, run_id, dataset_key, sample_id, attempt
         except (ValueError, KeyError, TypeError, OSError):
             cases = {}
         if not cases:
-            cases, _ = await _fallback_cases(session, run_id, section["context"])
+            cases, _ = await _fallback_cases(
+                session, run_id, section["context"], dataset_key
+            )
         for case in cases.values():
             if case["sample_id"] != sample_id:
                 continue

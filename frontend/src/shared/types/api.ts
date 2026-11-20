@@ -1541,6 +1541,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/autoeval/v1/runs/{run_id}/badcase-case": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Badcase Case Detail */
+        get: operations["badcase_case_detail_api_autoeval_v1_runs__run_id__badcase_case_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/autoeval/v1/runs/{run_id}/badcase-export": {
         parameters: {
             query?: never;
@@ -6110,6 +6127,40 @@ export interface operations {
     badcase_comparison_api_autoeval_v1_runs__run_id__badcase_comparison_get: {
         parameters: {
             query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    badcase_case_detail_api_autoeval_v1_runs__run_id__badcase_case_get: {
+        parameters: {
+            query: {
+                sample_id: string;
+                dataset_key?: string | null;
+            };
             header?: never;
             path: {
                 run_id: string;

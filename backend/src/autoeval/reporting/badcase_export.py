@@ -21,13 +21,13 @@ from sqlalchemy import select
 from starlette.background import BackgroundTask
 
 from autoeval.catalog.datasets import read_manifest
-from autoeval.reporting.badcases import comparison, report_case
+from autoeval.reporting.badcases import comparison, dataset_keys_for, report_case
 from autoeval.reporting.models import CaseExecutionRecord
 from autoeval.reporting.native_case_evidence import enrich_case
 
 MAX_CASES = 100
 MAX_FILE_BYTES = 16 * 1024 * 1024
-MAX_PACKAGE_BYTES = 200 * 1024 * 1024
+MAX_PACKAGE_BYTES = 1024 * 1024 * 1024
 SECRET_KEY = re.compile(
     r"(api[_-]?key|authorization|password|secret|access[_-]?token|credential|base_url|private_key)",
     re.IGNORECASE,
@@ -128,16 +128,20 @@ def selected_cases(data, body):
             raise HTTPException(422, "Some sample identifiers were not found")
     if not rows:
         raise HTTPException(422, "No matching cases")
-    if len(rows) > MAX_CASES:
-        raise HTTPException(422, f"At most {MAX_CASES} cases can be exported")
+    if body.scope != "all" and len(rows) > MAX_CASES:
+        raise HTTPException(422, f"At most {MAX_CASES} cases can be selected")
     return rows
 
 
-async def latest_record(session, run_id, sample_id, attempt_no=None):
+async def latest_record(session, run_id, sample_id, attempt_no=None, dataset_key=None):
     query = select(CaseExecutionRecord).where(
         CaseExecutionRecord.run_id == run_id,
         CaseExecutionRecord.sample_id == sample_id,
     )
+    if dataset_key:
+        query = query.where(
+            CaseExecutionRecord.dataset_key.in_(sorted(dataset_keys_for(dataset_key)))
+        )
     if attempt_no is not None:
         query = query.where(CaseExecutionRecord.attempt_no == attempt_no)
     row = await session.scalar(
@@ -591,6 +595,7 @@ async def build_package(session, settings, run_id, body):
                     run_id,
                     sample_id,
                     case["current"].get("attempt_no"),
+                    dataset["dataset_key"],
                 )
                 current_evidence = await evidence_for(session, settings, current_record)
                 current_trace = await trace_for(
@@ -638,7 +643,10 @@ async def build_package(session, settings, run_id, body):
                         sample_id,
                     )
                     history_record = await latest_record(
-                        session, history_run_id, sample_id
+                        session,
+                        history_run_id,
+                        sample_id,
+                        dataset_key=dataset["dataset_key"],
                     )
                     history_evidence = await evidence_for(
                         session, settings, history_record
@@ -729,6 +737,118 @@ async def build_package(session, settings, run_id, body):
         os.unlink(path)
         raise
     return path, filename
+
+
+@router.get("/runs/{run_id}/badcase-case")
+async def badcase_case_detail(
+    run_id: uuid.UUID,
+    request: Request,
+    sample_id: str,
+    dataset_key: str | None = None,
+):
+    async with request.app.state.sessions() as session:
+        data = await comparison(session, request.app.state.settings, run_id)
+        dataset = next(
+            (
+                item
+                for item in data["datasets"]
+                if dataset_key is None or item["dataset_key"] == dataset_key
+            ),
+            None,
+        )
+        if dataset is None:
+            raise HTTPException(422, "Unknown dataset")
+        case = next(
+            (item for item in dataset["cases"] if item["sample_id"] == sample_id),
+            None,
+        )
+        if case is None:
+            raise HTTPException(404, "Case not found")
+        current_raw = await report_case(
+            session,
+            request.app.state.settings,
+            run_id,
+            dataset["dataset_key"],
+            sample_id,
+            case["current"].get("attempt_no"),
+        )
+        current_record = await latest_record(
+            session,
+            run_id,
+            sample_id,
+            case["current"].get("attempt_no"),
+            dataset["dataset_key"],
+        )
+        current_evidence = await evidence_for(
+            session, request.app.state.settings, current_record
+        )
+        current_inference = inference_view(
+            sample_id=sample_id,
+            dataset_key=dataset["dataset_key"],
+            run_id=str(run_id),
+            report_id=data["report_id"],
+            model=data["report"]["remote_model"],
+            attempt_no=case["current"].get("attempt_no"),
+            evidence=current_evidence,
+            case=current_raw,
+        )
+        history = []
+        for entry in case["history"]["scores"]:
+            history_run_id = uuid.UUID(entry["run_id"])
+            raw = await report_case(
+                session,
+                request.app.state.settings,
+                history_run_id,
+                dataset["dataset_key"],
+                sample_id,
+            )
+            record = await latest_record(
+                session,
+                history_run_id,
+                sample_id,
+                dataset_key=dataset["dataset_key"],
+            )
+            evidence = await evidence_for(
+                session, request.app.state.settings, record
+            )
+            inference = inference_view(
+                sample_id=sample_id,
+                dataset_key=dataset["dataset_key"],
+                run_id=entry["run_id"],
+                report_id=entry["report_id"],
+                model=data["report"]["remote_model"],
+                attempt_no=(raw or {}).get("attempt_no"),
+                evidence=evidence,
+                case=raw,
+            )
+            history.append(
+                {
+                    "report_id": entry["report_id"],
+                    "run_id": entry["run_id"],
+                    "created_at": entry["created_at"],
+                    "score": entry["score"],
+                    "available": inference["available"],
+                    "prompt": inference["prompt"],
+                    "response": inference["response"],
+                }
+            )
+        return {
+            "data": {
+                "sample_id": sample_id,
+                "dataset_key": dataset["dataset_key"],
+                "current": {
+                    "score": case["current"].get("score"),
+                    "state": case["current"].get("state"),
+                    "missing": case["current"].get("missing", False),
+                    "evidence_status": case["current"].get("evidence_status"),
+                    "available": current_inference["available"],
+                    "prompt": current_inference["prompt"],
+                    "response": current_inference["response"],
+                },
+                "history": history,
+            },
+            "request_id": request.state.request_id,
+        }
 
 
 @router.post("/runs/{run_id}/badcase-export")

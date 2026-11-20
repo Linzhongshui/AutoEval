@@ -1,9 +1,17 @@
 """Pure T1 badcase scoring tests; no database or object storage is used."""
 
+import asyncio
+import uuid
+
+from sqlalchemy.dialects import postgresql
+
 from autoeval.reporting.badcases import (
     canonical_dataset,
     config_view,
+    dataset_keys_for,
     history_stats,
+    latest_records,
+    missing_case,
     same_config,
     soft_signals,
     sort_cases,
@@ -88,7 +96,48 @@ def test_same_config_requires_target_and_all_conditions():
     assert not same_config(left, config_view(context(target="target-2")))
     missing = dict(left)
     missing.pop("target_id")
-    assert same_config(left, missing)
+    assert not same_config(left, missing)
+    assert not same_config(missing, left)
+
+
+def test_dataset_keys_for_gpqa_spellings():
+    assert dataset_keys_for("GPQA-Diamond") == {
+        "GPQA",
+        "GPQA_diamond",
+        "GPQA-Diamond",
+    }
+    assert dataset_keys_for("AutomationBench") == {"AutomationBench"}
+
+
+def test_latest_records_query_filters_dataset_key():
+    class EmptyResult:
+        def all(self):
+            return []
+
+    class FakeSession:
+        async def scalars(self, statement):
+            self.statement = statement
+            return EmptyResult()
+
+    session = FakeSession()
+    asyncio.run(
+        latest_records(
+            session,
+            uuid.uuid4(),
+            ["gpqa_diamond:0"],
+            dataset_keys_for("GPQA-Diamond"),
+        )
+    )
+    sql = str(session.statement.compile(dialect=postgresql.dialect()))
+    assert "case_execution_record.dataset_key IN" in sql
+
+
+def test_missing_execution_is_not_a_badcase():
+    result = verdict(missing_case(), history_stats([]), [], "llm_accuracy")
+    assert result["is_badcase"] is False
+    assert result["band"] == "non_badcase"
+    assert result["method"] == "missing"
+    assert result["suspicion"] == 0.0
 
 
 def test_history_stats_excludes_missing_scores():

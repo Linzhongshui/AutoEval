@@ -59,6 +59,24 @@ def test_selected_cases_scopes():
         )
 
 
+def test_all_scope_exports_beyond_selected_limit():
+    data = {
+        "datasets": [
+            {
+                "dataset_key": "GPQA-Diamond",
+                "cases": [
+                    {"sample_id": f"gpqa_diamond:{index}", "verdict": {"band": "high"}}
+                    for index in range(120)
+                ],
+            }
+        ]
+    }
+    rows = selected_cases(data, ExportInput(scope="all"))
+    assert len(rows) == 120
+    with pytest.raises(HTTPException):
+        selected_cases(data, ExportInput(scope="high"))
+
+
 def test_redact_removes_credentials_and_base_url():
     value = {
         "api_key": "secret",

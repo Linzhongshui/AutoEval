@@ -1,3 +1,5 @@
+import { duration, EstimateElapsed, PlanEstimate, type Report } from "./PlanEstimate";
+import { TableWrap } from "../../shared/ui/TableWrap";
 import { PlanningSelect } from "./PlanningSelect";
 import { ServiceBindings } from "../resources/ServiceBindings";
 import { ResourceMultiSelect } from "./ResourceMultiSelect";
@@ -13,14 +15,6 @@ import { StandardInputs } from "../catalog/StandardInputs";
 import { ExecutionBindings } from "../catalog/ExecutionBindings";
 import { DatasetManifests } from "../catalog/DatasetManifests";
 
-type Report = {
-  input_sha256: string; conditional: boolean; confidence: string; warnings: string[];
-  representative_duration_sec: number;
-  estimate: { total_duration_sec: number; range: { p10_sec: number; p90_sec: number } };
-  plan: { dataset_order: string[]; dataset_concurrency: number; case_concurrency: Record<string, number> };
-  planner_revision?: string; throughput_source?: { measured_at?: string; type?: string };
-  tasks: { task_id: string; standalone_duration_sec: number; scheduled_duration_sec: number; scheduled_start_sec: number; scheduled_end_sec: number }[];
-};
 type Options = {
   compilations: { adaptor_revision?: string; runtime_config?: Record<string, unknown>; id: string; label?: string; sha256: string; target_id: string; dataset: string; input_ready: boolean; config: { subcommand: string; params: Record<string, unknown> } }[];
   manifests: { id: string; dataset: string; scope: string; sample_count: number; sha256?: string }[];
@@ -40,31 +34,6 @@ const describePreflight = (reasons: string[]) =>
   reasons.map(reason => preflightReasons[reason] ?? reason).join("；");
 type Job = { id: string; state: string; created_at?: string; updated_at?: string; result?: { progress?: { stage: string; current_concurrency?: number | null; completed_levels: number; total_levels: number; observed_at?: string } | null; report?: Report; throughput_profile_id?: string; reason?: string; dispatch_blocked?: boolean; remote_check?: { state: string; checked_at: string }; execution_ready?: boolean; supported_datasets?: string[]; blocking_reasons?: string[]; dataset_checks?: DatasetCheck[]; tool_versions?: Record<string, { expected: string; actual: string | null }> } };
 const datasets = ["GPQA", "MMMU-Pro", "DeepSWE", "AutomationBench"];
-const duration = (seconds: number | null | undefined) => {
-  if (seconds == null) return "未知";
-  const total = Math.max(0, Math.round(seconds));
-  return [total >= 3600 ? `${Math.floor(total / 3600)}小时` : "", total >= 60 ? `${Math.floor(total % 3600 / 60)}分` : "", `${total % 60}秒`].filter(Boolean).join(" ");
-};
-
-function EstimateElapsed() {
-  const [start] = useState(Date.now);
-  const [now, setNow] = useState(Date.now);
-  useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
-  return <span className="estimate-elapsed" aria-label="估算已耗时">已耗时 {duration((now - start) / 1000)}</span>;
-}
-
-export function PlanEstimate({ report }: { report: Report }) {
-  const confidence = ({ high: "高", medium: "中", low: "低" } as Record<string, string>)[report.confidence] || report.confidence;
-  return <section className="estimate-detail" aria-label="耗时估算与参数建议">
-    <div className="estimate-result"><small>预计总耗时</small><strong>{duration(report.estimate.total_duration_sec)}</strong><span>预测区间（P10–P90）<br />{duration(report.estimate.range.p10_sec)} – {duration(report.estimate.range.p90_sec)}</span><span>置信度：{confidence}</span></div>
-    <p className="estimate-note">不含平台排队及报告分析耗时。{report.conditional && "当前为条件估算，需执行资源预检后重新估算。"}</p>
-    <div className="estimate-datasets">{report.tasks.map(t => <article className="estimate-dataset" key={t.task_id}><header><strong>{t.task_id}</strong><span>样本并发 {report.plan.case_concurrency[t.task_id]}</span></header><dl><div><dt>单独执行</dt><dd>{duration(t.standalone_duration_sec)}</dd></div><div><dt>计划内耗时</dt><dd>{duration(t.scheduled_duration_sec)}</dd></div><div><dt>开始 → 结束</dt><dd>{duration(t.scheduled_start_sec)} → {duration(t.scheduled_end_sec)}</dd></div></dl></article>)}</div>
-    <p className="estimate-note">执行顺序：{report.plan.dataset_order.join(" → ")} · 同时运行 {report.plan.dataset_concurrency} 个数据集。并行共享吞吐与资源，各项时长不能直接相加。</p>
-    <details className="estimate-source"><summary>估算来源与限制</summary><dl><div><dt>组件版本</dt><dd>{report.planner_revision || "未记录"}</dd></div><div><dt>吞吐依据</dt><dd>{report.throughput_source?.type === "probe" ? "真实吞吐探测" : report.throughput_source?.type || "未记录"}</dd></div><div><dt>采集时间</dt><dd>{report.throughput_source?.measured_at ? new Date(report.throughput_source.measured_at).toLocaleString("zh-CN") : "未记录"}</dd></div></dl><p>代表性仿真终点：{duration(report.representative_duration_sec)}</p></details>
-    {report.warnings?.map((w, i) => <small className="estimate-note" key={i}>{w}</small>)}
-  </section>;
-}
-
 function StrategyChoice({ label, parallel, disabled = false, onChange }: { label: string; parallel: boolean; disabled?: boolean; onChange: (parallel: boolean) => void }) {
   return <div className="strategy-choices" role="group" aria-label={label}>
     <button type="button" aria-pressed={!parallel} onClick={() => onChange(false)}>串行执行</button>
@@ -294,7 +263,7 @@ export function TaskPlanning() {
       {preflight.result.dataset_checks?.map(check => <p key={check.task_id}>{check.dataset} · 数据路径：{check.data_path || "未配置"} · 工具版本：{check.tool_revision?.slice(0, 12) || `校验未通过（要求 ${check.expected_tool_revision.slice(0, 12)}）`}{check.blocking_reasons.length ? ` · ${describePreflight(check.blocking_reasons)}` : " · 就绪"}</p>)}
     </div>}
     <h2>2. 数据集与样本范围</h2>
-    <p className="muted">勾选后自动填充唯一匹配的执行配置、全量清单及绑定资源；存在多个候选或缺少全量清单时，请手动确认。不会自动启动环境检查或测评。</p><div className="table-wrap"><table className="planning-table"><thead><tr><th>启用</th><th>数据集</th><th>执行配置</th><th>样本范围</th><th>状态</th></tr></thead><tbody>{datasets.map(d => {
+    <p className="muted">勾选后自动填充唯一匹配的执行配置、全量清单及绑定资源；存在多个候选或缺少全量清单时，请手动确认。不会自动启动环境检查或测评。</p><TableWrap><table className="planning-table"><thead><tr><th>启用</th><th>数据集</th><th>执行配置</th><th>样本范围</th><th>状态</th></tr></thead><tbody>{datasets.map(d => {
       const active = enabled.includes(d);
       const chosenConfig = options.compilations.find(c => c.id === selection[d]?.compilation);
       const allowed = chosenConfig?.runtime_config?.resource_ids;
@@ -302,7 +271,7 @@ export function TaskPlanning() {
       const assignedName = resources.rows.find(r => r.id === assignedId)?.binding_key;
       const configs = options.compilations.filter(c => c.target_id === target && c.input_ready && c.dataset === d && (!Array.isArray(c.runtime_config?.resource_ids) || resources.rows.some(r => (c.runtime_config!.resource_ids as string[]).includes(r.id))));
       return <tr key={d}><td><input type="checkbox" aria-label={`启用 ${d}`} checked={active} onChange={e => { autoFillDataset(d, e.target.checked); }} /></td><td>{d}</td><td data-label="执行配置"><select disabled={!active || !target} aria-label={`${d} 执行配置`} value={selection[d]?.compilation || ""} onChange={e => setSelection(rows => ({ ...rows, [d]: { ...rows[d], compilation: e.target.value } }))}><option value="">{!target ? "先选择模型服务" : !configs.length ? "暂无可用配置" : "请选择执行配置"}</option>{configs.map(c => <option key={c.id} value={c.id}>{c.label?.split(" / ").pop() || c.sha256.slice(0, 12)}</option>)}</select>{active && chosenConfig && assignedName && <small className="muted">自动分配：{assignedName}</small>}</td><td data-label="样本范围"><select disabled={!active || !selection[d]?.compilation} aria-label={`${d} 样本范围`} value={selection[d]?.manifest || ""} onChange={e => setSelection(rows => ({ ...rows, [d]: { ...rows[d], manifest: e.target.value } }))}><option value="">请选择已绑定清单</option>{options.manifests.filter(m => m.dataset === d).map(m => <option key={m.id} value={m.id}>{m.scope === "full" ? "全量" : "Lite"} · {m.sample_count} 个样本 · {m.id.slice(0, 8)}</option>)}</select></td><td><span className="planning-row-state">{!active ? "未启用" : !configs.length ? "需配置" : selection[d]?.compilation && selection[d]?.manifest ? "已配置" : "待补全"}</span></td></tr>;
-    })}</tbody></table></div>
+    })}</tbody></table></TableWrap>
     {enabled.map(dataset => {
       const bound = options.compilations.filter(c => c.target_id === target && c.input_ready && c.dataset === dataset);
       if (!bound.length || bound.some(c => !Array.isArray(c.runtime_config?.resource_ids) || resourceIds.some(id => (c.runtime_config!.resource_ids as string[]).includes(id)))) return null;

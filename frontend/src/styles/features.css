@@ -1410,15 +1410,6 @@
 @media(max-width:1200px) { .console-workflow .console-config-fields { grid-template-columns: 1fr; gap: 12px; } }
 @media(max-width:650px) { .console-section-heading { align-items: flex-start; flex-wrap: wrap; } }
 
-/* Keep page-size controls aligned with navigation, overriding form label layout. */
-.pagination label.pagination-page-size {
-  display: inline-flex; flex-direction: row; align-items: center;
-  gap: 8px; margin: 0; width: auto;
-}
-.pagination .pagination-page-size select { margin: 0; height: 36px; }
-.pagination button { height: 36px; display: inline-flex; align-items: center; justify-content: center; }
-.pagination { align-items: center; gap: 8px; padding-top: 16px; }
-
 .model-registry { display: grid; gap: 24px; }
 .model-registry .registry-intro { margin: 0; font-size: 12px; }
 .registry-section { display: grid; gap: 16px; padding-bottom: 24px; border-bottom: 1px solid var(--border); }

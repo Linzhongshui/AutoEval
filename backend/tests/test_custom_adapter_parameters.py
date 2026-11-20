@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from autoeval.configuration import Parameters
+from autoeval.catalog.configuration import Parameters
 
 
 def values():

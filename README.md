@@ -10,7 +10,7 @@ AutoEval 是面向单团队、单工作空间的模型测评平台。通过统�
 
 技术栈：React / TypeScript / Vite、FastAPI、Temporal、PostgreSQL、S3 兼容对象存储。当前用于受控开发与演示，正式身份、生产运维和 Release 门禁尚未完成验收。
 
-[快速启动](#快速启动) · [当前能力](#当前能力与验证范围) · [Langfuse](#langfuse-与服务器访问) · [文档导航](#文档导航)
+[快速启动](#快速启动) · [当前能力](#当前能力与验证范围) · [服务器访问](#langfuse-与服务器访问) · [开发与检查](#开发与检查) · [文档导航](#文档导航)
 
 ## 当前能力与验证范围
 
@@ -27,6 +27,12 @@ AutoEval 是面向单团队、单工作空间的模型测评平台。通过统�
 | 性能测评、极光资源、生产发布 | 尚未完成验收 | 不以总耗时或 Token 数替代吞吐量、延迟及性能成绩 |
 
 本次具体结果、标识与限制见 [GPQA 20 题验收](docs/live-e2e-gpqa20-2026-11-16.md)和 [AutomationBench 真机验收](docs/automationbench-langfuse-acceptance-2026-11-17.md)。真实模型请求需明确目标、样本、尝试次数与预算；结果未知时不自动重发。
+
+### 基线与报告
+
+导入标准输入时，`baseline.json` 随输入版本同步并保留来源、提交和校验值。全量报告按标准库定义展示基线和百分点差值，Lite 报告标注样本范围。具体阈值、比较口径和验收范围见 [标准输入与基线规则](docs/standard-inputs.md)。
+
+一次测评任务生成一份报告，各数据集分别展示成绩、基线和证据。恢复归档采用追加修订，保留原始样本记录和任务状态。详见 [恢复归档与多数据集报告](docs/task-report-recovery.md)。
 
 ## 快速启动
 
@@ -46,8 +52,8 @@ AutoEval 是面向单团队、单工作空间的模型测评平台。通过统�
 cd backend
 uv sync --frozen --python 3.12
 uv run alembic upgrade head
-uv run python -m autoeval.bootstrap storage
-uv run uvicorn autoeval.api:app --host 127.0.0.1 --port 8000
+uv run python -m autoeval.infrastructure.bootstrap storage
+uv run uvicorn autoeval.entrypoints.api:app --host 127.0.0.1 --port 8000
 ```
 
 API 文档：`http://127.0.0.1:8000/docs`。`/health/live` 检查进程存活，`/health/ready` 检查数据库、Temporal 和对象存储。
@@ -58,12 +64,12 @@ API 文档：`http://127.0.0.1:8000/docs`。`/health/live` 检查进程存活，
 
 | 进程 | 命令 |
 | --- | --- |
-| 持久化任务分发 | `uv run python -m autoeval.dispatcher` |
-| 测评工作流 | `uv run python -m autoeval.worker workflow` |
-| 预检与规划协调 | `uv run python -m autoeval.planning_worker` |
-| 测评执行活动 | `uv run python -m autoeval.worker planning-execution` |
-| 状态对账 | `uv run python -m autoeval.reconciler` |
-| Harbor 轨迹导入（启用 Langfuse 时） | `uv run python -m autoeval.worker langfuse` |
+| 持久化任务分发 | `uv run python -m autoeval.entrypoints.dispatcher` |
+| 测评工作流 | `uv run python -m autoeval.entrypoints.worker workflow` |
+| 预检与规划协调 | `uv run python -m autoeval.planning.planning_worker` |
+| 测评执行活动 | `uv run python -m autoeval.entrypoints.worker planning-execution` |
+| 状态对账 | `uv run python -m autoeval.entrypoints.reconciler` |
+| Harbor 轨迹导入（启用 Langfuse 时） | `uv run python -m autoeval.entrypoints.worker langfuse` |
 
 结果收集、独立分析和旧兼容路径所需角色见[后端说明](backend/README.md)。默认规划协调仅处理 `preflight,plan`；吞吐探测与独立分析需单独配置并明确授权，不能为补齐页面数据自动触发。
 
@@ -95,6 +101,8 @@ Langfuse 采用指定 fork [llauren48/harbor-otel-stack](https://github.com/llau
 
 ## 开发与检查
 
+目标为 `main` 的 PR 会运行两项 GitHub Actions 检查。后端运行 Ruff，在临时 PostgreSQL 上执行 Alembic 迁移，再运行默认 pytest。前端检查模块边界、TypeScript 类型和 Vite 构建。合并前需通过两项检查、同步最新的 `main` 并解决评审对话。
+
 ```powershell
 # backend/
 uv run pytest -q
@@ -121,6 +129,8 @@ docs/                    接入、设计、验收与恢复说明
 deliverables/            已核对的截图、录屏与验收摘要
 ```
 
+本地草稿、凭据、备份与调试产物按 `.gitignore` 保留在工作区。`deliverables/` 用于存放已核对的交付材料。
+
 ## 文档导航
 
 | 主题 | 文档 |
@@ -134,11 +144,3 @@ deliverables/            已核对的截图、录屏与验收摘要
 | 验收与展示 | [GPQA 20 题验收及录屏](docs/live-e2e-gpqa20-2026-11-16.md)、[AutomationBench 平台截图](deliverables/automationbench-langfuse-platform.png)、[免登录轨迹截图](deliverables/automationbench-langfuse-public-trace.png) |
 
 早期版本限制、按日期追加的开发记录和页面预览已移至[整理前 README 历史快照](docs/readme-history-2026-11-17.md)。历史快照只用于追溯，不能代替当前运行说明及分项验收。
-
-### 标准库基线自动同步
-
-标准输入确认导入时，`baseline.json` 自动写入不可变基线表，与输入版本共用事务；重复导入复用同版本记录，内容冲突拒绝。保留来源模型、标准仓提交、原始文件 SHA-256、原始基线说明及继承关系。自动同步标记为 `standard-repository-auto-sync`，不代表人工审核或 Release 批准。
-
-标准库是平台基线的权威来源，无需额外审批或二次官网核验。全量报告应展示标准基线及百分点差值，容差和范围严格采用标准库定义；未配置阈值时不生成通过结论。Lite 明确样本范围，不代表全量达标；基线不自动写入官方榜单或开启 Release 门禁。完整规则及尚待实现的报告展示见[标准库基线规则](docs/standard-inputs.md#标准库基线规则2026-11-17-确认)。2026-11-17 已在服务器回填 31 条历史版本基线，重复回填数量不变；本轮未调用模型。
-
-一次测评任务只生成一份报告，多个数据集在报告内独立展示成绩、基线和证据，不生成跨数据集综合分。恢复归档采用追加修订，保留原始 Case 和任务状态，详见 [恢复归档与多数据集报告](docs/task-report-recovery.md)。

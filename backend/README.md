@@ -28,8 +28,8 @@ FastAPI 提供接口，Temporal 执行工作流与活动，PostgreSQL 保存业�
 ```powershell
 uv sync --frozen --python 3.12
 uv run alembic upgrade head
-uv run python -m autoeval.bootstrap storage
-uv run uvicorn autoeval.api:app --host 127.0.0.1 --port 8000 --reload
+uv run python -m autoeval.infrastructure.bootstrap storage
+uv run uvicorn autoeval.entrypoints.api:app --host 127.0.0.1 --port 8000 --reload
 ```
 
 迁移前确认目标库并按部署流程备份。新增迁移，不改写已应用版本；不要删除证据卷或清空数据库处理联调问题。
@@ -44,18 +44,18 @@ API 不负责直接消费任务。按所使用的功能在独立终端启动对�
 
 | 进程 / 角色 | 命令 | 用途 |
 | --- | --- | --- |
-| Dispatcher | `uv run python -m autoeval.dispatcher` | 投递持久化 Outbox 任务 |
-| Workflow | `uv run python -m autoeval.worker workflow` | 测评工作流编排 |
-| Planning coordinator | `uv run python -m autoeval.planning_worker` | 环境预检与可选规划 |
-| Planning execution | `uv run python -m autoeval.worker planning-execution` | 统一测评执行活动 |
-| Reconciler | `uv run python -m autoeval.reconciler` | 对账及恢复已有状态 |
-| Result | `uv run python -m autoeval.worker result` | 结果收集与已配置的分析活动 |
-| Langfuse | `uv run python -m autoeval.worker langfuse` | Harbor 产物归档后的独立导入 |
-| Monitored | `uv run python -m autoeval.worker monitored` | 已登记的 AISBench 监控执行路径 |
-| I/O / GPQA | `uv run python -m autoeval.worker io` / `uv run python -m autoeval.worker gpqa` | 诊断与旧 GPQA 探索兼容入口 |
-| Analysis workflow | `uv run python -m autoeval.worker analysis-workflow` | 独立分析工作流，需配置目标、资源与预算 |
+| Dispatcher | `uv run python -m autoeval.entrypoints.dispatcher` | 投递持久化 Outbox 任务 |
+| Workflow | `uv run python -m autoeval.entrypoints.worker workflow` | 测评工作流编排 |
+| Planning coordinator | `uv run python -m autoeval.planning.planning_worker` | 环境预检与可选规划 |
+| Planning execution | `uv run python -m autoeval.entrypoints.worker planning-execution` | 统一测评执行活动 |
+| Reconciler | `uv run python -m autoeval.entrypoints.reconciler` | 对账及恢复已有状态 |
+| Result | `uv run python -m autoeval.entrypoints.worker result` | 结果收集与已配置的分析活动 |
+| Langfuse | `uv run python -m autoeval.entrypoints.worker langfuse` | Harbor 产物归档后的独立导入 |
+| Monitored | `uv run python -m autoeval.entrypoints.worker monitored` | 已登记的 AISBench 监控执行路径 |
+| I/O / GPQA | `uv run python -m autoeval.entrypoints.worker io` / `uv run python -m autoeval.entrypoints.worker gpqa` | 诊断与旧 GPQA 探索兼容入口 |
+| Analysis workflow | `uv run python -m autoeval.entrypoints.worker analysis-workflow` | 独立分析工作流，需配置目标、资源与预算 |
 
-角色定义以 [worker.py](src/autoeval/worker.py) 为准。`fixture` 仅供显式人工夹具验收，不作为常规业务进程启动。
+角色定义以 [worker.py](src/autoeval/entrypoints/worker.py) 为准。`fixture` 仅供显式人工夹具验收，不作为常规业务进程启动。
 
 规划协调默认只处理 `preflight,plan`，不消费真实吞吐探测。启用 `AE_PLANNING_JOB_KINDS=preflight,plan,probe` 前必须核对历史待办和调用预算。独立分析与真实探测都可能发送模型请求；不能为了填充页面或状态恢复而自动开启。
 
@@ -73,16 +73,25 @@ Harbor 轨迹导入失败不修改测评成绩。只有确认导入成功才提�
 
 | 路径 | 责任 |
 | --- | --- |
-| `src/autoeval/api.py` | 应用装配与路由注册 |
+| `src/autoeval/entrypoints/api.py` | 应用装配与路由注册 |
 | `src/autoeval/evaluation/` / `planning/` | 测评与规划领域服务、接口及模型 |
 | `src/autoeval/reporting/` / `analysis/` | 报告、证据、榜单与独立分析 |
 | `src/autoeval/catalog/` | 模型、配置及目录管理 |
 | `src/autoeval/infrastructure/` | 数据库、存储、执行与恢复基础能力 |
-| `src/autoeval/langfuse_integration.py` | Trace 归档关联、导入活动与查询 / 重试接口 |
+| `src/autoeval/reporting/langfuse_integration.py` | Trace 归档关联、导入活动与查询 / 重试接口 |
 | `migrations/` / `tool-locks/` | 数据库迁移与固定工具依赖 |
 | `tests/` | 单元、基础设施与浏览器检查 |
 
-部分根模块保留兼容导入或命令入口；实际实现位置见[重构清单](../docs/refactor-inventory.md)。
+API、Worker、Dispatcher 和 Reconciler 命令位于 `autoeval.entrypoints`，规划协调位于 `autoeval.planning.planning_worker`。
+
+接口输入输出、ORM 注册与实体外键见[数据契约与实体关系](../docs/backend-data-model.md)。
+
+测评接口、执行活动和监控实现在 `evaluation/`，规划观测和探测投递在
+`planning/`，Docker 与 SSH 执行器在 `resources/`。计费模型、额度、账本和
+网关实现在 `billing/`，Langfuse 导入与结果标识在 `reporting/`。
+
+计费网关通过 `python -m autoeval.billing.gateway` 启动。独立远端运行时源码
+位于 `src/autoeval_runtime/`，下发文件名和内容沿用现有打包契约。
 
 ## 检查与依赖更新
 

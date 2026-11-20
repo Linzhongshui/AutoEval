@@ -15,11 +15,11 @@ from pydantic import ValidationError
 from sqlalchemy import CheckConstraint, select
 from sqlalchemy.exc import IntegrityError
 
-from autoeval.api import create_app
-from autoeval.config import Settings
-from autoeval.configuration import TestConfigItem as ConfigItem
-from autoeval.configuration import TestConfigVersion as ConfigVersion
-from autoeval.db import create_database
+from autoeval.catalog.models import TestConfigItem as ConfigItem
+from autoeval.catalog.models import TestConfigVersion as ConfigVersion
+from autoeval.entrypoints.api import create_app
+from autoeval.infrastructure.config import Settings
+from autoeval.infrastructure.db import create_database
 
 
 @pytest.fixture(scope="module")
@@ -298,7 +298,7 @@ def test_postgres_standard_import_constraints_idempotency_and_read_only(tmp_path
         "AE_ENVIRONMENT": "test",
         "AE_DATABASE_URL": settings.database_url.get_secret_value(),
     }
-    command = [sys.executable, "-m", "autoeval.import_standard_config", "--input", str(path)]
+    command = [sys.executable, "-m", "autoeval.catalog.import_standard_config", "--input", str(path)]
     options = {
         "capture_output": True,
         "text": True,

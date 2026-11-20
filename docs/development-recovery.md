@@ -33,8 +33,8 @@ docker compose --env-file backend/.env -f deploy/compose.storage-durable.yaml up
 所有uv命令在backend目录执行。切换前停止写入服务，保留源端点配置，先预览再执行：
 
 ```powershell
-uv run python -m autoeval.migrate_storage --target-endpoint http://127.0.0.1:9002
-uv run python -m autoeval.migrate_storage --target-endpoint http://127.0.0.1:9002 --apply
+uv run python -m autoeval.infrastructure.migrate_storage --target-endpoint http://127.0.0.1:9002
+uv run python -m autoeval.infrastructure.migrate_storage --target-endpoint http://127.0.0.1:9002 --apply
 ```
 
 工具只接受本机开发目标；逐对象比较SHA-256，冲突拒绝覆盖，源对象不删除。源对象清单在迁移期间变化会拒绝宣布成功。所有校验通过后才修改客户端端点；切换后同源同目标命令会被拒绝，避免误报迁移。
@@ -42,7 +42,7 @@ uv run python -m autoeval.migrate_storage --target-endpoint http://127.0.0.1:900
 新建受保护备份目录时可执行：
 
 ```powershell
-uv run python -m autoeval.backup create --postgres-container autoeval-demo-postgres-1 --output .secrets/backups/manual-new
+uv run python -m autoeval.infrastructure.backup create --postgres-container autoeval-demo-postgres-1 --output .secrets/backups/manual-new
 ```
 
 目标目录必须不存在。现有restore命令仅用于空scratch数据库/桶，不能直接覆盖当前工作空间。备份应独立于pytest临时目录和存储容器，定期验证；持久卷不替代备份。
@@ -59,7 +59,7 @@ uv run python -m autoeval.repair_gpqa_evidence --csv <缓存CSV路径> --source 
 
 deploy/ssh-sim.Dockerfile以sshd作为前台主进程，setup_ssh_sim.py检测已有监听，避免重复启动守护进程。当前本机恢复镜像autoeval-ssh-sim-recovery:20261111保留该模拟实例的身份和文件，仅供该实例本机恢复；包含其主机私钥，不发布、不用作通用镜像。
 
-API之外分别启动autoeval.dispatcher、autoeval.worker workflow、autoeval.worker io、autoeval.worker gpqa和autoeval.reconciler。启动前核对未确认的真实运行，不通过重提或删除占用解决未知状态。分析Worker仅在目标、资源和预算明确时开启。
+API之外分别启动autoeval.dispatcher、autoeval.entrypoints.worker workflow、autoeval.entrypoints.worker io、autoeval.entrypoints.worker gpqa和autoeval.reconciler。启动前核对未确认的真实运行，不通过重提或删除占用解决未知状态。分析Worker仅在目标、资源和预算明确时开启。
 
 ## 验收解释
 

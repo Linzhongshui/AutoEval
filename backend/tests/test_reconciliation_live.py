@@ -11,15 +11,15 @@ from playwright.async_api import async_playwright, expect
 from sqlalchemy import select
 from temporalio.client import Client
 
-from autoeval import reconciler
-from autoeval.api import create_app
-from autoeval.config import get_settings
-from autoeval.docker_executor import DockerExecutor
-from autoeval.models import EvaluationRun, Outbox, RunEvent, RunSnapshot
-from autoeval.reconciler import reconcile_diagnostic
+from autoeval.entrypoints import reconciler
+from autoeval.entrypoints.api import create_app
+from autoeval.entrypoints.reconciler import reconcile_diagnostic
+from autoeval.evaluation.runs import ExecutionLease
+from autoeval.evaluation.workflows import DockerDiagnosticWorkflow
+from autoeval.infrastructure.config import get_settings
+from autoeval.infrastructure.models import EvaluationRun, Outbox, RunEvent, RunSnapshot
 from autoeval.resources import ResourceBinding
-from autoeval.runs import ExecutionLease
-from autoeval.workflows import DockerDiagnosticWorkflow
+from autoeval.resources.docker_executor import DockerExecutor
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("AE_DOCKER_TEST"), reason="Live services required"
@@ -257,7 +257,7 @@ async def test_background_reconciler_selects_terminal_run_with_lease(monkeypatch
             return "deferred"
 
         monkeypatch.setattr(reconciler, "reconcile_run", observe)
-        monkeypatch.setattr("autoeval.cleanup.reclaim", skip_ssh_cleanup)
+        monkeypatch.setattr("autoeval.infrastructure.cleanup.reclaim", skip_ssh_cleanup)
         monkeypatch.setattr(reconciler.asyncio, "sleep", stop_polling)
         try:
             with pytest.raises(StopPolling):

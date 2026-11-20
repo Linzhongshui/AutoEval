@@ -5,7 +5,7 @@ from unittest.mock import Mock
 import pytest
 from botocore.exceptions import ClientError
 
-from autoeval.repair_gpqa_evidence import restore_exact
+from autoeval.reporting.repair_gpqa_evidence import restore_exact
 
 
 def missing_client():

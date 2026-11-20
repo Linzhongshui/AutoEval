@@ -6,7 +6,7 @@ import uuid
 import httpx
 import pytest
 
-from autoeval.api import create_app
+from autoeval.entrypoints.api import create_app
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("AE_INFRA_TEST"), reason="Live PostgreSQL required"

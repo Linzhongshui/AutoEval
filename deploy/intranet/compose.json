@@ -173,7 +173,7 @@
       "cpus": 2,
       "command": [
         "uvicorn",
-        "autoeval.api:app",
+        "autoeval.entrypoints.api:app",
         "--host",
         "0.0.0.0",
         "--port",

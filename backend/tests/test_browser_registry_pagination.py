@@ -8,13 +8,13 @@ import pytest
 from playwright.sync_api import expect, sync_playwright
 from sqlalchemy import delete, select
 
-from autoeval.config import get_settings
-from autoeval.configuration import TestConfigItem as ConfigItem
-from autoeval.configuration import TestConfigVersion as ConfigVersion
-from autoeval.db import create_database
-from autoeval.registry import Asset, AssetVersion
+from autoeval.catalog.models import TestConfigItem as ConfigItem
+from autoeval.catalog.models import TestConfigVersion as ConfigVersion
+from autoeval.catalog.registry import Asset, AssetVersion
+from autoeval.infrastructure.config import get_settings
+from autoeval.infrastructure.db import create_database
 from autoeval.resources import ResourceBinding, ResourceProvider
-from autoeval.targets import TargetBinding
+from autoeval.resources.models import TargetBinding
 
 PREFIX = "browser-page-" + uuid.uuid4().hex[:10]
 

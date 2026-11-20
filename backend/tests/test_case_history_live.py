@@ -6,10 +6,15 @@ import pytest
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 
-from autoeval.api import create_app
-from autoeval.case_history import AttemptEvidence, AttemptInput, begin_attempt, finish_attempt
-from autoeval.datasets import storage
-from autoeval.models import EvaluationRun
+from autoeval.catalog.datasets import storage
+from autoeval.entrypoints.api import create_app
+from autoeval.infrastructure.models import EvaluationRun
+from autoeval.reporting.case_history import (
+    AttemptEvidence,
+    AttemptInput,
+    begin_attempt,
+    finish_attempt,
+)
 
 pytestmark = pytest.mark.skipif(not os.environ.get("AE_INFRA_TEST"), reason="Live SQL/S3 required")
 
@@ -102,7 +107,7 @@ async def test_fail_retry_success_preserves_both_evidence_and_rejects_overwrite(
         new = (await api.get(f"{prefix}/case-executions/{second}/evidence")).json()["data"]
         assert new["response"] == "" and new["finish_reason"] == "length"
         # S3 corruption cannot masquerade as valid historical evidence.
-        from autoeval.case_history import CaseExecutionRecord
+        from autoeval.reporting.case_history import CaseExecutionRecord
 
         async with app.state.sessions() as session:
             row = await session.scalar(

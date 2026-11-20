@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from autoeval.native_predictions import collect, selected
+from autoeval_runtime.native_predictions import collect, selected
 
 
 def contract():
@@ -71,8 +71,8 @@ def test_runtime_publishes_observed_counts_and_archives_native_files_without_mod
     import sys
     import time
 
-    from autoeval import native_predictions
-    from autoeval import planning_runtime as runtime
+    from autoeval_runtime import native_predictions
+    from autoeval_runtime import planning_runtime as runtime
 
     monkeypatch.setitem(sys.modules, "native_predictions", native_predictions)
     monkeypatch.setattr(runtime, "installed_revision", lambda _: runtime.ADAPTOR_REVISION)

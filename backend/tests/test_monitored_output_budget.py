@@ -1,6 +1,6 @@
 import pytest
 
-from autoeval.monitored_runtime import validate_budget
+from autoeval_runtime.monitored_runtime import validate_budget
 
 
 def request(output=2048, cap=2048):

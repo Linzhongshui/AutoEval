@@ -4,9 +4,9 @@ import uuid
 import pytest
 from fastapi.testclient import TestClient
 
-from autoeval.api import create_app
 from autoeval.catalog.registry import ModelCreate
-from autoeval.config import Settings
+from autoeval.entrypoints.api import create_app
+from autoeval.infrastructure.config import Settings
 
 
 def test_model_registration_accepts_namespaced_identifier():

@@ -151,7 +151,7 @@ async def latest_record(session, run_id, sample_id, attempt_no=None, dataset_key
 
 
 async def trace_status(session, attempt_id):
-    from autoeval.langfuse_integration import TraceImport
+    from autoeval.reporting.langfuse_integration import TraceImport
 
     row = await session.scalar(
         select(TraceImport)

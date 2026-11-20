@@ -20,14 +20,14 @@ from autoeval.analysis.routes import (
     validate_analysis_output,
 )
 from autoeval.catalog.datasets import canonical_manifest, read_manifest, write_manifest
-from autoeval.evaluations import EvaluationReport
+from autoeval.evaluation.evaluations import EvaluationReport
 from autoeval.infrastructure.config import get_settings
 from autoeval.infrastructure.db import create_database
+from autoeval.infrastructure.models import RunSnapshot
 from autoeval.infrastructure.secrets import FileSecretStore
-from autoeval.models import RunSnapshot
-from autoeval.native_smoke import invoke
 from autoeval.reporting.case_history import CaseExecutionRecord
 from autoeval.resources import ResourceBinding, inspect_executor
+from autoeval.resources.native_smoke import invoke
 from autoeval.resources.targets import TargetBinding, validate_url
 
 SAFE_ERROR = re.compile(r"^[A-Z0-9_]{1,64}$")
@@ -267,7 +267,7 @@ async def execute_report_analysis(analysis_id: str, retry_count: int = 0):
         credential = await asyncio.to_thread(
             FileSecretStore(settings.secret_store_path).get, target.credential_ref
         )
-        from autoeval.billing_transport import budget_ignored, execution_route
+        from autoeval.billing.transport import budget_ignored, execution_route
 
         budget_route = execution_route(settings, job.run_id, target.id, 'analysis', 'analysis',
                                        ignore_budget=budget_ignored(snapshot.canonical_body))
@@ -349,7 +349,7 @@ def invoke_compatible_analysis(settings, container_id, payload):
             container_id,
             "python",
             "-m",
-            "autoeval.analysis_runtime",
+            "autoeval.analysis.analysis_runtime",
         ],
         input=json.dumps(payload).encode(),
         capture_output=True,

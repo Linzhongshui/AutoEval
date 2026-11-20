@@ -12,26 +12,27 @@ from temporalio.client import WorkflowExecutionStatus
 from temporalio.common import WorkflowIDReusePolicy
 from temporalio.service import RPCError, RPCStatusCode
 
-from autoeval import evaluation_activity, reconciler
-from autoeval.audit import AuditEvent
-from autoeval.case_history import (
+from autoeval.catalog.datasets import canonical_manifest
+from autoeval.catalog.registry import Asset, AssetVersion
+from autoeval.entrypoints import reconciler
+from autoeval.evaluation import evaluation_activity
+from autoeval.evaluation.evaluations import EvaluationReport
+from autoeval.evaluation.run_activities import transition
+from autoeval.evaluation.runs import ExecutionLease
+from autoeval.evaluation.workflows import GpqaExplorationWorkflow
+from autoeval.infrastructure.audit import AuditEvent
+from autoeval.infrastructure.config import Settings
+from autoeval.infrastructure.models import EvaluationRun, RunEvent, RunSnapshot
+from autoeval.infrastructure.secrets import FileSecretStore
+from autoeval.reporting import case_history
+from autoeval.reporting.case_history import (
     AttemptEvidence,
     AttemptInput,
     CaseExecutionRecord,
     begin_attempt,
     finish_attempt,
 )
-from autoeval.config import Settings
-from autoeval.datasets import canonical_manifest
-from autoeval.evaluations import EvaluationReport
-from autoeval.models import EvaluationRun, RunEvent, RunSnapshot
-from autoeval.registry import Asset, AssetVersion
-from autoeval.reporting import case_history
-from autoeval.run_activities import transition
-from autoeval.runs import ExecutionLease
-from autoeval.secrets import FileSecretStore
-from autoeval.targets import TargetBinding
-from autoeval.workflows import GpqaExplorationWorkflow
+from autoeval.resources.models import TargetBinding
 
 
 @pytest.fixture

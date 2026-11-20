@@ -11,11 +11,11 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from autoeval.catalog.datasets import canonical_manifest, read_manifest
+from autoeval.evaluation.runs import complete_cleanup
 from autoeval.infrastructure.audit import record_audit
-from autoeval.models import Base, EvaluationRun, Record, RunSnapshot
+from autoeval.infrastructure.models import Base, EvaluationRun, Record, RunSnapshot
 from autoeval.reporting.case_history import CaseExecutionRecord
 from autoeval.resources.execution_transport import ssh_transport
-from autoeval.runs import complete_cleanup
 
 
 class ExecutionCleanup(Record, Base):
@@ -56,8 +56,8 @@ def cleanup_view(row, *, required=True):
 
 
 async def reclaim(sessions, settings, run_id, *, force=False):
-    from autoeval.evaluation_activity import _verified_report, model_payload
-    from autoeval.evaluations import EvaluationReport
+    from autoeval.evaluation.evaluation_activity import _verified_report, model_payload
+    from autoeval.evaluation.evaluations import EvaluationReport
 
     now, token = datetime.now(UTC), uuid.uuid4()
     async with sessions() as session, session.begin():

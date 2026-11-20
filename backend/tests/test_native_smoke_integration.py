@@ -6,12 +6,11 @@ import uuid
 import pytest
 from sqlalchemy import select
 
-from autoeval import native_smoke
-from autoeval.config import get_settings
-from autoeval.db import create_database
-from autoeval.models import RunEvent, RunSnapshot
-from autoeval.resources import ResourceBinding
-from autoeval.targets import TargetBinding
+from autoeval.infrastructure.config import get_settings
+from autoeval.infrastructure.db import create_database
+from autoeval.infrastructure.models import RunEvent, RunSnapshot
+from autoeval.resources import ResourceBinding, native_smoke
+from autoeval.resources.models import TargetBinding
 
 pytestmark = pytest.mark.skipif(not os.environ.get("AE_INFRA_TEST"), reason="Live SQL/S3 required")
 

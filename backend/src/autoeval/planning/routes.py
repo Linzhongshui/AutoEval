@@ -1,3 +1,4 @@
+# ruff: noqa: PLC0414 -- explicit compatibility re-exports
 """Persistent planning intents. Workers own calculations and remote generation probes."""
 
 import copy
@@ -6,22 +7,23 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
 from fastapi import APIRouter, Header, HTTPException, Request
-from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select, text
 
-from autoeval.datasets import DatasetManifest
+from autoeval.catalog.datasets import DatasetManifest
+from autoeval.catalog.standard_inputs import (
+    StandardInputCompilation,
+    StandardInputVersion,
+    digest,
+    reject_secrets,
+)
+from autoeval.evaluation.inputs import resolve_inputs, target_data
 from autoeval.evaluation.service import (
-    artifact,
-    current_preflight,
     planned_run_detail,
     planned_run_report,
-    resolve_inputs,
-    submit_planned_run,
-    target_data,
 )
-from autoeval.planning.models import PlanningArtifact, PlanningJob
-from autoeval.planning_engine import DATASETS, apply_concurrency
-from autoeval.responses import (
+from autoeval.evaluation.submission import submit_planned_run
+from autoeval.infrastructure.responses import (
     Accepted,
     Envelope,
     ObjectPageEnvelope,
@@ -29,94 +31,12 @@ from autoeval.responses import (
     SubmittedRun,
     envelope,
 )
-from autoeval.standard_inputs import (
-    StandardInputCompilation,
-    StandardInputVersion,
-    digest,
-    reject_secrets,
-)
-
-
-class Strict(BaseModel):
-    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
-
-
-class ResourceRef(Strict):
-    resource_id: uuid.UUID
-    resource_kind: Literal["docker_local", "customer_ssh"]
-
-
-class ProbeInput(ResourceRef):
-    target_id: uuid.UUID
-    concurrency: list[int] = Field(default_factory=lambda: [1, 2, 4, 8], min_length=1, max_length=7)
-    requests_per_level: int = Field(default=2, ge=1, le=64)
-    prompt_tokens: int = Field(default=512, ge=1, le=4096)
-    max_tokens: int = Field(default=512, ge=1, le=4096)
-
-    @model_validator(mode="after")
-    def levels(self):
-        if sorted(set(self.concurrency)) != self.concurrency or any(
-            not 1 <= n <= 64 for n in self.concurrency
-        ):
-            raise ValueError("Unique increasing concurrency levels in 1..64 required")
-        return self
-
-
-class TaskInput(Strict):
-    concurrency: int | None = Field(default=None, ge=1, le=256)
-    task_id: str = Field(pattern=r"^[a-zA-Z0-9_-]{1,64}$")
-    compilation_id: uuid.UUID
-    manifest_id: uuid.UUID
-    dataset: Literal["GPQA", "MMMU-Pro", "DeepSWE", "AutomationBench"]
-
-    @model_serializer(mode="wrap")
-    def serialize(self, handler):
-        value = handler(self)
-        # Preserve old request hashes when callers do not supply the new optional setting.
-        if self.concurrency is None:
-            value.pop("concurrency", None)
-        return value
-
-
-class PlanInput(ResourceRef):
-    resource_ids: list[uuid.UUID] = Field(default_factory=list, max_length=16)
-    ignore_budget: bool = Field(default=False, strict=True)
-
-    @model_serializer(mode="wrap")
-    def serialize(self, handler):
-        value = handler(self)
-        if not self.resource_ids:
-            value.pop("resource_ids", None)
-        if not self.ignore_budget:
-            value.pop("ignore_budget", None)
-        return value
-
-    target_id: uuid.UUID
-    throughput_profile_id: uuid.UUID | None = None
-    tasks: list[TaskInput] = Field(min_length=1, max_length=4)
-    dataset_concurrency: int = Field(default=1, ge=1, le=3)
-    recommend: bool = True
-    runs: int = Field(default=100, ge=1, le=100)
-    seed: int = Field(default=20261111, ge=0, le=2147483647)
-
-    @model_validator(mode="after")
-    def unique(self):
-        if self.resource_ids and (self.resource_id not in self.resource_ids or len(set(self.resource_ids)) != len(self.resource_ids)):
-            raise ValueError("Resource pool must be unique and contain the primary resource")
-        if len({t.task_id for t in self.tasks}) != len(self.tasks) or len(
-            {t.dataset for t in self.tasks}
-        ) != len(self.tasks):
-            raise ValueError("Duplicate task or dataset")
-        return self
-
-
-class CurveInput(ResourceRef):
-    target_id: uuid.UUID
-    curve: dict
-
-
-class ApplyInput(Strict):
-    input_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+from autoeval.planning.artifacts import artifact, current_preflight
+from autoeval.planning.models import PlanningArtifact, PlanningJob
+from autoeval.planning.planning_engine import DATASETS, apply_concurrency
+from autoeval.planning.schemas import ApplyInput, CurveInput, PlanInput, ProbeInput, Strict
+from autoeval.planning.schemas import ResourceRef as ResourceRef
+from autoeval.planning.schemas import TaskInput as TaskInput
 
 
 class IdOnly(BaseModel):
@@ -207,7 +127,7 @@ router = APIRouter(prefix="/api/autoeval/v1/planning", tags=["task planning"])
 
 @router.get("/options", response_model=ObjectPageEnvelope[PlanningOptions])
 async def options(request: Request, offset: int = 0, limit: int = 100, include_test: bool = False):
-    from autoeval.profiles import EvaluationProfile
+    from autoeval.catalog.models import EvaluationProfile
 
     if offset < 0 or not 1 <= limit <= 200:
         raise HTTPException(422, "Invalid pagination")
@@ -435,7 +355,7 @@ async def enqueue(kind, payload, request):
 
 @router.post("/probes", status_code=202, response_model=Envelope[JobAccepted])
 async def probe(body: ProbeInput, request: Request):
-    from autoeval.probe_dispatch import consumer_ready
+    from autoeval.planning.probe_dispatch import consumer_ready
 
     async with request.app.state.sessions() as session, session.begin():
         if not await consumer_ready(session):
@@ -484,7 +404,7 @@ async def job_status(job_id: uuid.UUID, request: Request):
             raise HTTPException(404, "Planning job not found")
         result = row.result
         if row.kind == "probe" and row.state == "pending":
-            from autoeval.probe_dispatch import consumer_ready
+            from autoeval.planning.probe_dispatch import consumer_ready
 
             if not await consumer_ready(session, row.id, row.created_at):
                 result = {
@@ -514,8 +434,8 @@ class CloseProbe(Strict):
 
 @router.post("/probes/{job_id}/reconcile", response_model=Envelope[ProbeReconciled])
 async def reconcile_probe(job_id: uuid.UUID, request: Request):
-    from autoeval.contracts import JobRef
-    from autoeval.planning_transport import transport
+    from autoeval.infrastructure.contracts import JobRef
+    from autoeval.planning.planning_transport import transport
 
     async with request.app.state.sessions() as session, session.begin():
         idle = await session.scalar(
@@ -572,7 +492,7 @@ async def reconcile_probe(job_id: uuid.UUID, request: Request):
 
 @router.post("/probes/{job_id}/close", response_model=Envelope[JobAccepted])
 async def close_probe(job_id: uuid.UUID, body: CloseProbe, request: Request):
-    from autoeval.audit import AuditEvent
+    from autoeval.infrastructure.audit import AuditEvent
 
     async with request.app.state.sessions() as session, session.begin():
         idle = await session.scalar(
@@ -685,7 +605,7 @@ async def apply_plan(job_id: uuid.UUID, body: ApplyInput, request: Request):
         report = job.result["report"]
         inputs = copy.deepcopy(job.payload)
         try:
-            from autoeval.evaluation.service import demand_for, fits
+            from autoeval.evaluation.resource_allocation import demand_for, fits
 
             for item in inputs["tasks"]:
                 item["concurrency"] = report["plan"]["case_concurrency"][item["task_id"]]
@@ -734,7 +654,7 @@ async def submit_run(
 
 @router.get("/runs", response_model=PageEnvelope[PlannedRunItem])
 async def list_runs(request: Request, offset: int = 0, limit: int = 20):
-    from autoeval.models import EvaluationRun
+    from autoeval.infrastructure.models import EvaluationRun
 
     if offset < 0 or not 1 <= limit <= 100:
         raise HTTPException(422, "Invalid pagination")
@@ -770,7 +690,7 @@ async def run_detail(run_id: uuid.UUID, request: Request):
 
 @router.post("/runs/{run_id}/cancel", status_code=202, response_model=Envelope[Accepted])
 async def cancel_run(run_id: uuid.UUID, request: Request):
-    from autoeval.models import EvaluationRun
+    from autoeval.infrastructure.models import EvaluationRun
 
     async with request.app.state.sessions() as session, session.begin():
         run = await session.get(EvaluationRun, run_id, with_for_update=True)

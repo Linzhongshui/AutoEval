@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 from autoeval.catalog.datasets import canonical_manifest, read_manifest
 from autoeval.evaluation.models import EvaluationReport
-from autoeval.models import EvaluationRun, RunSnapshot
+from autoeval.infrastructure.models import EvaluationRun, RunSnapshot
 from autoeval.reporting.report_integrity import report_evidence_status
 from autoeval.reporting.unified_outputs import parse_output
 

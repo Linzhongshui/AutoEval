@@ -9,10 +9,15 @@ import pytest
 from autoeval_planner.library.db import Library
 from pydantic import ValidationError
 
-from autoeval.orchestration import demand_for, fits
+from autoeval.evaluation.service import demand_for, fits
 from autoeval.planning import PlanInput, ProbeInput, selection_identity
-from autoeval.planning_engine import apply_concurrency, calculate, import_history, selected_samples
-from autoeval.planning_runtime import validate_spec
+from autoeval.planning.planning_engine import (
+    apply_concurrency,
+    calculate,
+    import_history,
+    selected_samples,
+)
+from autoeval_runtime.planning_runtime import validate_spec
 
 
 def inputs():
@@ -77,7 +82,7 @@ def test_sample_selection_honors_offset_limit_and_harbor_attempt_selection():
 
 @pytest.mark.skipif(sys.platform != "linux", reason="SSH job runtime is Linux-only")
 def test_job_runtime_credential_file_is_private(tmp_path):
-    from autoeval.job_runtime import write_credential
+    from autoeval.infrastructure.job_runtime import write_credential
 
     path = tmp_path / "credential.json"
     write_credential(path, "TEST-only")
@@ -238,7 +243,7 @@ async def test_planned_workflow_is_valid_in_temporal_sandbox():
     from temporalio import workflow
     from temporalio.worker.workflow_sandbox import SandboxedWorkflowRunner
 
-    from autoeval.workflows import PlannedEvaluationWorkflow
+    from autoeval.evaluation.workflows import PlannedEvaluationWorkflow
 
     SandboxedWorkflowRunner().prepare_workflow(
         workflow._Definition.must_from_class(PlannedEvaluationWorkflow)
@@ -262,7 +267,7 @@ def test_manifest_aliases_reject_other_datasets(dataset, key):
 
 
 def test_native_gpqa_report_requires_matching_scores_and_accuracy():
-    from autoeval.orchestration import gpqa_report_summary
+    from autoeval.evaluation.orchestration import gpqa_report_summary
 
     task = {
         "samples": [{"sample_id": "a"}, {"sample_id": "b"}],
@@ -294,7 +299,7 @@ def test_offline_planner_identity_requires_all_locked_source_hashes(tmp_path, mo
     from pathlib import Path
     from types import SimpleNamespace
 
-    from autoeval import planning_runtime
+    from autoeval_runtime import planning_runtime
 
     real = importlib.metadata.distribution("autoeval-task-planner")
     root = Path(real.locate_file("autoeval_planner"))

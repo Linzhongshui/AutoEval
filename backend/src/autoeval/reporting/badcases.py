@@ -20,7 +20,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from autoeval.catalog.dataset_identity import report_dataset
 from autoeval.catalog.datasets import canonical_manifest, read_manifest
 from autoeval.evaluation.models import EvaluationReport
-from autoeval.models import EvaluationRun, RunSnapshot
+from autoeval.infrastructure.models import EvaluationRun, RunSnapshot
 from autoeval.reporting.models import CaseExecutionRecord
 from autoeval.reporting.report_integrity import verified_report_body
 from autoeval.reporting.unified_outputs import parse_output
@@ -223,7 +223,7 @@ async def latest_records(session, run_id, sample_ids, dataset_keys=None):
 async def trace_statuses(session, rows):
     if not rows:
         return {}
-    from autoeval.langfuse_integration import TraceImport
+    from autoeval.reporting.langfuse_integration import TraceImport
 
     imports = (
         await session.scalars(

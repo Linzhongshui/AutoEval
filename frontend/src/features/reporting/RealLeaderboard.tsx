@@ -1,3 +1,4 @@
+import { TableWrap } from "../../shared/ui/TableWrap";
 import { useEffect, useState } from "react";
 import { apiGet } from "../../shared/api";
 
@@ -86,7 +87,7 @@ export function RealLeaderboard({ open }: { open: (id: string) => void }) {
             <span className="badge">同条件报告 {group.entries.length}</span>
           </div>
           <section className="card table-card">
-            <div className="table-wrap">
+            <TableWrap>
               <table className="leader-table">
                 <thead>
                   <tr><th>排名</th><th>模型 / run_id</th><th>{group.metric_name}</th><th>created_at</th><th>报告</th></tr>
@@ -112,7 +113,7 @@ export function RealLeaderboard({ open }: { open: (id: string) => void }) {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </TableWrap>
           </section>
 
           <div className="task-columns">

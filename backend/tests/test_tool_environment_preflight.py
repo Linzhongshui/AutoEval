@@ -1,7 +1,7 @@
 import json
 from types import SimpleNamespace
 
-from autoeval.planning_runtime import check_tool_environment
+from autoeval_runtime.planning_runtime import check_tool_environment
 
 
 def test_preflight_only_uses_placeholder_and_preserves_config(monkeypatch):
@@ -20,7 +20,7 @@ def test_preflight_only_uses_placeholder_and_preserves_config(monkeypatch):
         assert kwargs["capture_output"] is True
         return SimpleNamespace(returncode=2)
 
-    monkeypatch.setattr("autoeval.planning_runtime.subprocess.run", run)
+    monkeypatch.setattr("autoeval_runtime.planning_runtime.subprocess.run", run)
     assert not check_tool_environment(config)
     assert config["params"] == {"work_dir": "/original"}
 
@@ -39,14 +39,14 @@ def test_automationbench_uses_harbor_resource_reservations():
 
 
 def test_task_selection_preflight_never_runs_agent(monkeypatch):
-    from autoeval.planning_runtime import check_task_selection
+    from autoeval_runtime.planning_runtime import check_task_selection
 
     def run(command, **kwargs):
         assert "get_task_configs" in command[2] and "Job(" not in command[2]
         assert json.loads(command[3])["task_names"] == ["directory-id"]
         return SimpleNamespace(returncode=0)
 
-    monkeypatch.setattr("autoeval.planning_runtime.subprocess.run", run)
+    monkeypatch.setattr("autoeval_runtime.planning_runtime.subprocess.run", run)
     assert check_task_selection(
         {
             "params": {

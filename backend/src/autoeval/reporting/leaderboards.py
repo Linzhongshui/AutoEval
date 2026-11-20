@@ -12,9 +12,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from autoeval.catalog.dataset_identity import report_dataset
 from autoeval.catalog.datasets import canonical_manifest
 from autoeval.evaluation.models import EvaluationReport
-from autoeval.models import EvaluationRun, RunSnapshot
+from autoeval.infrastructure.models import EvaluationRun, RunSnapshot
+from autoeval.infrastructure.responses import LeaderboardEnvelope
 from autoeval.reporting.report_integrity import verified_report_body
-from autoeval.responses import LeaderboardEnvelope
 
 router = APIRouter(prefix="/api/autoeval/v1/leaderboard", tags=["internal leaderboard"])
 

@@ -2,7 +2,7 @@
 
 页面提示“探测执行器未启用”来自 `/planning/probes` 的消费者在线检查。服务器原 planning Worker 仅处理 preflight、plan；取消预算拦截并不会自动启动 probe 消费者。
 
-已启动独立 Compose 服务 `autoeval-platform-probe-1`，复用原 planning 服务的受保护配置、网络和持久挂载，运行 `python -m autoeval.planning_worker`，仅消费 `AE_PLANNING_JOB_KINDS=probe`。镜像固定为 `sha256:77626a6b9d0db73bb94710fa038c5adcc26bec7ba1cf004949d9e88f57576540`。
+已启动独立 Compose 服务 `autoeval-platform-probe-1`，复用原 planning 服务的受保护配置、网络和持久挂载，运行 `python -m autoeval.planning.planning_worker`，仅消费 `AE_PLANNING_JOB_KINDS=probe`。镜像固定为 `sha256:77626a6b9d0db73bb94710fa038c5adcc26bec7ba1cf004949d9e88f57576540`。
 
 设置 `AE_PLANNING_PROBE_ACCEPT_AFTER=2026-11-17T12:55:49+00:00`（北京时间20:55:49），避免启动时消费过去积压任务。服务器部署记录位于 `/home/chenluwen/autoeval-platform/probe-worker-20261117/compose.json`，目录700、文件600；该文件含运行环境配置，不提交仓库。后续维护应沿用该 override，不重置时间边界。
 

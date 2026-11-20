@@ -15,15 +15,15 @@ from pydantic import SecretStr, ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.engine import make_url
 
-from autoeval.api import create_app
-from autoeval.config import get_settings
-from autoeval.evaluation_tasks import SubmitTask
-from autoeval.models import Base, EvaluationRun, Outbox, RunSnapshot
-from autoeval.orchestration import DatasetExecution
+from autoeval.catalog.registry import Asset, AssetVersion
+from autoeval.entrypoints.api import create_app
+from autoeval.evaluation.evaluation_tasks import SubmitTask
+from autoeval.evaluation.models import DatasetExecution
+from autoeval.infrastructure.config import get_settings
+from autoeval.infrastructure.models import Base, EvaluationRun, Outbox, RunSnapshot
 from autoeval.planning import PlanningJob
-from autoeval.planning_transport import PlanningRemoteContainer
-from autoeval.registry import Asset, AssetVersion
-from autoeval.targets import TargetBinding
+from autoeval.planning.planning_transport import PlanningRemoteContainer
+from autoeval.resources.models import TargetBinding
 
 
 def submission(datasets=("GPQA", "MMMU-Pro")):
@@ -60,7 +60,7 @@ def test_submit_contract_has_only_final_parameters():
 
 
 def test_execution_transport_does_not_require_planner(monkeypatch):
-    monkeypatch.setattr("autoeval.planning_runtime.installed_revision", lambda _: None)
+    monkeypatch.setattr("autoeval_runtime.planning_runtime.installed_revision", lambda _: None)
     transport = PlanningRemoteContainer(
         SimpleNamespace(workdir="/test", owner_id="test"), "c" * 64, "sha256:" + "d" * 64
     )
@@ -69,7 +69,7 @@ def test_execution_transport_does_not_require_planner(monkeypatch):
 
 
 def test_remote_runtime_can_share_absolute_host_mount(monkeypatch):
-    monkeypatch.setattr("autoeval.planning_runtime.installed_revision", lambda _: None)
+    monkeypatch.setattr("autoeval_runtime.planning_runtime.installed_revision", lambda _: None)
     connection = SimpleNamespace(workdir="/test", owner_id="test")
     adapter = PlanningRemoteContainer(
         connection, "c" * 64, "sha256:" + "d" * 64, runtime_root="/acceptance/shared-runtime"
@@ -90,7 +90,7 @@ class NoPlanner(importlib.abc.MetaPathFinder):
         if fullname.startswith('autoeval_planner'):
             raise ModuleNotFoundError('Planner intentionally unavailable', name=fullname)
 sys.meta_path.insert(0, NoPlanner())
-from autoeval.api import create_app
+from autoeval.entrypoints.api import create_app
 assert '/api/autoeval/v1/evaluation-tasks' in create_app().openapi()['paths']
 """
     result = subprocess.run(
@@ -135,7 +135,7 @@ async def test_final_form_concurrency_cannot_override_scoring_lock(monkeypatch):
     async def target(*args):
         return {"model": "TEST", "base_url": "https://fixture.invalid"}
 
-    monkeypatch.setattr("autoeval.evaluation.service.target_data", target)
+    monkeypatch.setattr("autoeval.evaluation.inputs.target_data", target)
     with pytest.raises(HTTPException, match="Standard lock conflicts") as exc:
         await resolve_inputs(Session(), get_settings(), body)
     assert exc.value.status_code == 422
@@ -216,8 +216,8 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                     },
                 )
 
-            monkeypatch.setattr("autoeval.orchestration.resolve_inputs", resolve)
-            monkeypatch.setattr("autoeval.orchestration.current_preflight", preflight)
+            monkeypatch.setattr("autoeval.evaluation.submission.resolve_inputs", resolve)
+            monkeypatch.setattr("autoeval.evaluation.submission.current_preflight", preflight)
             async with httpx.AsyncClient(
                 transport=httpx.ASGITransport(app), base_url="http://test"
             ) as c:
@@ -317,7 +317,7 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                 async def no_object_write(*args, **kwargs):
                     return None
 
-                monkeypatch.setattr("autoeval.probe_dispatch.consumer_ready", ready)
+                monkeypatch.setattr("autoeval.planning.probe_dispatch.consumer_ready", ready)
                 monkeypatch.setattr("autoeval.planning.routes.artifact", no_object_write)
                 probe_body = {
                     "target_id": target_id,
@@ -362,7 +362,7 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                     "data"
                 ]["state"] == "cancelled"
                 # Expired preflight is refreshed without issuing a generating request.
-                from autoeval.planning_worker import ProbePreflightBlocked, execute_job
+                from autoeval.planning.planning_worker import ProbePreflightBlocked, execute_job
 
                 class ProbeAdapter:
                     checks = 0
@@ -384,8 +384,8 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                 async def expired(*args, **kwargs):
                     return None
 
-                monkeypatch.setattr("autoeval.planning_worker.transport", transport)
-                monkeypatch.setattr("autoeval.planning_worker.current_preflight", expired)
+                monkeypatch.setattr("autoeval.planning.planning_worker.transport", transport)
+                monkeypatch.setattr("autoeval.planning.planning_worker.current_preflight", expired)
                 async with app.state.sessions() as session, session.begin():
                     candidate = PlanningJob(
                         kind="probe",
@@ -409,7 +409,7 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                     return SimpleNamespace(state="unknown")
 
                 adapter.status = status
-                monkeypatch.setattr("autoeval.planning_transport.transport", transport)
+                monkeypatch.setattr("autoeval.planning.planning_transport.transport", transport)
                 path = "/api/autoeval/v1/planning/probes/" + saved["id"]
                 close = {
                     "reason": "TEST historical evidence unavailable",
@@ -422,7 +422,7 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                 closed = await c.post(path + "/close", json=close)
                 assert closed.status_code == 200, closed.text
                 assert closed.json()["data"]["result"]["closure"]["execution_outcome"] == "unknown"
-                from autoeval.audit import AuditEvent
+                from autoeval.infrastructure.audit import AuditEvent
 
                 async with app.state.sessions() as session:
                     event = await session.scalar(

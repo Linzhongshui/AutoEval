@@ -5,9 +5,9 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from autoeval import planning_observations
 from autoeval.evaluation.resource_allocation import execution_compilation
-from autoeval.task_monitor import normalize
+from autoeval.evaluation.task_monitor import normalize
+from autoeval.planning import planning_observations
 
 
 def test_runtime_metadata_is_not_sent_and_snapshot_is_not_mutated():

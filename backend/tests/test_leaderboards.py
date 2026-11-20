@@ -3,9 +3,9 @@ import math
 import pytest
 from fastapi.testclient import TestClient
 
-from autoeval.api import create_app
-from autoeval.config import Settings
-from autoeval.leaderboards import rank_leaderboard
+from autoeval.entrypoints.api import create_app
+from autoeval.infrastructure.config import Settings
+from autoeval.reporting.leaderboards import rank_leaderboard
 
 
 def report(report_id, accuracy, *, validity="complete", manifest="manifest-a", model="model-a"):

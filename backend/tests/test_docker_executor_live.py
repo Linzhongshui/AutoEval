@@ -5,9 +5,9 @@ import uuid
 
 import pytest
 
-from autoeval.config import get_settings
-from autoeval.docker_executor import DockerExecutor
+from autoeval.infrastructure.config import get_settings
 from autoeval.resources import inspect_executor
+from autoeval.resources.docker_executor import DockerExecutor
 
 pytestmark = pytest.mark.skipif(
     not os.environ.get("AE_DOCKER_TEST"), reason="Docker executor required"

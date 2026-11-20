@@ -4,10 +4,15 @@ import uuid
 import pytest
 from playwright.async_api import async_playwright, expect
 
-from autoeval.case_history import AttemptEvidence, AttemptInput, begin_attempt, finish_attempt
-from autoeval.config import get_settings
-from autoeval.db import create_database
-from autoeval.models import EvaluationRun
+from autoeval.infrastructure.config import get_settings
+from autoeval.infrastructure.db import create_database
+from autoeval.infrastructure.models import EvaluationRun
+from autoeval.reporting.case_history import (
+    AttemptEvidence,
+    AttemptInput,
+    begin_attempt,
+    finish_attempt,
+)
 
 
 @pytest.mark.skipif(not os.environ.get("AE_BROWSER_URL"), reason="Live services required")

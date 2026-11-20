@@ -4,10 +4,10 @@ import uuid
 
 from pydantic import SecretStr
 
+from autoeval.infrastructure.secrets import FileSecretStore
 from autoeval.resources.models import SSHResourceBinding
-from autoeval.secrets import FileSecretStore
-from autoeval.ssh_executor import SSHConnection
-from autoeval.ssh_native import SSHNativeTransport
+from autoeval.resources.ssh_executor import SSHConnection
+from autoeval.resources.ssh_native import SSHNativeTransport
 
 
 def frozen_ssh_resource(row, settings):

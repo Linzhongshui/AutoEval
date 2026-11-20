@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from autoeval.billing_transport import execution_route, route_compilation
+from autoeval.billing.transport import execution_route, route_compilation
 
 
 def test_private_budget_routing_and_no_fallback(tmp_path):
@@ -45,7 +45,7 @@ def test_private_budget_routing_and_no_fallback(tmp_path):
 async def test_gateway_rejects_unscoped_and_expired_tokens_without_model_calls(tmp_path):
     import httpx
 
-    from autoeval.billing_gateway import create_gateway
+    from autoeval.billing.gateway import create_gateway
 
     path = tmp_path / "gateway.json"
     token = "test-only"
@@ -76,7 +76,7 @@ async def test_stream_relays_live_and_commits_before_done(monkeypatch, missing_u
 
     import httpx
 
-    import autoeval.billing_stream as stream
+    from autoeval.billing import stream
 
     wire = b'data: {"choices":[{"delta":{"content":"answer"}}]}\n\n'
     if not missing_usage:
@@ -129,8 +129,8 @@ async def test_stream_relays_live_and_commits_before_done(monkeypatch, missing_u
 def test_budget_mode_blocks_legacy_paid_entrypoints(tmp_path):
     from fastapi.testclient import TestClient
 
-    from autoeval.api import create_app
-    from autoeval.config import Settings
+    from autoeval.entrypoints.api import create_app
+    from autoeval.infrastructure.config import Settings
 
     client = TestClient(create_app(Settings(billing_execution_config=tmp_path / "private.json", enforce_task_budget=True)))
     for path in ("/runs", "/aisbench-monitored/runs", "/planning/probes"):
@@ -143,7 +143,7 @@ def test_budget_mode_blocks_legacy_paid_entrypoints(tmp_path):
 async def test_unexpected_failure_latches_proxy_closed(tmp_path):
     import httpx
 
-    from autoeval.billing_gateway import create_gateway
+    from autoeval.billing.gateway import create_gateway
 
     path = tmp_path / "gateway.json"
     token = "test-scoped-token"
@@ -169,8 +169,8 @@ async def test_unexpected_failure_latches_proxy_closed(tmp_path):
 def test_default_budget_policy_does_not_block_probe_validation(tmp_path):
     from fastapi.testclient import TestClient
 
-    from autoeval.api import create_app
-    from autoeval.config import Settings
+    from autoeval.entrypoints.api import create_app
+    from autoeval.infrastructure.config import Settings
 
     client = TestClient(create_app(Settings(billing_execution_config=tmp_path / "missing-private.json")))
     response = client.post('/api/autoeval/v1/planning/probes', json={})

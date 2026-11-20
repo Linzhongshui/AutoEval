@@ -7,7 +7,7 @@ from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, UniqueCons
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from autoeval.models import Base, Record
+from autoeval.infrastructure.models import Base, Record
 
 
 class EvaluationReport(Record, Base):
@@ -28,6 +28,10 @@ class EvaluationReport(Record, Base):
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     review_note: Mapped[str | None] = mapped_column(String(1000))
     __table_args__ = (
+        CheckConstraint(
+            "execution_origin IN ('real','simulation','unverified')",
+            name="ck_report_origin",
+        ),
         CheckConstraint(
             "review_status IN ('pending','approved','revoked')",
             name="ck_evaluation_report_review_status",

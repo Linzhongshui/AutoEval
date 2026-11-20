@@ -3,11 +3,11 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
-from autoeval.models import Base, Record
+from autoeval.infrastructure.models import Base, Record
 
 
 class ReportAnalysis(Record, Base):
@@ -35,6 +35,8 @@ class ReportAnalysis(Record, Base):
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     __table_args__ = (
+        Index("ix_report_analysis_run", "run_id"),
+        Index("ix_report_analysis_state", "state", "created_at"),
         CheckConstraint("state IN ('queued','running','succeeded','failed','unresolved')"),
         CheckConstraint("trigger IN ('report_created','manual_start','manual_retry')"),
         CheckConstraint("retry_count >= 0"),

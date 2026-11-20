@@ -59,4 +59,12 @@ def report_data(
         "analysis_status": analysis_status,
         "analysis_id": str(analysis_id) if analysis_id else None,
         "baseline_comparison": comparison,
+        "review_status": getattr(row, "review_status", "pending"),
+        "reviewed_by": getattr(row, "reviewed_by", None),
+        "reviewed_at": (
+            row.reviewed_at.isoformat()
+            if getattr(row, "reviewed_at", None)
+            else None
+        ),
+        "review_note": getattr(row, "review_note", None),
     }

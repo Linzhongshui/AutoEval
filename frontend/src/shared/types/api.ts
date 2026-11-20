@@ -847,6 +847,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/autoeval/v1/runs/{run_id}/result-revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Result Revisions */
+        get: operations["result_revisions_api_autoeval_v1_runs__run_id__result_revisions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/autoeval/v1/runs/{run_id}/result-revisions/{revision_id}/cases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recovered Cases */
+        get: operations["recovered_cases_api_autoeval_v1_runs__run_id__result_revisions__revision_id__cases_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/autoeval/v1/runs/{run_id}/traces": {
         parameters: {
             query?: never;
@@ -1453,6 +1487,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/autoeval/v1/reports/{report_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Review
+         * @description Mark one immutable report as an approved history source; never edits evidence.
+         */
+        post: operations["review_api_autoeval_v1_reports__report_id__review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/autoeval/v1/reports/{report_id}/evidence": {
         parameters: {
             query?: never;
@@ -1464,6 +1518,57 @@ export interface paths {
         get: operations["evidence_api_autoeval_v1_reports__report_id__evidence_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/autoeval/v1/runs/{run_id}/badcase-comparison": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Badcase Comparison */
+        get: operations["badcase_comparison_api_autoeval_v1_runs__run_id__badcase_comparison_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/autoeval/v1/runs/{run_id}/badcase-case": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Badcase Case Detail */
+        get: operations["badcase_case_detail_api_autoeval_v1_runs__run_id__badcase_case_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/autoeval/v1/runs/{run_id}/badcase-export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Badcase Export */
+        post: operations["badcase_export_api_autoeval_v1_runs__run_id__badcase_export_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1562,6 +1667,10 @@ export interface components {
         };
         /** CaseExecutionItem */
         CaseExecutionItem: {
+            /** Metadata Provenance */
+            metadata_provenance?: {
+                [key: string]: unknown;
+            } | null;
             /** Trace Status */
             trace_status: string;
             /** Trace Id */
@@ -1893,7 +2002,7 @@ export interface components {
             scope: "full" | "lite";
             /** Conditions */
             conditions: {
-                [key: string]: string | number;
+                [key: string]: string | number | null;
             };
             /** Source Name */
             source_name: string;
@@ -2024,6 +2133,24 @@ export interface components {
             expected_samples?: number | null;
             /** Gate Status */
             gate_status?: string | null;
+        };
+        /** ExportInput */
+        ExportInput: {
+            /** Dataset Key */
+            dataset_key?: string | null;
+            /**
+             * Scope
+             * @default suspicious
+             * @enum {string}
+             */
+            scope: "selected" | "high" | "suspicious" | "all";
+            /** Sample Ids */
+            sample_ids?: string[];
+            /**
+             * Include Traces
+             * @default true
+             */
+            include_traces: boolean;
         };
         /** FrozenConfigSpec */
         FrozenConfigSpec: {
@@ -2409,6 +2536,10 @@ export interface components {
         };
         /** ReportView */
         ReportView: {
+            /** Dataset Results */
+            dataset_results?: {
+                [key: string]: unknown;
+            }[] | null;
             /** Id */
             id: string;
             /** Run Id */
@@ -2455,6 +2586,24 @@ export interface components {
             baseline_comparison: {
                 [key: string]: unknown;
             };
+            /** Review Status */
+            review_status: string;
+            /** Reviewed By */
+            reviewed_by?: string | null;
+            /** Reviewed At */
+            reviewed_at?: string | null;
+            /** Review Note */
+            review_note?: string | null;
+        };
+        /** ReviewInput */
+        ReviewInput: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "approve" | "revoke";
+            /** Note */
+            note?: string | null;
         };
         /** RunListItem */
         RunListItem: {
@@ -2904,6 +3053,7 @@ export interface operations {
         parameters: {
             query?: {
                 selection?: "best" | "all";
+                compact?: boolean;
             };
             header?: never;
             path?: never;
@@ -3405,7 +3555,9 @@ export interface operations {
     };
     archived_log_api_autoeval_v1_runs__run_id__monitor_log_get: {
         parameters: {
-            query?: never;
+            query?: {
+                dataset_key?: string | null;
+            };
             header?: never;
             path: {
                 run_id: string;
@@ -4406,6 +4558,7 @@ export interface operations {
                 state?: string | null;
                 offset?: number;
                 limit?: number;
+                evidence_version?: "current" | "original";
             };
             header?: never;
             path: {
@@ -4437,7 +4590,9 @@ export interface operations {
     };
     evidence_api_autoeval_v1_case_executions__attempt_id__evidence_get: {
         parameters: {
-            query?: never;
+            query?: {
+                evidence_version?: "current" | "original";
+            };
             header?: never;
             path: {
                 attempt_id: string;
@@ -4453,6 +4608,75 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    result_revisions_api_autoeval_v1_runs__run_id__result_revisions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recovered_cases_api_autoeval_v1_runs__run_id__result_revisions__revision_id__cases_get: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+                sample_id?: string | null;
+                state?: string | null;
+                dataset_key?: string | null;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+                revision_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -5774,6 +5998,8 @@ export interface operations {
             query?: {
                 offset?: number;
                 limit?: number;
+                summary_only?: boolean;
+                review_status?: string | null;
             };
             header?: never;
             path?: never;
@@ -5832,6 +6058,41 @@ export interface operations {
             };
         };
     };
+    review_api_autoeval_v1_reports__report_id__review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     evidence_api_autoeval_v1_reports__report_id__evidence_get: {
         parameters: {
             query?: never;
@@ -5850,6 +6111,106 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    badcase_comparison_api_autoeval_v1_runs__run_id__badcase_comparison_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    badcase_case_detail_api_autoeval_v1_runs__run_id__badcase_case_get: {
+        parameters: {
+            query: {
+                sample_id: string;
+                dataset_key?: string | null;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    badcase_export_api_autoeval_v1_runs__run_id__badcase_export_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

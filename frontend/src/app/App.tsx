@@ -81,10 +81,10 @@ export function App() {
     : page.startsWith("evaluate?")
       ? "新建探索测评"
       : page.startsWith("report/")
-        ? "测评报告"
-        : page.startsWith("config/")
-          ? "配置维护"
-          : menus.find((menu) => menu.id === page)?.label || "控制台";
+          ? "测评报告"
+          : page.startsWith("config/")
+            ? "配置维护"
+            : menus.find((menu) => menu.id === page)?.label || "控制台";
   const descriptions: Record<string, string> = {
     home: "从一次测评开始，让模型能力与执行证据清晰可见。",
     console: "选择模型、数据集与执行资源，按当前参数发起测评；可选获取耗时估算和参数建议。",
@@ -176,6 +176,7 @@ export function App() {
             open={(id) => go(`report/${id}`)}
           />
         )}
+
         {page === "leaderboard" && (<div className="stack"><PublishedLeaderboard /><details onToggle={(event) => setCandidateScoresOpen(event.currentTarget.open)}><summary>平台运行报告候选成绩（未人工评审）</summary>{candidateScoresOpen && <RealLeaderboard open={(id) => go(`report/${id}`)} />}</details></div>)}
         {workbenchEnabled && page === "data-workbench" && <DataWorkbench />}
 

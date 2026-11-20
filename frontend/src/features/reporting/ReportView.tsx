@@ -5,6 +5,7 @@ import { ManagementDrawer } from "../../shared/ui/ManagementDrawer";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnalysisPanel } from "./AnalysisPanel";
+import { BadcaseComparison } from "./BadcaseComparison";
 import { apiGet, apiPost } from "../../shared/api";
 
 type Summary = {
@@ -213,7 +214,6 @@ export function ReportView({ id, go }: { id: string; go: (path: string) => void 
         </nav>
         <div className="inline">
           <a className="primary button" href={`#run/${report.run_id}`}>查看任务</a>
-          <a className="button" href={`#badcases/${report.run_id}`}>Badcase 对比</a>
           <button
             onClick={review}
             disabled={reviewing || report.evidence_status !== "verified" || report.validity !== "complete"}
@@ -233,7 +233,7 @@ export function ReportView({ id, go }: { id: string; go: (path: string) => void 
           </span>
         </div>
         <div className="tabs report-view-tabs" role="tablist" aria-label="报告视图">
-          {["总览", "数据集结果", "智能分析"].map((name) => (
+          {["总览", "数据集结果", "智能分析", "Badcase 分析"].map((name) => (
             <button
               key={name}
               role="tab"
@@ -311,6 +311,9 @@ export function ReportView({ id, go }: { id: string; go: (path: string) => void 
         {view === "智能分析" && <section className="report-analysis-view">
           <p className="muted">{report.evidence_status !== "verified" ? "原始证据不可用，当前无法确认有效成绩或生成可信比较结论。" : "本次为所选 Lite 清单的探索结果，不代表全量成绩，不适用正式发布门禁。"}</p>
           <AnalysisPanel reportId={report.id} status={report.analysis_status} executionOrigin={report.execution_origin} onStatus={(state) => setReport((current) => current ? { ...current, analysis_status: state } : current)} />
+        </section>}
+        {view === "Badcase 分析" && <section className="report-badcase-view">
+          <BadcaseComparison runId={report.run_id} go={go} embedded />
         </section>}
       </section>}
 

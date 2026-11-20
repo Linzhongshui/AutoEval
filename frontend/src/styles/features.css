@@ -1266,8 +1266,6 @@
 .detail-properties > div { display: grid; grid-template-columns: 120px 1fr; padding: 14px 0; border-bottom: 1px solid var(--border); }
 .detail-properties dd { margin: 0; overflow-wrap: anywhere; }
 .button { display: inline-flex; align-items: center; padding: 10px 16px; border-radius: 7px; text-decoration: none; }
-.button:not(.primary) { border: 1px solid #d3d7e8; background: white; }
-.button:not(.primary):hover { background: #f1efff; border-color: #b9b0ff; }
 @media (max-width: 900px) { .restored-detail .task-overview-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 500px) { .restored-detail .task-overview-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
@@ -1923,7 +1921,7 @@ textarea { font: inherit; }
 .report-validity-badge.partial { color: #a86009; background: #fff4e3; }
 .report-validity-badge.error, .report-analysis-badge.analysis-failed { color: #ba3d37; background: #fff0ee; }
 .report-analysis-badge { color: var(--primary); background: #efebff; }
-.reports-table .run-report-action { white-space: nowrap; min-width: 96px; }
+.reports-table .run-report-action { white-space: nowrap; }
 .reports-table tbody tr:hover { background: #faf9ff; }
 
 .planning-fields > .planning-service-field { grid-column: 1 / -1; display: grid; gap: 8px; min-width: 0; }
@@ -2073,3 +2071,6 @@ textarea { font: inherit; }
 .badcase-empty p { margin: 0; }
 @media(max-width:1100px) { .badcase-summary { grid-template-columns: repeat(3, minmax(0,1fr)); } .badcase-export-actions { margin-left: 0; } }
 @media(max-width:650px) { .badcase-summary { grid-template-columns: repeat(2, minmax(0,1fr)); } .badcase-toolbar { align-items: stretch; } .badcase-toolbar > input { width: 100%; } }
+
+.report-badcase-view { display: grid; gap: 16px; }
+.badcase-embedded-head { padding: 0 0 12px; border-bottom: 1px solid var(--border); }

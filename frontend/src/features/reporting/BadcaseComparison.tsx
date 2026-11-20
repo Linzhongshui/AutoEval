@@ -92,9 +92,11 @@ const time = (value: string) =>
 export function BadcaseComparison({
   runId,
   go,
+  embedded = false,
 }: {
   runId: string;
   go: (path: string) => void;
+  embedded?: boolean;
 }) {
   const [data, setData] = useState<Comparison | null>(null);
   const [loading, setLoading] = useState(true);
@@ -274,65 +276,75 @@ export function BadcaseComparison({
     );
   }
 
+  const configBlock = (
+    <>
+      <div className="badcase-meta">
+        <span>
+          报告状态 <b>{data.report.validity}</b>
+        </span>
+        <span>
+          证据 <b>{data.report.evidence_status}</b>
+        </span>
+        <span>
+          有效历史 <b>{REVIEW_LABELS[reviewStatus] || reviewStatus}</b>
+        </span>
+        <span>
+          算法 <b>Beta-Binomial T1</b>
+        </span>
+      </div>
+      {data.datasets.map((item) => (
+        <div className="badcase-config" key={item.dataset_key}>
+          <b>{item.dataset_key}</b>
+          <span>历史报告 {item.history.approved_reports} 份</span>
+          <span>清单 {String(item.config.manifest_sha256 || "—").slice(0, 12)}</span>
+          <span>工具 {String(item.config.tool_revision || "—").slice(0, 12)}</span>
+          <span>
+            output {String(item.config.output ?? "—")} · 并发{" "}
+            {String(item.config.concurrency ?? "—")} · scope{" "}
+            {String(item.config.scope ?? "—")}
+          </span>
+        </div>
+      ))}
+      {!data.datasets.length && <p className="muted">该报告没有可比较的数据集。</p>}
+    </>
+  );
+
   return (
     <div className="stack badcase-page" data-testid="badcase-comparison">
-      <section className="card">
-        <div className="spread">
-          <div>
-            <h2>Badcase 对比</h2>
-            <p className="muted">
-              任务 {data.run_id.slice(0, 8)} · 报告 {data.report_id.slice(0, 8)} ·{" "}
-              {data.report.remote_model || "未知模型"} · {time(data.report.created_at)}
-            </p>
+      {embedded ? (
+        <div className="badcase-embedded-head">{configBlock}</div>
+      ) : (
+        <section className="card">
+          <div className="spread">
+            <div>
+              <h2>Badcase 对比</h2>
+              <p className="muted">
+                任务 {data.run_id.slice(0, 8)} · 报告 {data.report_id.slice(0, 8)} ·{" "}
+                {data.report.remote_model || "未知模型"} · {time(data.report.created_at)}
+              </p>
+            </div>
+            <div className="inline">
+              <button onClick={() => go(`report/${data.report_id}`)}>
+                查看报告 <ArrowUpRight size={15} />
+              </button>
+              <a className="button" href={`#run/${data.run_id}`}>
+                查看任务
+              </a>
+              <button
+                onClick={toggleReview}
+                disabled={
+                  reviewing ||
+                  data.report.validity !== "complete" ||
+                  data.report.evidence_status !== "verified"
+                }
+              >
+                {reviewStatus === "approved" ? "撤销有效历史" : "录入为有效历史"}
+              </button>
+            </div>
           </div>
-          <div className="inline">
-            <button onClick={() => go(`report/${data.report_id}`)}>
-              查看报告 <ArrowUpRight size={15} />
-            </button>
-            <a className="button" href={`#run/${data.run_id}`}>
-              查看任务
-            </a>
-            <button
-              onClick={toggleReview}
-              disabled={
-                reviewing ||
-                data.report.validity !== "complete" ||
-                data.report.evidence_status !== "verified"
-              }
-            >
-              {reviewStatus === "approved" ? "撤销有效历史" : "录入为有效历史"}
-            </button>
-          </div>
-        </div>
-        <div className="badcase-meta">
-          <span>
-            报告状态 <b>{data.report.validity}</b>
-          </span>
-          <span>
-            证据 <b>{data.report.evidence_status}</b>
-          </span>
-          <span>
-            有效历史 <b>{REVIEW_LABELS[reviewStatus] || reviewStatus}</b>
-          </span>
-          <span>
-            算法 <b>Beta-Binomial T1</b>
-          </span>
-        </div>
-        {data.datasets.map((item) => (
-          <div className="badcase-config" key={item.dataset_key}>
-            <b>{item.dataset_key}</b>
-            <span>历史报告 {item.history.approved_reports} 份</span>
-            <span>清单 {String(item.config.manifest_sha256 || "—").slice(0, 12)}</span>
-            <span>工具 {String(item.config.tool_revision || "—").slice(0, 12)}</span>
-            <span>
-              output {String(item.config.output ?? "—")} · 并发{" "}
-              {String(item.config.concurrency ?? "—")} · scope{" "}
-              {String(item.config.scope ?? "—")}
-            </span>
-          </div>
-        ))}
-        {!data.datasets.length && <p className="muted">该报告没有可比较的数据集。</p>}
-      </section>
+          {configBlock}
+        </section>
+      )}
 
       <section className="badcase-summary" aria-label="可疑度汇总">
         <div>

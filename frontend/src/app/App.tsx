@@ -9,7 +9,6 @@ import { Configurations } from "../features/catalog/Configurations";
 import { useProfiles } from "../features/catalog/useProfiles";
 import { TaskPlanning } from "../features/planning/TaskPlanning";
 import { EvaluationRuns } from "../features/evaluation/EvaluationRuns";
-import { BadcaseComparison } from "../features/reporting/BadcaseComparison";
 import { RealReports } from "../features/reporting/RealReports";
 import { RealLeaderboard } from "../features/reporting/RealLeaderboard";
 import { useEffect, useState } from "react";
@@ -108,9 +107,7 @@ export function App() {
     ? "测评任务详情"
     : page.startsWith("evaluate?")
       ? "新建探索测评"
-      : page.startsWith("badcases/")
-        ? "Badcase 对比"
-        : page.startsWith("report/")
+      : page.startsWith("report/")
           ? "测评报告"
           : page.startsWith("config/")
             ? "配置维护"
@@ -121,7 +118,6 @@ export function App() {
     config: "按模型与数据集分别维护测试参数、清单和执行绑定。",
     tasks: "追踪每一次测评，定位每一个问题。",
     reports: "查看测评报告，追溯历史结果。",
-    badcases: "对比同配置已审核历史，定位可疑 case 并导出独立分析包。",
     leaderboard: "按来源与比较条件查看模型成绩。",
     "data-workbench": "评审报告成绩、维护榜单数据及导入官方来源。",
   };
@@ -141,8 +137,7 @@ export function App() {
               className={
                 page === menu.id ||
                 ((evaluationPage || page.startsWith("planned-run/")) && menu.id === "tasks") ||
-                ((page.startsWith("report/") || page.startsWith("badcases/")) &&
-                  menu.id === "reports") ||
+                (page.startsWith("report/") && menu.id === "reports") ||
                 (page.startsWith("config/") && menu.id === "config")
                   ? "selected"
                   : ""
@@ -160,7 +155,7 @@ export function App() {
       <main className="main">
         <BackendConnection onWorkbenchEnabled={setWorkbenchEnabled} />
         <div className="breadcrumb">
-          {page.startsWith("report/") || page.startsWith("badcases/") ? (
+          {page.startsWith("report/") ? (
             <button onClick={() => go("reports")}>报告管理</button>
           ) : page.startsWith("run/") ? (
             <button onClick={() => go("tasks")}>任务管理</button>
@@ -208,9 +203,7 @@ export function App() {
             open={(id) => go(`report/${id}`)}
           />
         )}
-        {page.startsWith("badcases/") && (
-          <BadcaseComparison runId={page.slice(9)} go={go} />
-        )}
+
         {page === "leaderboard" && (<div className="stack"><PublishedLeaderboard /><details onToggle={(event) => setCandidateScoresOpen(event.currentTarget.open)}><summary>平台运行报告候选成绩（未人工评审）</summary>{candidateScoresOpen && <RealLeaderboard open={(id) => go(`report/${id}`)} />}</details></div>)}
         {workbenchEnabled && page === "data-workbench" && <DataWorkbench />}
 

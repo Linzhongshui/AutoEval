@@ -24,6 +24,27 @@ from autoeval.planning.artifacts import artifact as artifact
 from autoeval.planning.artifacts import current_preflight as current_preflight
 
 
+def child_environment_view(child, environment, hosts):
+    template = environment.template if environment else child.payload.get("execution_template")
+    if not template:
+        return None
+    resource_id = str(
+        environment.resource_id if environment else child.payload["assigned_resource_id"]
+    )
+    return {
+        "resource_id": resource_id,
+        "host": hosts.get(resource_id),
+        "tool": template["family"],
+        "revision": template["revision"],
+        "container_id": environment.container_id[:12]
+        if environment and environment.container_id
+        else None,
+        "state": environment.state
+        if environment
+        else ("waiting_capacity" if child.state == "pending" else "not_created"),
+    }
+
+
 async def planned_run_detail(sessions, run_id):
     """Read one planned run with children and the archived report reference."""
     from autoeval.evaluation.models import EvaluationReport
@@ -58,6 +79,22 @@ async def planned_run_detail(sessions, run_id):
                 )
             )
         }
+        from autoeval.resources.models import SSHResourceBinding
+
+        resource_ids = {row.resource_id for row in environments.values()}
+        resource_ids.update(
+            child.payload["assigned_resource_id"]
+            for child in children
+            if child.payload.get("execution_template")
+        )
+        hosts = {
+            str(identifier): host
+            for identifier, host in await session.execute(
+                select(SSHResourceBinding.id, SSHResourceBinding.host).where(
+                    SSHResourceBinding.id.in_(resource_ids)
+                )
+            )
+        }
         from autoeval.evaluation.orchestration import child_view
 
         return {
@@ -68,13 +105,12 @@ async def planned_run_detail(sessions, run_id):
             "datasets": [
                 {
                     **child_view(child),
-                    "execution_environment": {
-                        "resource_id": str(environment.resource_id),
-                        "tool": environment.template["family"],
-                        "revision": environment.template["revision"],
-                        "container_id": (environment.container_id or "")[:12] or None,
-                        "state": environment.state,
-                    } if (environment := environments.get(child.id)) else None,
+                    "selected_cases": len(child.payload.get("samples", []))
+                    if "samples" in child.payload
+                    else None,
+                    "execution_environment": child_environment_view(
+                        child, environments.get(child.id), hosts
+                    ),
                 }
                 for child in children
             ],

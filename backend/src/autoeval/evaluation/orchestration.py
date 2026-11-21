@@ -249,7 +249,7 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                     sessions, settings, run_id, child, adapter, job, observation.state,
                     secret, child_secret, heartbeat,
                 )
-            except Exception as exc:  # noqa: BLE001 -- isolated jobs retain evidence for retry
+            except Exception as exc:  # Isolated jobs retain evidence for retry.
                 if not isolated:
                     raise
                 if not (child.summary or {}).get("archive_pending"):
@@ -309,6 +309,8 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                     resource_for_task(frozen["resource"], child.task_id),
                     demand_for(child.payload),
                 ):
+                    if inputs["dataset_concurrency"] == 1:
+                        break  # Preserve dataset order while the first pending child waits.
                     continue
                 stored = await session.get(DatasetExecution, child.id, with_for_update=True)
                 if isolated and await session.get(DatasetExecutionEnvironment, child.id) is None:

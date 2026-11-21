@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+from contextlib import AsyncExitStack
 
 from temporalio.client import Client
 from temporalio.worker import Worker
@@ -12,6 +13,7 @@ from autoeval.evaluation.monitored_execution import execute_monitored_gpqa
 from autoeval.evaluation.orchestration import execute_planned_evaluation
 from autoeval.evaluation.run_activities import execute_docker_diagnostic
 from autoeval.evaluation.workflows import (
+    ISOLATED_DATASET_QUEUE,
     AnalysisWorkflow,
     DockerDiagnosticWorkflow,
     GpqaExplorationWorkflow,
@@ -80,6 +82,11 @@ def role_options(settings):
                 collect_unified_output,
             ],
         },
+        "isolated-execution": {
+            "task_queue": ISOLATED_DATASET_QUEUE,
+            "workflows": [PlannedEvaluationWorkflow],
+            "activities": [execute_planned_evaluation],
+        },
         "planning-execution": {
             "task_queue": "demo.planning-execution.v1",
             "activities": [execute_planned_evaluation],
@@ -94,7 +101,12 @@ def role_options(settings):
 async def serve(role: str):
     settings = get_settings()
     client = await Client.connect(settings.temporal_address, namespace=settings.temporal_namespace)
-    async with Worker(client, **role_options(settings)[role]):
+    roles = role_options(settings)
+    async with AsyncExitStack() as stack:
+        await stack.enter_async_context(Worker(client, **roles[role]))
+        if role == "planning-execution":
+            # Existing deployments serve both new isolated runs and in-flight legacy activities.
+            await stack.enter_async_context(Worker(client, **roles["isolated-execution"]))
         await asyncio.Event().wait()
 
 

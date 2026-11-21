@@ -45,6 +45,25 @@ def submission(datasets=("GPQA", "MMMU-Pro")):
     }
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("isolated", [True, False])
+async def test_workflow_dispatch_preserves_dataset_isolation_queue(monkeypatch, isolated):
+    from unittest.mock import AsyncMock
+
+    from autoeval.entrypoints.worker import role_options
+    from autoeval.evaluation import workflows
+
+    queue = workflows.ISOLATED_DATASET_QUEUE
+    workflow_queue = queue if isolated else "demo.workflow.v1"
+    activity = AsyncMock()
+    monkeypatch.setattr(workflows.workflow, "info", lambda: SimpleNamespace(task_queue=workflow_queue))
+    monkeypatch.setattr(workflows.workflow, "execute_activity", activity)
+    await workflows.PlannedEvaluationWorkflow().run("run-id")
+    role = role_options(get_settings())["isolated-execution" if isolated else "planning-execution"]
+    assert activity.await_args.kwargs["task_queue"] == role["task_queue"]
+    assert role["activities"][0].__name__ == activity.await_args.args[0]
+
+
 def test_submit_contract_has_only_final_parameters():
     body = submission()
     assert len(SubmitTask(**body).tasks) == 2
@@ -271,14 +290,19 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                 changed = copy.deepcopy(body)
                 changed["tasks"][0]["concurrency"] = 3
                 assert (await send("same-intent", changed)).status_code == 409
-                single = submission(("GPQA",))
-                single.update(target_id=target_id, resource_id=resource_id)
-                assert (await send("single", single)).status_code == 202
+                new_request = await send("new-identical-task", body)
+                assert new_request.status_code == 202
+                second_run = new_request.json()["data"]["run_id"]
+                assert second_run != rid
                 async with app.state.sessions() as session:
                     assert (
                         await session.scalar(select(func.count()).select_from(EvaluationRun)) == 2
                     )
-                    assert await session.scalar(select(func.count()).select_from(Outbox)) == 2
+                    outbox = list(await session.scalars(select(Outbox)))
+                    assert len(outbox) == 2
+                    from autoeval.evaluation.workflows import ISOLATED_DATASET_QUEUE
+
+                    assert all(row.payload["workflow_queue"] == ISOLATED_DATASET_QUEUE for row in outbox)
                     assert await session.scalar(select(func.count()).select_from(PlanningJob)) == 0
                     frozen = await session.scalar(
                         select(RunSnapshot).where(RunSnapshot.run_id == uuid.UUID(rid))
@@ -287,6 +311,24 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                     assert frozen.canonical_body["estimate"] is None
                 detail = (await c.get(f"/api/autoeval/v1/evaluation-tasks/{rid}")).json()["data"]
                 assert len(detail["datasets"]) == 2
+                second_detail = (await c.get(f"/api/autoeval/v1/evaluation-tasks/{second_run}")).json()["data"]
+                assert {d["id"] for d in detail["datasets"]}.isdisjoint(
+                    d["id"] for d in second_detail["datasets"]
+                )
+                for child in detail["datasets"] + second_detail["datasets"]:
+                    env = child["execution_environment"]
+                    assert env["state"] == "waiting_capacity" and env["container_id"] is None
+                    assert env["host"] == "fixture.invalid" and child["selected_cases"] == 1
+                legacy_body = {
+                    "config_version_id": str(uuid.uuid4()), "target_id": target_id,
+                    "resource_id": resource_id, "run_mode": "exploration", "max_model_requests": 1,
+                }
+                for endpoint, kind in (("runs", "customer_ssh"), ("aisbench-monitored/runs", "aisbench_monitor")):
+                    blocked = await c.post(
+                        f"/api/autoeval/v1/{endpoint}", json={**legacy_body, "resource_kind": kind},
+                        headers={"Idempotency-Key": "new-legacy"},
+                    )
+                    assert blocked.status_code == 422 and "evaluation-tasks" in blocked.text
                 first = (await c.get("/api/autoeval/v1/evaluation-tasks?limit=1")).json()
                 assert first["statistics"]["total"] == 2 and first["next_offset"] == 1
                 second = (await c.get("/api/autoeval/v1/evaluation-tasks?limit=1&offset=1")).json()
@@ -735,6 +777,61 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                             select(CapacityLease).where(CapacityLease.owner_id == owner)
                         )
                         assert environment.state == "cleaned" and lease.released
+
+                # The second dataset would fit while the first waits. Serial order still wins.
+                serial = submission(("DeepSWE", "AutomationBench"))
+                serial.update(target_id=target_id, resource_id=resource_id, dataset_concurrency=1)
+                serial["tasks"][1]["concurrency"] = 1
+                serial_run = uuid.UUID((await send("serial-capacity", serial)).json()["data"]["run_id"])
+                holder = uuid.uuid4()
+                async with app.state.sessions() as session, session.begin():
+                    session.add(CapacityLease(
+                        owner_id=holder, node_id="postgres-fixture-node",
+                        demand={"cpu": 10, "mem": 0, "disk": 0, "networks": 0},
+                    ))
+                    ordered = {
+                        child.task_id: child.id for child in await session.scalars(
+                            select(DatasetExecution).where(DatasetExecution.run_id == serial_run)
+                        )
+                    }
+                visits = []
+                def owned_adapter(session, settings, resource, owner, template, **kwargs):
+                    async def ensure():
+                        visits.append(("create", owner))
+                        return owner.hex * 2
+
+                    async def remove():
+                        visits.append(("remove", owner))
+                        return True
+
+                    return SimpleNamespace(ensure=ensure, remove=remove, submit=AsyncMock(),
+                                           status=AsyncMock(return_value=SimpleNamespace(state="failed")))
+
+                monkeypatch.setattr(orchestration, "isolated_transport", AsyncMock(side_effect=owned_adapter))
+                monkeypatch.setattr(isolated_cleanup, "isolated_transport", AsyncMock(side_effect=owned_adapter))
+                class PauseAfterPoll(Exception):
+                    pass
+
+                heartbeat = iter((None,))
+                def pause():
+                    if next(heartbeat, False) is False:
+                        raise PauseAfterPoll()
+
+                with pytest.raises(PauseAfterPoll):
+                    await orchestration.execute(app.state.sessions, settings, serial_run, pause)
+                assert visits == []
+                async with app.state.sessions() as session, session.begin():
+                    assert not await session.scalar(select(DatasetExecutionEnvironment).where(
+                        DatasetExecutionEnvironment.dataset_execution_id.in_(ordered.values())
+                    ))
+                    from autoeval.evaluation.resource_allocation import release
+                    await release(session, holder)
+                async with asyncio.timeout(20):
+                    await orchestration.execute(app.state.sessions, settings, serial_run)
+                assert visits == [
+                    ("create", ordered["DeepSWE"]), ("remove", ordered["DeepSWE"]),
+                    ("create", ordered["AutomationBench"]), ("remove", ordered["AutomationBench"]),
+                ]
     finally:
         await admin.execute(f'DROP DATABASE "{database}"')
         await admin.close()

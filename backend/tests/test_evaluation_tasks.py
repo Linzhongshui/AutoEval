@@ -21,7 +21,7 @@ from autoeval.evaluation.evaluation_tasks import SubmitTask
 from autoeval.evaluation.models import DatasetExecution, DatasetExecutionEnvironment
 from autoeval.infrastructure.config import get_settings
 from autoeval.infrastructure.models import Base, EvaluationRun, Outbox, RunSnapshot
-from autoeval.planning import PlanningJob
+from autoeval.planning import PlanInput, PlanningJob
 from autoeval.planning.planning_transport import PlanningRemoteContainer
 from autoeval.resources.models import ResourceProvider, SSHResourceBinding, TargetBinding
 
@@ -62,6 +62,15 @@ async def test_workflow_dispatch_preserves_dataset_isolation_queue(monkeypatch, 
     role = role_options(get_settings())["isolated-execution" if isolated else "planning-execution"]
     assert activity.await_args.kwargs["task_queue"] == role["task_queue"]
     assert role["activities"][0].__name__ == activity.await_args.args[0]
+
+
+@pytest.mark.parametrize("request_model", [PlanInput, SubmitTask])
+def test_four_dataset_concurrency(request_model):
+    body = submission(("GPQA", "MMMU-Pro", "DeepSWE", "AutomationBench"))
+    body["dataset_concurrency"] = len(body["tasks"])
+    assert request_model(**body).dataset_concurrency == 4
+    with pytest.raises(ValidationError):
+        request_model(**{**body, "dataset_concurrency": 0})
 
 
 def test_submit_contract_has_only_final_parameters():
@@ -245,7 +254,7 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                         tool={},
                         subset_scope="lite",
                         compilation={
-                            "config": {"params": {"batch_size": t.get("concurrency") or 1}}
+                            "config": {"params": {"abbr": "fixture", "batch_size": t.get("concurrency") or 1}}
                         },
                     )
                 return inputs
@@ -543,7 +552,7 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                 monkeypatch.setattr(orchestration, "isolated_transport", execution_transport)
                 monkeypatch.setattr(isolated_cleanup, "isolated_transport", cleanup_transport)
                 monkeypatch.setattr(
-                    orchestration, "execution_template", lambda *a: {**template, "family": "harbor"}
+                    orchestration, "execution_template", lambda settings, resource, task: task["execution_template"]
                 )
                 monkeypatch.setattr(orchestration.FileSecretStore, "get", lambda *a: "test-only")
                 monkeypatch.setattr(
@@ -832,6 +841,18 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                     ("create", ordered["DeepSWE"]), ("remove", ordered["DeepSWE"]),
                     ("create", ordered["AutomationBench"]), ("remove", ordered["AutomationBench"]),
                 ]
+
+                visits.clear()
+                four = submission(("GPQA", "MMMU-Pro", "DeepSWE", "AutomationBench"))
+                four.update(target_id=target_id, resource_id=resource_id, dataset_concurrency=4)
+                accepted = await send("four-parallel", four)
+                assert accepted.status_code == 202
+                async with asyncio.timeout(20):
+                    await orchestration.execute(
+                        app.state.sessions, settings, uuid.UUID(accepted.json()["data"]["run_id"])
+                    )
+                assert [action for action, _ in visits] == ["create"] * 4 + ["remove"] * 4
+                assert len({owner for _, owner in visits[:4]}) == 4
     finally:
         await admin.execute(f'DROP DATABASE "{database}"')
         await admin.close()

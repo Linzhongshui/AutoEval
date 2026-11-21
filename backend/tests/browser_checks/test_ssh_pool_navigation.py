@@ -255,10 +255,13 @@ def test_preflight_elapsed_and_all_pool_nodes():
         expect(blocked_dataset.locator("summary")).to_be_focused()
         expect(blocked_dataset.get_by_text("配置缺少数据目录", exact=True)).to_be_visible()
         path_missing = False
+        page.get_by_role("group", name="数据集执行策略").get_by_role("button", name="并行执行").click()
+        expect(page.get_by_label("数据集同时运行数")).to_have_value("4")
         page.get_by_role("button", name="重新检查").click()
         summary.get_by_role("button", name="提交测评").click()
         assert len(submissions) == 1
         assert submissions[0]["resource_ids"] == ["worker", "standby"]
+        assert submissions[0]["dataset_concurrency"] == 4
         assert submissions[0]["resource_id"] == "worker"
         assert [t["dataset"] for t in submissions[0]["tasks"]] == datasets
         browser.close()

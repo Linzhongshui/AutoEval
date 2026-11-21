@@ -178,7 +178,8 @@ def test_fixed_parameters_are_estimated_without_silent_optimization(tmp_path):
     assert report["plan"]["dataset_concurrency"] == 1
 
 
-def test_three_dataset_parallel_plan_and_attempt_counts(tmp_path):
+@pytest.mark.parametrize("recommend", [True, False])
+def test_parallel_plan_and_attempt_counts(tmp_path, recommend):
     data = inputs()
     second = copy.deepcopy(data["tasks"][0])
     second.update(task_id="mmmu", dataset="MMMU-Pro")
@@ -196,6 +197,12 @@ def test_three_dataset_parallel_plan_and_attempt_counts(tmp_path):
         },
     }
     data["tasks"] += [second, harbor]
+    if not recommend:
+        automation = copy.deepcopy(harbor)
+        automation.update(task_id="automationbench", dataset="AutomationBench")
+        automation["compilation"]["config"]["params"]["dataset_abbr"] = "fixture_automation"
+        data["tasks"].append(automation)
+        data["dataset_concurrency"] = len(data["tasks"])
     resource = {
         "cpu_cores": 16,
         "mem_mb": 131072,
@@ -203,11 +210,16 @@ def test_three_dataset_parallel_plan_and_attempt_counts(tmp_path):
         "network_available": 8,
         "captured_at": datetime.now(UTC).isoformat(),
     }
-    report = calculate(data, {"decode_tps": 100, "max_concurrency": 4}, resource, [], tmp_path)
-    assert len(report["tasks"]) == 3
+    report = calculate(
+        data, {"decode_tps": 100, "max_concurrency": 4}, resource, [], tmp_path, recommend=recommend
+    )
+    assert len(report["tasks"]) == len(data["tasks"])
     assert not report["conditional"]
     assert next(t for t in report["tasks"] if t["task_id"] == "deepswe")["case_count"] == 4
-    assert report["plan"]["dataset_concurrency"] <= 3
+    if recommend:
+        assert report["plan"]["dataset_concurrency"] <= len(data["tasks"])
+    else:
+        assert report["plan"]["dataset_concurrency"] == 4
 
 
 def test_capacity_counts_existing_leases_and_reserves_headroom():

@@ -48,7 +48,7 @@ class SubmitTask(ResourceRef):
 
     target_id: uuid.UUID
     tasks: list[TaskSelection] = Field(min_length=1, max_length=4)
-    dataset_concurrency: int = Field(default=1, ge=1, le=3)
+    dataset_concurrency: int = Field(default=1, ge=1)
 
     @model_validator(mode="after")
     def unique_selection(self):

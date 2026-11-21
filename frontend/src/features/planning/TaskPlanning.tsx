@@ -342,7 +342,7 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
       <section className="strategy-card strategy-datasets" aria-label="数据集执行设置">
         <div className="strategy-card-heading"><h3>数据集之间</h3><span>{enabled.length} 个数据集</span></div>
         <div className="strategy-controls">
-          <div><span className="strategy-field-label">执行方式</span><StrategyChoice label="数据集执行策略" parallel={parallel > 1} disabled={enabled.length < 2} onChange={value => setParallel(value ? Math.max(2, Math.min(enabled.length, 3)) : 1)} /></div>
+          <div><span className="strategy-field-label">执行方式</span><StrategyChoice label="数据集执行策略" parallel={parallel > 1} disabled={enabled.length < 2} onChange={value => setParallel(value ? enabled.length : 1)} /></div>
           <label>同时运行的数据集数<input aria-label="数据集同时运行数" type="number" min={1} max={Math.max(1, enabled.length)} value={parallel} disabled={parallel <= 1} onChange={e => setParallel(Math.max(1, Math.min(enabled.length || 1, Number(e.target.value))))} /></label>
         </div>
         <p className="strategy-help">{enabled.length < 2 ? "当前仅一个数据集，无需数据集并行；样本仍可单独选择并行。" : parallel > 1 ? "多个数据集共享执行资源，同时运行数量仍需通过资源预检。" : "按下方顺序逐个执行，前一个结束后开始下一个。"}</p>

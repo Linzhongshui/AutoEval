@@ -6764,7 +6764,6 @@
           },
           "dataset_concurrency": {
             "type": "integer",
-            "maximum": 3.0,
             "minimum": 1.0,
             "title": "Dataset Concurrency",
             "default": 1
@@ -7521,7 +7520,6 @@
           },
           "dataset_concurrency": {
             "type": "integer",
-            "maximum": 3.0,
             "minimum": 1.0,
             "title": "Dataset Concurrency",
             "default": 1

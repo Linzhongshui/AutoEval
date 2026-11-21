@@ -8,6 +8,7 @@ import { ExecutionBindings } from "../features/catalog/ExecutionBindings";
 import { StandardInputs } from "../features/catalog/StandardInputs";
 import { Configurations } from "../features/catalog/Configurations";
 import { useProfiles } from "../features/catalog/useProfiles";
+import { SSHResources } from "../features/resources/SSHResources";
 import { TaskPlanning } from "../features/planning/TaskPlanning";
 import { EvaluationRuns } from "../features/evaluation/EvaluationRuns";
 import { RealReports } from "../features/reporting/RealReports";
@@ -51,6 +52,9 @@ export function App() {
   const [workbenchEnabled, setWorkbenchEnabled] = useState(false);
   const [candidateScoresOpen, setCandidateScoresOpen] = useState(false);
   useEffect(() => { if (page !== "leaderboard") setCandidateScoresOpen(false); }, [page]);
+  const [poolReturn, setPoolReturn] = useState(false);
+  const [poolRevision, setPoolRevision] = useState(0);
+  const poolPage = page === "config/ssh-pool" || page === "config/ssh-pool/add";
   const [toast, setToast] = useState("");
   const evaluationPage = page === "tasks" || page.startsWith("run/") || page.startsWith("evaluate?");
   const go = (path: string) => {
@@ -76,7 +80,7 @@ export function App() {
     return () => clearTimeout(timer);
   }, [toast]);
 
-  const title = page.startsWith("run/") || page.startsWith("planned-run/")
+  const title = poolPage ? (page.endsWith("/add") ? "添加 SSH 节点" : "SSH 资源池") : page.startsWith("run/") || page.startsWith("planned-run/")
     ? "测评任务详情"
     : page.startsWith("evaluate?")
       ? "新建探索测评"
@@ -88,6 +92,8 @@ export function App() {
   const descriptions: Record<string, string> = {
     home: "从一次测评开始，让模型能力与执行证据清晰可见。",
     console: "选择模型、数据集与执行资源，按当前参数发起测评；可选获取耗时估算和参数建议。",
+    "config/ssh-pool": "维护测评使用的 SSH 节点，检查节点连接。",
+    "config/ssh-pool/add": "登记节点连接信息与凭据。",
     config: "按模型与数据集分别维护测试参数、清单和执行绑定。",
     tasks: "追踪每一次测评，定位每一个问题。",
     reports: "查看测评报告，追溯历史结果。",
@@ -147,13 +153,26 @@ export function App() {
         </header>
 
         {page === "home" && <Overview go={go} />}
-        {page === "console" && <TaskPlanning />}
+        {(page === "console" || (poolPage && poolReturn)) && <div hidden={page !== "console"}>
+          <TaskPlanning poolRevision={poolRevision} onManagePool={(add) => {
+            setPoolReturn(true);
+            go(add ? "config/ssh-pool/add" : "config/ssh-pool");
+          }} />
+        </div>}
+        {poolPage && <SSHResources
+          adding={page.endsWith("/add")}
+          onAdd={() => go("config/ssh-pool/add")}
+          onCancel={() => go("config/ssh-pool")}
+          onSaved={() => { setPoolRevision(value => value + 1); go(poolReturn ? "console" : "config/ssh-pool"); }}
+          onBack={poolReturn ? () => go("console") : undefined}
+        />}
         {page === "config" && <div className="management-toolbar">
+          <button onClick={() => { setPoolReturn(false); go("config/ssh-pool"); }}>SSH 资源池</button>
           <ManagementDrawer title="管理样本清单"><DatasetManifests /></ManagementDrawer>
           <ManagementDrawer title="执行规则与绑定"><ExecutionBindings /></ManagementDrawer>
           {import.meta.env.DEV && <ManagementDrawer title="标准仓输入与版本"><StandardInputs /></ManagementDrawer>}
         </div>}
-        {(page === "config" || page.startsWith("config/")) && (
+        {(page === "config" || (page.startsWith("config/") && !poolPage)) && (
           <Configurations profiles={profiles} setProfiles={setProfiles} go={go} notify={setToast} />
         )}
         {evaluationPage && (

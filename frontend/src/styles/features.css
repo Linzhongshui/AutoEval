@@ -2037,3 +2037,15 @@ textarea { font: inherit; }
 .planning-table td[data-label="样本范围"] { vertical-align: top; }
 .planning-table td[data-label="执行配置"] > select,
 .planning-table td[data-label="样本范围"] > select { display: block; margin: 0; height: 40px; box-sizing: border-box; }
+.ssh-pool-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+}
+.ssh-pool-fields .field-wide { grid-column: 1 / -1; }
+.ssh-pool td small { display: block; color: var(--muted); }
+.resource-selected { margin-top: 8px; flex-wrap: wrap; }
+.resource-selected button { display: inline-flex; align-items: center; gap: 6px; }
+@media (max-width: 600px) {
+  .ssh-pool-fields { grid-template-columns: minmax(0, 1fr); }
+}

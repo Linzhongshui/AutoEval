@@ -7,6 +7,7 @@ import { PreflightNodes, type PreflightEvidence, type PreflightProgress } from "
 import { ResourceMultiSelect } from "./ResourceMultiSelect";
 import { ModelServices } from "../resources/ModelServices";
 import { ProbeProgress } from "../evaluation/ProbeProgress";
+import { Clock3, LoaderCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { apiGet, apiGetPage, apiPost } from "../../shared/api";
 import type { Resource, Target } from "../evaluation/types";
@@ -158,7 +159,7 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
         const rows = await Promise.all(jobs.map(j => apiGet<Job>(`/planning/probes/${j.id}`)));
         for (const row of rows) {
           if (row.id === job?.id) setJob(row);
-          if (row.id === adviceJob?.id) setAdviceJob(row);
+          if (row.id === adviceJob?.id) setAdviceJob(current => current?.id === row.id ? row : current);
           if (row.id === preflight?.id) setPreflight(current => current?.id === row.id ? row : current);
           if (row.id === probe?.id) { setProbe(row); if (row.result?.throughput_profile_id) { void refresh(); setCurve(row.result.throughput_profile_id); } }
         }
@@ -188,6 +189,16 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
   const ready = !!target && !!resource && payload.tasks.length > 0 && !incomplete;
   const report = job?.state === "completed" ? job.result?.report : undefined;
   const advice = adviceJob?.state === "completed" ? adviceJob.result?.report : undefined;
+  const adviceQueued = adviceJob?.state === "pending";
+  const adviceRunning = adviceJob?.state === "running";
+  const adviceActive = adviceQueued || adviceRunning;
+  const adviceNotice = adviceJob && !adviceActive && !advice
+    ? ({
+        failed: "优化建议生成失败",
+        cancelled: "优化建议已取消",
+        completed: "未返回可用的优化建议",
+      } as Record<string, string>)[adviceJob.state] ?? "优化建议状态待确认"
+    : null;
   const probeBlocked = !!probe && ["pending", "running", "unresolved"].includes(probe.state);
   const checking = !!preflight && ["pending", "running"].includes(preflight.state);
   const preflightLabel = !preflight ? "未检查" : ({ pending: "排队中", running: "检查中", completed: preflight.result?.execution_ready ? "检查通过" : "存在阻塞", failed: "检查失败", cancelled: "已取消" } as Record<string, string>)[preflight.state] || "状态待确认";
@@ -432,12 +443,16 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
         {terminal && preflight.created_at && preflight.updated_at && <small>· 耗时 {duration((Date.parse(preflight.updated_at) - Date.parse(preflight.created_at)) / 1000)}</small>}
       </dd></div>
     </dl>
-    <div className="planning-duration" role="status"><span>预计总耗时</span><div className="estimate-status-line"><strong>{estimating || (job && ["pending", "running"].includes(job.state)) ? "正在估算…" : report ? duration(report.estimate.total_duration_sec) : "暂无可靠估算"}</strong>{(estimating || (job && ["pending", "running"].includes(job.state))) && <ElapsedTime label="估算已耗时" />}</div><small>{report ? "不含排队及报告分析耗时" : !curve ? "未提供吞吐曲线；可直接按当前配置发起测评" : "吞吐曲线就绪后自动估算当前参数；可手动获取优化建议"}</small></div>
+    <div className="planning-duration" role="status"><span>预计总耗时</span><div className="estimate-status-line"><strong>{job?.state === "pending" ? "估算排队中" : estimating || job?.state === "running" ? "正在估算…" : report ? duration(report.estimate.total_duration_sec) : "暂无可靠估算"}</strong>{(estimating || (job && ["pending", "running"].includes(job.state))) && <ElapsedTime label="估算已耗时" />}</div><small>{report ? "不含排队及报告分析耗时" : !curve ? "未提供吞吐曲线；可直接按当前配置发起测评" : "按当前参数估算"}</small></div>
     {job?.state === "failed" && <p role="alert">当前参数估算失败：{job.result?.reason || "请重试"}</p>}
     <div className="estimate-actions"><button disabled={busy || estimating || !ready || !curve || (job != null && ["pending", "running"].includes(job.state))} onClick={() => void action(async () => { const revision = generation.current; setEstimating(true); setJob(null); try { const next = await apiPost<Job>("/planning/plans", { ...payload, recommend: false }); if (revision === generation.current) { setStaleEstimate(false); setJob(next); } } finally { setEstimating(false); } })}>重新估算</button>
-    <button disabled={busy || !ready || !curve || (adviceJob != null && ["pending", "running"].includes(adviceJob.state))} onClick={() => void action(async () => { const revision = generation.current; const next = await apiPost<Job>("/planning/plans", { ...payload, recommend: true }); if (revision === generation.current) setAdviceJob(next); })}>获取优化建议</button></div>
+    <button className={adviceActive ? "advice-in-progress" : undefined} disabled={busy || !ready || !curve || adviceActive} onClick={() => void action(async () => { const revision = generation.current; const next = await apiPost<Job>("/planning/plans", { ...payload, recommend: true }); if (revision === generation.current) setAdviceJob(next); })}>
+      {adviceQueued && <Clock3 size={16} aria-hidden="true" />}
+      {adviceRunning && <LoaderCircle size={16} aria-hidden="true" />}
+      <span aria-live="polite">{adviceQueued ? "优化建议排队中" : adviceRunning ? "正在生成建议" : "获取优化建议"}</span>
+    </button></div>
     {report && <details className="estimate-disclosure"><summary>查看当前参数耗时依据</summary><PlanEstimate report={report} /></details>}
-    {adviceJob && <p role="status">优化建议：{adviceJob.state} {adviceJob.result?.reason}</p>}
+    {adviceNotice && <p role="status">{adviceNotice}{adviceJob?.result?.reason && ` · ${adviceJob.result.reason}`}</p>}
     {advice && <section className="stack"><h3>优化建议（尚未采纳）</h3><details className="estimate-disclosure"><summary>查看优化建议与参数差异</summary><PlanEstimate report={advice} /><p>同时运行数据集 {parallel} → {advice.plan.dataset_concurrency}</p>{advice.tasks.map(t => <p key={t.task_id}>{t.task_id}：case 并发 {currentConcurrency(datasets.find(d => d.replaceAll("-", "_") === t.task_id) || t.task_id)} → {advice.plan.case_concurrency[t.task_id]}</p>)}</details><button disabled={busy || advice.conditional} onClick={() => {
       const proposed: Record<string, number> = {};
       for (const d of datasets) { const id = d.replaceAll("-", "_"); if (advice.plan.case_concurrency[id] != null) proposed[d] = advice.plan.case_concurrency[id]; }

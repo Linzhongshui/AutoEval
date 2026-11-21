@@ -1971,6 +1971,15 @@ textarea { font: inherit; }
 .probe-budget-dialog .inline { justify-content: flex-end; flex-wrap: wrap; }
 .estimate-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 .estimate-actions button { flex: 1; }
+.estimate-actions button.advice-in-progress:disabled {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--primary);
+  background: #efecff;
+  opacity: 1;
+}
 .probe-progress-card { display:grid;gap:10px;padding:16px;border:1px solid #ddd8fc;border-radius:10px;background:#f5f3ff;color:#465078;text-align:left; }
 .probe-progress-heading { display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px 16px; }
 .probe-progress-heading strong { color:#362a85; }

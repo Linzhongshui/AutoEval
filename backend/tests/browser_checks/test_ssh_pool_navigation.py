@@ -149,6 +149,7 @@ def test_preflight_elapsed_and_all_pool_nodes():
     datasets = ["GPQA", "MMMU-Pro", "DeepSWE", "AutomationBench"]
     node_ids = ["worker", "standby", "unused"]
     attempts = []
+    estimates = []
     finish = False
     path_missing = False
     submissions = []
@@ -169,7 +170,8 @@ def test_preflight_elapsed_and_all_pool_nodes():
                 "manifests": [
                     {"id": d, "dataset": d, "scope": "full", "sample_count": 1} for d in datasets
                 ],
-                "curves": [],
+                "curves": [{"id": "curve", "target_id": "model", "resource_id": "worker",
+                            "resource_kind": "customer_ssh", "measured_at": "2026-11-21T00:00:00Z"}],
             }
         elif path == "/ssh-resources":
             data = [{"id": n, "binding_key": n, "host": "shared.test", "port": 22} for n in node_ids]
@@ -179,6 +181,9 @@ def test_preflight_elapsed_and_all_pool_nodes():
             assert route.request.post_data_json["resource_ids"] == ["worker", "standby"]
             attempts.append(datetime.now(UTC))
             data = {"id": str(len(attempts)), "state": "pending"}
+        elif path == "/planning/plans":
+            estimates.append(route.request.post_data_json)
+            data = {"id": "estimate", "state": "completed"}
         elif path.startswith("/planning/probes/"):
             index = int(path.rsplit("/", 1)[1])
             start = attempts[index - 1]
@@ -199,6 +204,8 @@ def test_preflight_elapsed_and_all_pool_nodes():
                                          "blocking_reasons": ["dataset_path_missing"]
                                          if path_missing and d == "MMMU-Pro" else []} for d in datasets
                                     ]})
+                if len(attempts) == 1:
+                    data["result"]["preflight_valid_until"] = (start + timedelta(minutes=5)).isoformat()
         elif path == "/evaluation-tasks" and route.request.method == "POST":
             submissions.append(route.request.post_data_json)
             data = {"run_id": "four-datasets"}
@@ -208,6 +215,7 @@ def test_preflight_elapsed_and_all_pool_nodes():
         chrome = os.getenv("AE_CHROME_PATH")
         browser = playwright.chromium.launch(**({"executable_path": chrome} if chrome else {}))
         page = browser.new_page()
+        page.clock.install()
         page.route("**/api/autoeval/v1/**", mock)
         page.goto(os.environ["AE_BROWSER_URL"].split("#")[0] + "#console")
         page.get_by_label("规划模型服务", exact=True).click()
@@ -230,6 +238,18 @@ def test_preflight_elapsed_and_all_pool_nodes():
         summary = page.get_by_role("complementary", name="任务摘要")
         expect(summary.get_by_text("已选 1 台")).to_be_visible()
         expect(summary.get_by_text("4/4 通过")).to_be_visible()
+        # A strategy edit must retain the same evidence across the auto-check debounce.
+        check_count = len(attempts)
+        page.locator(".planning-throughput > summary").click()
+        page.get_by_label("吞吐来源").select_option("curve")
+        page.get_by_role("button", name="MMMU-Pro 前移").click()
+        page.get_by_role("button", name="GPQA 前移").click()
+        page.get_by_role("group", name="GPQA 样本执行策略").get_by_role("button", name="并行执行").click()
+        page.get_by_label("GPQA case 并发", exact=True).fill("6")
+        page.clock.run_for(700)
+        assert len(attempts) == check_count
+        assert next(t for t in estimates[-1]["tasks"] if t["dataset"] == "GPQA")["concurrency"] == 6
+        expect(summary.get_by_text("4/4 通过")).to_be_visible()
         expect(summary.get_by_text("· 耗时 7秒")).to_be_visible()
         expect(summary.locator(".planning-blocker")).to_have_count(0)
         expect(summary.get_by_role("button", name="提交测评")).to_be_enabled()
@@ -240,8 +260,11 @@ def test_preflight_elapsed_and_all_pool_nodes():
         expect(summary.get_by_text("标准参数校验", exact=False)).to_be_visible()
         path_missing = True
         finish = False
-        page.get_by_role("button", name="重新检查").click()
-        expect(timer).to_have_text("已耗时 0秒")
+        page.clock.fast_forward(5 * 60 * 1000)
+        expect(summary.get_by_text("已过期", exact=True)).to_be_visible()
+        expect(summary.get_by_role("button", name="提交测评")).to_be_disabled()
+        page.get_by_role("group", name="数据集执行策略").get_by_role("button", name="并行执行").click()
+        expect(timer).to_be_visible()
         expect(nodes.get_by_text("预检通过", exact=True)).to_have_count(0)
         finish = True
         blocked_dataset = details.locator("details").filter(has_text="MMMU-Pro")
@@ -262,6 +285,7 @@ def test_preflight_elapsed_and_all_pool_nodes():
         assert len(submissions) == 1
         assert submissions[0]["resource_ids"] == ["worker", "standby"]
         assert submissions[0]["dataset_concurrency"] == 4
+        assert submissions[0]["tasks"][0]["concurrency"] == 6
         assert submissions[0]["resource_id"] == "worker"
         assert [t["dataset"] for t in submissions[0]["tasks"]] == datasets
         browser.close()

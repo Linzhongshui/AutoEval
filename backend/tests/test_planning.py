@@ -52,9 +52,11 @@ def test_preflight_selection_tracks_compilation_manifest_and_profile():
         compilation_id="compilation", manifest_id="manifest", profile_sha256="profile"
     )
     snapshot = copy.deepcopy(data)
+    snapshot["dataset_concurrency"] = 4
+    snapshot["tasks"][0]["concurrency"] = 6
     snapshot["tasks"].reverse()
     assert selection_identity(snapshot) == selection_identity(data)
-    for field in ("compilation_id", "manifest_id", "profile_sha256"):
+    for field in ("compilation_id", "compilation_sha256", "manifest_id", "manifest_sha256", "profile_sha256"):
         changed = copy.deepcopy(data)
         changed["tasks"][0][field] = "changed"
         assert selection_identity(changed) != selection_identity(data)

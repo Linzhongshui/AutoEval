@@ -186,21 +186,20 @@ async def resolve_inputs(session, settings, body):
     }
 
 
+def preflight_task_identity(task):
+    # The registered compilation hash precedes runtime concurrency overrides.
+    return {
+        key: task.get(key)
+        for key in (
+            "task_id", "dataset", "compilation_id", "compilation_sha256",
+            "manifest_id", "manifest_sha256", "profile_sha256", "tool",
+            "assigned_resource_id", "assigned_resource_kind", "execution_template",
+        )
+    }
+
+
 def selection_identity(inputs):
     return sorted(
-        (
-            {
-                **{
-                    key: task[key]
-                    for key in ("task_id", "dataset", "compilation_id", "manifest_id")
-                },
-                "profile_sha256": task.get("profile_sha256"),
-                "concurrency": task.get("concurrency"),
-                "assigned_resource_id": task.get("assigned_resource_id"),
-                "assigned_resource_kind": task.get("assigned_resource_kind"),
-                "execution_template": task.get("execution_template"),
-            }
-            for task in inputs.get("tasks", [])
-        ),
+        (preflight_task_identity(task) for task in inputs.get("tasks", [])),
         key=lambda task: task["task_id"],
     )

@@ -38,7 +38,7 @@ const preflightReasons: Record<string, string> = {
 };
 const describePreflight = (reasons: string[]) =>
   reasons.map(reason => preflightReasons[reason] ?? reason).join("；");
-type Job = { id: string; state: string; created_at?: string; updated_at?: string; result?: { preflight_progress?: PreflightProgress; progress?: { stage: string; current_concurrency?: number | null; completed_levels: number; total_levels: number; observed_at?: string } | null; report?: Report; throughput_profile_id?: string; reason?: string; dispatch_blocked?: boolean; remote_check?: { state: string; checked_at: string }; execution_ready?: boolean; supported_datasets?: string[]; blocking_reasons?: string[]; dataset_checks?: DatasetCheck[]; tool_versions?: Record<string, { expected: string; actual: string | null }> } };
+type Job = { id: string; state: string; created_at?: string; updated_at?: string; result?: { preflight_valid_until?: string; preflight_progress?: PreflightProgress; progress?: { stage: string; current_concurrency?: number | null; completed_levels: number; total_levels: number; observed_at?: string } | null; report?: Report; throughput_profile_id?: string; reason?: string; dispatch_blocked?: boolean; remote_check?: { state: string; checked_at: string }; execution_ready?: boolean; supported_datasets?: string[]; blocking_reasons?: string[]; dataset_checks?: DatasetCheck[]; tool_versions?: Record<string, { expected: string; actual: string | null }> } };
 const datasets = ["GPQA", "MMMU-Pro", "DeepSWE", "AutomationBench"];
 function StrategyChoice({ label, parallel, disabled = false, onChange }: { label: string; parallel: boolean; disabled?: boolean; onChange: (parallel: boolean) => void }) {
   return <div className="strategy-choices" role="group" aria-label={label}>
@@ -71,6 +71,8 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
   const checkDetails = useRef<HTMLDetailsElement>(null);
   const firstBlocker = useRef<HTMLDetailsElement>(null);
   const [preflight, setPreflight] = useState<Job | null>(null);
+  const [checkRequest, setCheckRequest] = useState(0);
+  const [checkExpired, setCheckExpired] = useState(false);
   const [concurrency, setConcurrency] = useState<Record<string, number>>({});
   const [staleEstimate, setStaleEstimate] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -133,12 +135,26 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
     })) };
   const fingerprint = JSON.stringify(payload);
   useEffect(() => { setParallel(v => Math.min(v, maxParallel)); }, [maxParallel]);
-  const preflightFingerprint = JSON.stringify({ target_id: target, resource_id: resource, resource_kind: resourceKind, resource_ids: resourceIds, tasks: payload.tasks });
+  const preflightFingerprint = JSON.stringify({
+    target_id: target, resource_id: resource, resource_kind: resourceKind, resource_ids: resourceIds,
+    tasks: payload.tasks.map(({ task_id, dataset, compilation_id, manifest_id }) => ({
+      task_id, dataset, compilation_id, manifest_id,
+    })).sort((a, b) => a.task_id.localeCompare(b.task_id)),
+  });
   useEffect(() => {
     generation.current++; if (job) setStaleEstimate(true); setJob(null); setAdviceJob(null);
+    if (checkExpired) setCheckRequest(n => n + 1);
   }, [fingerprint]);
-  useEffect(() => { setPreflight(null); setMessage(""); }, [preflightFingerprint]);
-  useEffect(() => { setPreflight(null); setProbeReview(false); setCurve(""); }, [target, resource, resourceKind]);
+  useEffect(() => { setProbeReview(false); setCurve(""); }, [target, resource, resourceKind]);
+  const validUntil = preflight?.result?.preflight_valid_until;
+  useEffect(() => {
+    if (!validUntil) return;
+    const timer = setTimeout(() => {
+      setCheckExpired(true);
+      setPreflight(null);
+    }, Math.max(0, Date.parse(validUntil) - Date.now()));
+    return () => clearTimeout(timer);
+  }, [validUntil]);
   useEffect(() => {
     setSelection(current => {
       const next = { ...current }; let changed = false;
@@ -158,7 +174,7 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
       try {
         const rows = await Promise.all(jobs.map(j => apiGet<Job>(`/planning/probes/${j.id}`)));
         for (const row of rows) {
-          if (row.id === job?.id) setJob(row);
+          if (row.id === job?.id) setJob(current => current?.id === row.id ? row : current);
           if (row.id === adviceJob?.id) setAdviceJob(current => current?.id === row.id ? row : current);
           if (row.id === preflight?.id) setPreflight(current => current?.id === row.id ? row : current);
           if (row.id === probe?.id) { setProbe(row); if (row.result?.throughput_profile_id) { void refresh(); setCurve(row.result.throughput_profile_id); } }
@@ -201,7 +217,7 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
     : null;
   const probeBlocked = !!probe && ["pending", "running", "unresolved"].includes(probe.state);
   const checking = !!preflight && ["pending", "running"].includes(preflight.state);
-  const preflightLabel = !preflight ? "未检查" : ({ pending: "排队中", running: "检查中", completed: preflight.result?.execution_ready ? "检查通过" : "存在阻塞", failed: "检查失败", cancelled: "已取消" } as Record<string, string>)[preflight.state] || "状态待确认";
+  const preflightLabel = !preflight ? (checkExpired ? "已过期" : "未检查") : ({ pending: "排队中", running: "检查中", completed: preflight.result?.execution_ready ? "检查通过" : "存在阻塞", failed: "检查失败", cancelled: "已取消" } as Record<string, string>)[preflight.state] || "状态待确认";
   const preflightTone = checking ? "checking" : preflight?.result?.execution_ready ? "passed" : "blocked";
   const autoFillDataset = (dataset: string, active: boolean) => {
     setEnabled(rows => active ? [...new Set([...rows, dataset])] : rows.filter(row => row !== dataset));
@@ -269,7 +285,7 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
   const missingInput = !target ? "请选择模型服务" : !enabled.length ? "请启用至少一个数据集"
     : incomplete ? `请补全 ${enabled.filter(d => !selection[d]?.compilation || !selection[d]?.manifest).join("、")} 的配置或样本范围`
     : !resource ? "请选择 SSH 节点" : "";
-  const blocker = missingInput || (blocked ? failureReason : "");
+  const blocker = missingInput || (checkExpired ? "环境检查已过期，请重新检查。" : blocked ? failureReason : "");
   function revealBlocker() {
     const details = checkDetails.current;
     if (!details) return;
@@ -298,14 +314,17 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
   };
   const sampleCount = payload.tasks.reduce((sum, t) => sum + (options.manifests.find(m => m.id === t.manifest_id)?.sample_count || 0), 0);
   useEffect(() => {
+    setPreflight(null);
+    setCheckExpired(false);
+    setMessage("");
     if (!ready) return;
     let stopped = false;
-    const timer = setTimeout(() => { void apiPost<Job>("/planning/resources/preflight", payload)
+    const timer = setTimeout(() => { void apiPost<Job>("/planning/resources/preflight", JSON.parse(preflightFingerprint))
       .then(result => { if (!stopped) setPreflight(result); })
       .catch(() => { if (!stopped) setMessage("自动环境检查失败，请点击环境检查重试。"); }); }, 350);
     return () => { stopped = true; clearTimeout(timer); };
   // Resource checks follow execution selection, independently of optional estimation inputs.
-  }, [preflightFingerprint, ready]);
+  }, [preflightFingerprint, ready, checkRequest]);
   return <div className="planning-layout"><section className="card stack planning-card" aria-label="发起测评">
     <h2>1. 模型服务</h2>
     <p className="planning-intro">支持 GPQA、MMMU-Pro、DeepSWE、AutomationBench 的全量或已绑定 Lite 清单。Agent 工作流通过 AISBench Harbor 执行，需绑定配置与清单并通过环境检查。</p>
@@ -341,7 +360,7 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
     <div className="spread"><h2>3. SSH 执行资源</h2><button type="button" onClick={() => onManagePool()}>管理 SSH 资源池</button></div>
     {resources.loading ? <p role="status">正在加载 SSH 节点…</p> : resources.error ? <div className="inline"><p role="alert">{resources.error}</p><button onClick={resources.retry}>重新加载</button></div> : !resources.rows.length ? <div className="notice"><p>资源池暂无可用的 SSH 节点。</p><button type="button" onClick={() => onManagePool(true)}>添加 SSH 节点</button></div> : <ResourceMultiSelect hosts={hosts} showChips={!preflight || (checking && !result?.preflight_progress && !checks.length)} value={resourceIds} onChange={ids => { manualNodeSelection.current = true; setResourceIds(ids); setResource(ids[0] || ""); }} />}
     <div className="planning-actions">
-      <button disabled={busy || !ready || checking} onClick={() => void action(async () => { const revision = generation.current; const result = await apiPost<Job>("/planning/resources/preflight", payload); if (revision === generation.current) setPreflight(result); })}>{checking ? "正在检查…" : preflight ? "重新检查" : "环境检查"}</button>
+      <button disabled={busy || !ready || checking} onClick={() => setCheckRequest(n => n + 1)}>{checking ? "正在检查…" : preflight || checkExpired ? "重新检查" : "环境检查"}</button>
       <p className="muted">仅检查环境，不发起测评。</p>
     </div>
     {preflight && <PreflightNodes hosts={hosts} selectedIds={resourceIds} datasets={enabled} job={preflight} />}

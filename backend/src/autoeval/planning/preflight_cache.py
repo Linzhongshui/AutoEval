@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select, text
 
 from autoeval.catalog.standard_inputs import digest
+from autoeval.evaluation.inputs import preflight_task_identity
 from autoeval.planning.artifacts import PREFLIGHT_TTL, artifact
 from autoeval.planning.models import PlanningArtifact
 from autoeval.planning.planning_transport import execution_template
@@ -24,9 +25,10 @@ async def cached_isolated_check(sessions, settings, job_id, item, check, report,
             raise ValueError("SSH binding missing")
         key = digest(
             {
-                "format": 1,
+                "format": 2,
                 "ssh": {**resource_data(binding), "credential_ref": binding.credential_ref},
-                "task": item,
+                "task": preflight_task_identity(item),
+                "samples": item.get("samples"),
             }
         )
         # Concurrent preflight jobs for this exact binding share one real check.

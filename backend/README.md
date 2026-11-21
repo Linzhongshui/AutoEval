@@ -36,7 +36,7 @@ uv run uvicorn autoeval.entrypoints.api:app --host 127.0.0.1 --port 8000 --reloa
 
 - API 前缀：`/api/autoeval/v1`，交互文档：`http://127.0.0.1:8000/docs`。
 - `/health/live` 检查进程，`/health/ready` 实际检查数据库、Temporal 和对象存储；依赖不可用时 ready 返回 503。
-- 前端在 `frontend/` 启动，Vite 默认将 API 请求代理到本机 8000。
+- 前端在 `frontend/` 启动，Vite 默认将 API 请求代理到本机 8000。多工作树并行时，可在本工作树的 `frontend/.env.development.local` 设置 `AE_DEV_API_ORIGIN` 指向对应 API。
 
 ## 后台进程
 
@@ -48,6 +48,7 @@ API 不负责直接消费任务。按所使用的功能在独立终端启动对�
 | Workflow | `uv run python -m autoeval.entrypoints.worker workflow` | 测评工作流编排 |
 | Planning coordinator | `uv run python -m autoeval.planning.planning_worker` | 环境预检与可选规划 |
 | Planning execution | `uv run python -m autoeval.entrypoints.worker planning-execution` | 统一测评执行活动 |
+| Isolated execution | `uv run python -m autoeval.entrypoints.worker isolated-execution` | 混合版本环境中仅消费 R13 新任务；已启动本版 planning-execution 时无需重复启动 |
 | Reconciler | `uv run python -m autoeval.entrypoints.reconciler` | 对账及恢复已有状态 |
 | Result | `uv run python -m autoeval.entrypoints.worker result` | 结果收集与已配置的分析活动 |
 | Langfuse | `uv run python -m autoeval.entrypoints.worker langfuse` | Harbor 产物归档后的独立导入 |
@@ -116,6 +117,30 @@ uv export --frozen --no-dev --no-emit-project --format requirements-txt --output
 
 ### R13 remote execution templates
 
+SSH 节点是执行资源，容器由平台按子任务创建。首次预检也会创建临时独立容器，
+完成检查后回收。正式任务获配容量后创建自己的容器。资源池无需手工新增每个容器。
+从旧版配置升级时，只有 `container_id` 和 `image_id` 的绑定还缺少执行模板，
+需要在同一节点条目中补充 `executors`。原固定容器信息供历史任务和兼容路径读取。
+
+```json
+{
+  "<SSH 节点 UUID>": {
+    "executors": {
+      "aisbench": {
+        "revision": "<与执行配置一致的完整 Git 提交>",
+        "image_id": "sha256:<节点上已安装镜像的 64 位摘要>",
+        "readonly_mounts": [
+          {"source": "/srv/evaluation/datasets", "target": "/benchmark/ais_bench/datasets"}
+        ]
+      }
+    }
+  }
+}
+```
+
+模板无需 `container_id`。镜像必须包含匹配的工具及平台适配器，数据可以包含在镜像中，
+或通过只读挂载提供。平台仍校验工具版本、评分文件和数据目录。
+
 Unified evaluation accepts SSH resources. Configure the protected
 `AE_PLANNING_CONTAINER_CONFIG` mapping by SSH binding UUID. Each binding's
 `executors` object maps tool names to execution templates with `revision`,
@@ -132,8 +157,18 @@ daemon. Keep the existing fixed runner binding for planning and in-flight
 snapshots. Apply migrations through `0038_cleanup_attempt_order` before starting the
 updated worker and reconciler.
 
+Harbor 节点也可在模板中配置 `rootless_docker_helper`，值为节点上可执行的
+`deploy/r13-rootless-docker` 的绝对路径。将该程序安装在节点已配置的
+Docker 静态工具目录中，与 `docker/`、`docker-rootless-extras/` 同级。
+节点需为 SSH 用户配置 subordinate UID/GID，并提供 `ip`、Python 3.9+
+和支持 pidfd 的 Linux 内核。每个子任务有独立套接字和状态目录。
+执行器先回收外层容器，再让节点程序停止相应的私有 daemon。
+
 PEIR and AgentX currently have tool identifiers and template matching tests.
 Production submission and native output adapters require their tool contracts.
+
+新任务的工作流与活动使用 `autoeval.dataset-containers.v1` 队列。本版 `planning-execution` 同时监听历史活动队列，升级时先启动 Worker 再切换 API。
+同机隔离验收可设置 `AE_ISOLATION_RESOURCE_ID` 为已登记 AISBench 镜像的 SSH 资源 UUID，执行 `uv run pytest -q -s tests/test_dataset_container_ssh.py`。此用例启动三个固定输出容器，使用配置的对象存储保存验收记录并校验回读，模型请求数为零。
 
 The optional lifecycle fixtures in `tests/test_isolated_execution.py` accept
 `AE_ISOLATED_SSH_CONFIG`, a protected JSON file for an approved test node.

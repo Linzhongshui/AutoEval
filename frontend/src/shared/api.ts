@@ -67,6 +67,26 @@ export async function apiPost<T>(path: string, payload?: unknown, key?: string, 
   return body.data as T;
 }
 
+export async function apiPostBlob(
+  path: string,
+  payload: unknown,
+  signal?: AbortSignal,
+): Promise<{ blob: Blob; filename: string }> {
+  const response = await fetch(`/api/autoeval/v1${path}`, {
+    method: "POST",
+    signal,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw await readError(response);
+  const disposition = response.headers.get("Content-Disposition") || "";
+  const match = /filename\*?=(?:UTF-8''|")?([^";]+)/i.exec(disposition);
+  return {
+    blob: await response.blob(),
+    filename: match ? decodeURIComponent(match[1]) : "autoeval-badcase.zip",
+  };
+}
+
 export interface BackendCapabilities {
   workspace_mode: "single";
   subject: string;

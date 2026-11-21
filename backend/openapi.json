@@ -226,6 +226,16 @@
               "default": "best",
               "title": "Selection"
             }
+          },
+          {
+            "name": "compact",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Compact"
+            }
           }
         ],
         "responses": {
@@ -980,6 +990,22 @@
               "type": "string",
               "format": "uuid",
               "title": "Run Id"
+            }
+          },
+          {
+            "name": "dataset_key",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dataset Key"
             }
           }
         ],
@@ -2549,6 +2575,20 @@
               "default": 50,
               "title": "Limit"
             }
+          },
+          {
+            "name": "evidence_version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "current",
+                "original"
+              ],
+              "type": "string",
+              "default": "current",
+              "title": "Evidence Version"
+            }
           }
         ],
         "responses": {
@@ -2592,6 +2632,20 @@
               "format": "uuid",
               "title": "Attempt Id"
             }
+          },
+          {
+            "name": "evidence_version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "current",
+                "original"
+              ],
+              "type": "string",
+              "default": "current",
+              "title": "Evidence Version"
+            }
           }
         ],
         "responses": {
@@ -2602,6 +2656,166 @@
                 "schema": {
                   "$ref": "#/components/schemas/Envelope_dict_"
                 }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/autoeval/v1/runs/{run_id}/result-revisions": {
+      "get": {
+        "tags": [
+          "case execution history"
+        ],
+        "summary": "Result Revisions",
+        "operationId": "result_revisions_api_autoeval_v1_runs__run_id__result_revisions_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/autoeval/v1/runs/{run_id}/result-revisions/{revision_id}/cases": {
+      "get": {
+        "tags": [
+          "case execution history"
+        ],
+        "summary": "Recovered Cases",
+        "operationId": "recovered_cases_api_autoeval_v1_runs__run_id__result_revisions__revision_id__cases_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "revision_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Revision Id"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "sample_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sample Id"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          },
+          {
+            "name": "dataset_key",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dataset Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -4520,6 +4734,32 @@
               "default": 20,
               "title": "Limit"
             }
+          },
+          {
+            "name": "summary_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Summary Only"
+            }
+          },
+          {
+            "name": "review_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Review Status"
+            }
           }
         ],
         "responses": {
@@ -4589,6 +4829,60 @@
         }
       }
     },
+    "/api/autoeval/v1/reports/{report_id}/review": {
+      "post": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Review",
+        "description": "Mark one immutable report as an approved history source; never edits evidence.",
+        "operationId": "review_api_autoeval_v1_reports__report_id__review_post",
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Report Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_dict_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/autoeval/v1/reports/{report_id}/evidence": {
       "get": {
         "tags": [
@@ -4616,6 +4910,164 @@
                 "schema": {
                   "$ref": "#/components/schemas/Envelope_dict_"
                 }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/autoeval/v1/runs/{run_id}/badcase-comparison": {
+      "get": {
+        "tags": [
+          "badcase comparison"
+        ],
+        "summary": "Badcase Comparison",
+        "operationId": "badcase_comparison_api_autoeval_v1_runs__run_id__badcase_comparison_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/autoeval/v1/runs/{run_id}/badcase-case": {
+      "get": {
+        "tags": [
+          "badcase export"
+        ],
+        "summary": "Badcase Case Detail",
+        "operationId": "badcase_case_detail_api_autoeval_v1_runs__run_id__badcase_case_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "sample_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sample Id"
+            }
+          },
+          {
+            "name": "dataset_key",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dataset Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/autoeval/v1/runs/{run_id}/badcase-export": {
+      "post": {
+        "tags": [
+          "badcase export"
+        ],
+        "summary": "Badcase Export",
+        "operationId": "badcase_export_api_autoeval_v1_runs__run_id__badcase_export_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -4767,6 +5219,18 @@
       },
       "CaseExecutionItem": {
         "properties": {
+          "metadata_provenance": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata Provenance"
+          },
           "trace_status": {
             "type": "string",
             "title": "Trace Status"
@@ -5657,6 +6121,9 @@
                 },
                 {
                   "type": "number"
+                },
+                {
+                  "type": "null"
                 }
               ]
             },
@@ -6068,6 +6535,48 @@
           "state"
         ],
         "title": "ExplorationSubmitted"
+      },
+      "ExportInput": {
+        "properties": {
+          "dataset_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Key"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "selected",
+              "high",
+              "suspicious",
+              "all"
+            ],
+            "title": "Scope",
+            "default": "suspicious"
+          },
+          "sample_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Sample Ids"
+          },
+          "include_traces": {
+            "type": "boolean",
+            "title": "Include Traces",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ExportInput"
       },
       "FrozenConfigSpec": {
         "properties": {
@@ -7090,6 +7599,21 @@
       },
       "ReportView": {
         "properties": {
+          "dataset_results": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Results"
+          },
           "id": {
             "type": "string",
             "title": "Id"
@@ -7183,6 +7707,43 @@
             "additionalProperties": true,
             "type": "object",
             "title": "Baseline Comparison"
+          },
+          "review_status": {
+            "type": "string",
+            "title": "Review Status"
+          },
+          "reviewed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "review_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Note"
           }
         },
         "type": "object",
@@ -7204,9 +7765,39 @@
           "gate_status",
           "analysis_status",
           "analysis_id",
-          "baseline_comparison"
+          "baseline_comparison",
+          "review_status"
         ],
         "title": "ReportView"
+      },
+      "ReviewInput": {
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approve",
+              "revoke"
+            ],
+            "title": "Decision"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "decision"
+        ],
+        "title": "ReviewInput"
       },
       "RunListItem": {
         "properties": {

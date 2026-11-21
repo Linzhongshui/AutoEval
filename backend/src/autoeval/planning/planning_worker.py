@@ -111,7 +111,7 @@ async def execute_job(sessions, settings, identifier):
         )
         prior_progress = (row.result or {}).get("preflight_progress") if isolated_preflight else None
         adapter = None if isolated_preflight else await transport(session, settings, inputs)
-    if kind != "probe" or previous != "pending":
+    if kind == "preflight" or previous != "pending":
         await set_job(sessions, identifier, state="running")
     if kind == "preflight":
         checks = [
@@ -181,6 +181,17 @@ async def execute_job(sessions, settings, identifier):
         async with sessions() as session:
             curve = await session.get(PlanningArtifact, inputs["throughput_profile_id"])
             snapshot = await current_preflight(session, inputs)
+            if previous == "pending" and (not snapshot or not snapshot.payload.get("planner_ready")):
+                await set_job(
+                    sessions,
+                    identifier,
+                    state="failed",
+                    result={
+                        "error_code": "plan_preflight_required",
+                        "reason": "当前配置缺少有效的规划预检，请重新检查环境后估算。",
+                    },
+                )
+                return
             observations = (
                 await session.execute(
                     select(CaseExecutionRecord, RunSnapshot)
@@ -217,6 +228,7 @@ async def execute_job(sessions, settings, identifier):
             raise ValueError("Fresh pinned container preflight required")
         key = str(identifier)
         if previous == "pending":
+            await set_job(sessions, identifier, state="running")
             job = await adapter.submit(
                 {
                     "kind": "planner_plan",

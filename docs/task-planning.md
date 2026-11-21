@@ -162,6 +162,8 @@ PlanInput：target_id、resource_id、resource_kind（customer_ssh）、候选�
 
 默认 `AE_PLANNING_JOB_KINDS=preflight,plan`，不会消费历史待执行探测。确认逐条遗留任务与预算后才能显式启用 probe；禁用不等于取消，历史记录保持不变。Docker 本地适配路径仍保留兼容，客户 SSH 路径强制选择绑定容器。
 
+控制台的耗时估算和优化建议都进入 `plan` 队列。若把预检和吞吐探测拆成专用 Worker，也要保留消费 `plan` 的进程。在与 API 相同的后端环境启动两个 `AE_PLANNING_JOB_KINDS=plan` 的规划 Worker，即可并行处理两条规划作业。每个进程一次处理一条，PostgreSQL 按作业 ID 加锁。排队期间如果预检已过期，该估算会提示重新检查环境；预检通过后可使用已有吞吐曲线重新估算。
+
 验证：在现有服务器 LLM 容器中完成固定版本预检与人工输入的离线规划，作业 `f3d3c192-bb99-4e03-a145-e74440918624` 成功、结果读回及清理完成；证据位于开发目录 `.screenshots/remote-planner-no-model-validation.json`。使用人工吞吐数据，没有模型请求，不作为真实吞吐精度或全量测评验收。容器共享 AISBench 的适配器包版本仍需按实际预检结果独立确认。
 
 

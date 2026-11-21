@@ -21,6 +21,7 @@ from autoeval.planning.planning_transport import (
     isolated_transport,
     transport,
 )
+from autoeval.planning.preflight_cache import cached_isolated_check, evidence_expires_at
 from autoeval.reporting.case_history import CaseExecutionRecord
 from autoeval.resources.models import TargetBinding
 from autoeval.resources.targets import validate_url
@@ -42,7 +43,7 @@ async def set_job(sessions, identifier, **values):
         row.updated_at = datetime.now(UTC)
 
 
-async def preflight_isolated_task(sessions, settings, job_id, item, check):
+async def preflight_isolated_task(sessions, settings, job_id, item, check, report):
     resource_id = item["assigned_resource_id"]
     frozen = item["execution_template"]
     def blocked(reason):
@@ -69,17 +70,31 @@ async def preflight_isolated_task(sessions, settings, job_id, item, check):
         adapter = await isolated_transport(
             session, settings, resource_id, uuid.uuid5(job_id, item["task_id"]), frozen
         )
+    container_id = None
     try:
-        await adapter.ensure()
+        await report("preparing", item)
+        container_id = await adapter.ensure()
+        await report("checking", item, container_id=container_id)
         result = await adapter.preflight([check])
+        evidence = {
+            "container_id": container_id,
+            "source_job_id": str(job_id),
+            "checked_at": datetime.now(UTC).isoformat(),
+        }
+        result["preflight_evidence"] = evidence
         for dataset_check in result["dataset_checks"]:
             dataset_check["assigned_resource_id"] = resource_id
+            dataset_check["preflight_evidence"] = evidence
         return result
-    except HarborDaemonUnavailable:
+    except HarborDaemonUnavailable as exc:
+        container_id = exc.container_id
         return blocked("harbor_private_daemon_unavailable")
     finally:
-        if not await adapter.remove():
-            raise RuntimeError("Preflight container cleanup could not be confirmed")
+        try:
+            await report("cleaning", item, container_id=container_id)
+        finally:
+            if not await adapter.remove():
+                raise RuntimeError("Preflight container cleanup could not be confirmed")
 
 
 async def execute_job(sessions, settings, identifier):
@@ -94,6 +109,7 @@ async def execute_job(sessions, settings, identifier):
         isolated_preflight = kind == "preflight" and all(
             t.get("execution_template") for t in inputs["tasks"]
         )
+        prior_progress = (row.result or {}).get("preflight_progress") if isolated_preflight else None
         adapter = None if isolated_preflight else await transport(session, settings, inputs)
     if kind != "probe" or previous != "pending":
         await set_job(sessions, identifier, state="running")
@@ -102,13 +118,36 @@ async def execute_job(sessions, settings, identifier):
             {key: item[key] for key in ("task_id", "dataset", "compilation", "tool")}
             for item in inputs["tasks"]
         ]
-        if all(t.get("execution_template") for t in inputs["tasks"]):
-            task_resources = {
-                item["task_id"]: await preflight_isolated_task(
-                    sessions, settings, identifier, item, check
-                )
-                for item, check in zip(inputs["tasks"], checks, strict=True)
+        if isolated_preflight:
+            progress = {
+                "assignments": {t["dataset"]: t["assigned_resource_id"] for t in inputs["tasks"]},
+                "events": list((prior_progress or {}).get("events", [])),
             }
+
+            async def report(stage, item=None, **details):
+                progress["events"].append({
+                    "at": datetime.now(UTC).isoformat(),
+                    "stage": stage,
+                    "dataset": item["dataset"] if item else None,
+                    **details,
+                })
+                await set_job(sessions, identifier, result={"preflight_progress": progress})
+
+            await report("resumed" if prior_progress else "started")
+            task_resources = {}
+            for item, check in zip(inputs["tasks"], checks, strict=True):
+                try:
+                    checked, reused = await cached_isolated_check(
+                        sessions, settings, identifier, item, check, report, preflight_isolated_task
+                    )
+                except Exception:
+                    await report("failed", item)
+                    raise
+                task_resources[item["task_id"]] = checked
+                if reused:
+                    await report("reused", item, **checked["preflight_evidence"])
+                else:
+                    await report("passed" if checked["execution_ready"] else "blocked", item)
             snapshot = {
                 **next(iter(task_resources.values())),
                 "task_resources": task_resources,
@@ -118,6 +157,10 @@ async def execute_job(sessions, settings, identifier):
                 "execution_ready": all(r["execution_ready"] for r in task_resources.values()),
                 "blocking_reasons": sorted({b for r in task_resources.values() for b in r["blocking_reasons"]}),
             }
+            if snapshot["execution_ready"]:
+                snapshot["preflight_valid_until"] = min(
+                    evidence_expires_at(r["preflight_evidence"]) for r in task_resources.values()
+                ).isoformat()
         elif inputs.get("resource_ids"):
             task_resources = {}
             for item in inputs["tasks"]:

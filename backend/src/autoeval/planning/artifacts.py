@@ -7,6 +7,8 @@ from autoeval.catalog.datasets import canonical_manifest, write_manifest
 from autoeval.catalog.standard_inputs import digest
 from autoeval.evaluation.inputs import selection_identity
 
+PREFLIGHT_TTL = timedelta(minutes=5)
+
 
 async def artifact(session, settings, kind, payload):
     from autoeval.planning.models import PlanningArtifact
@@ -32,7 +34,7 @@ async def current_preflight(session, inputs, *, require_selection=True):
             .limit(100)
         )
     ).all()
-    return next(
+    row = next(
         (
             r
             for r in rows
@@ -45,7 +47,14 @@ async def current_preflight(session, inputs, *, require_selection=True):
                     and selection_identity(r.payload) == selection_identity(inputs)
                 )
             )
-            and r.created_at > datetime.now(UTC) - timedelta(minutes=5)
+            and r.created_at > datetime.now(UTC) - PREFLIGHT_TTL
         ),
         None,
     )
+    if (
+        row
+        and (expires := row.payload.get("preflight_valid_until"))
+        and datetime.fromisoformat(expires) <= datetime.now(UTC)
+    ):
+        return None
+    return row

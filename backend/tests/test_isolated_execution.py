@@ -613,8 +613,47 @@ async def test_queued_preflight_blocks_template_drift_before_starting_ssh(monkey
     monkeypatch.setattr(planning_worker, "execution_template", lambda *_: {"image_id": "new"})
     connect = AsyncMock()
     monkeypatch.setattr(planning_worker, "isolated_transport", connect)
-    result = await planning_worker.preflight_isolated_task(None, None, uuid4(), item, None)
+    result = await planning_worker.preflight_isolated_task(None, None, uuid4(), item, None, AsyncMock())
     assert not result["execution_ready"]
     assert result["blocking_reasons"] == ["ssh_execution_template_changed"]
     assert result["dataset_checks"][0]["assigned_resource_id"] == resource_id
     connect.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("report_failure", [False, True])
+async def test_preflight_progress_preserves_container_cleanup(monkeypatch, report_failure):
+    from unittest.mock import AsyncMock, MagicMock
+
+    from autoeval.planning import planning_worker
+
+    session = MagicMock()
+    template = {"image_id": "fixed"}
+    item = {"task_id": "GPQA", "dataset": "GPQA", "assigned_resource_id": str(uuid4()),
+            "execution_template": template, "tool": {"revision": "fixed"}}
+    adapter = AsyncMock()
+    adapter.preflight.return_value = {"execution_ready": True, "dataset_checks": []}
+    adapter.ensure.return_value = "a" * 64
+    adapter.remove.return_value = True
+    monkeypatch.setattr(planning_worker, "execution_template", lambda *_: template)
+    monkeypatch.setattr(planning_worker, "isolated_transport", AsyncMock(return_value=adapter))
+    stages = []
+
+    async def report(stage, task, **details):
+        assert task == item
+        if stage in {"checking", "cleaning"}:
+            assert details["container_id"] == adapter.ensure.return_value
+        stages.append(stage)
+        if stage == "cleaning" and report_failure:
+            raise RuntimeError("progress write failed")
+
+    job = planning_worker.preflight_isolated_task(session, None, uuid4(), item, {}, report)
+    if report_failure:
+        with pytest.raises(RuntimeError, match="progress write failed"):
+            await job
+    else:
+        result = await job
+        assert result["execution_ready"]
+        assert result["preflight_evidence"]["container_id"] == "a" * 64
+    assert stages == ["preparing", "checking", "cleaning"]
+    adapter.remove.assert_awaited_once()

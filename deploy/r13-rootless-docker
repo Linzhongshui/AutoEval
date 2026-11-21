@@ -1,0 +1,103 @@
+#!/usr/bin/python3
+"""Manage one rootless Docker daemon per R13 container owner."""
+
+import fcntl
+import os
+import signal
+import subprocess
+import sys
+import time
+import uuid
+from pathlib import Path
+
+
+def start_time(pid):
+    try:
+        fields = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()
+        return fields[19] if fields[0] != "Z" else None
+    except FileNotFoundError:
+        return None
+
+
+def main():
+    action, raw_owner = sys.argv[1:]
+    owner = str(uuid.UUID(raw_owner))
+    if owner != raw_owner or action not in {"ensure", "remove"}:
+        raise ValueError("Invalid action or owner")
+    os.umask(0o077)
+    installation = Path(__file__).resolve().parent
+    root = Path(f"/tmp/autoeval-harbor-{os.getuid()}")
+    root.mkdir(mode=0o700, exist_ok=True)
+    if root.is_symlink() or root.stat().st_uid != os.getuid() or root.stat().st_mode & 0o077:
+        raise ValueError("Unsafe Rootless Docker directory")
+    task = root / owner
+    task.mkdir(mode=0o700, exist_ok=True)
+    if task.is_symlink() or task.stat().st_uid != os.getuid() or task.stat().st_mode & 0o077:
+        raise ValueError("Unsafe task directory")
+    socket = task / "docker.sock"
+    record = task / "supervisor"
+    docker = [str(installation / "docker/docker"), "--host", f"unix://{socket}"]
+
+    def ready():
+        result = subprocess.run(docker + ["info", "--format", "{{json .SecurityOptions}}"],
+                                capture_output=True, timeout=3, check=False)
+        return result.returncode == 0 and b"name=rootless" in result.stdout
+
+    with (task / "lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        pid, identity = (0, None)
+        if record.exists():
+            raw_pid, identity = record.read_text().split()
+            pid = int(raw_pid)
+        running = identity is not None and start_time(pid) == identity
+        if action == "remove":
+            if running:
+                if ready():
+                    subprocess.run(docker + ["system", "prune", "-af", "--volumes"],
+                                   stdout=subprocess.DEVNULL, timeout=20, check=True)
+                with os.fdopen(os.pidfd_open(pid), "rb") as process:
+                    if start_time(pid) == identity:
+                        signal.pidfd_send_signal(process.fileno(), signal.SIGTERM)
+                for _ in range(40):
+                    if start_time(pid) != identity:
+                        break
+                    time.sleep(0.25)
+                else:
+                    raise RuntimeError("Rootless Docker process did not stop")
+            if ready():
+                raise RuntimeError("Task socket still has a live daemon")
+            record.unlink(missing_ok=True)
+            return
+        if not running:
+            if ready():
+                raise RuntimeError("Untracked Rootless Docker daemon")
+            extras = installation / "docker-rootless-extras"
+            env = {
+                "HOME": os.environ["HOME"],
+                "PATH": f"{installation / 'docker'}:{extras}:/usr/sbin:/usr/bin:/sbin:/bin",
+                "XDG_RUNTIME_DIR": str(task),
+                "DOCKERD_ROOTLESS_ROOTLESSKIT_NET": "vpnkit",
+                "DOCKERD_ROOTLESS_ROOTLESSKIT_STATE_DIR": str(task / "kit"),
+            }
+            with (task / "daemon.log").open("ab") as log:
+                process = subprocess.Popen(
+                    [str(extras / "dockerd-rootless.sh"), "--host", f"unix://{socket}",
+                     "--data-root", str(task / "data"), "--exec-root", str(task / "exec"),
+                     "--pidfile", str(task / "dockerd.pid"), "--storage-driver", "vfs"],
+                    stdin=subprocess.DEVNULL, stdout=log, stderr=log, env=env,
+                    start_new_session=True,
+                )
+            identity = start_time(process.pid)
+            if identity is None:
+                raise RuntimeError("Rootless Docker process exited")
+            record.write_text(f"{process.pid} {identity}\n")
+        for _ in range(20):
+            if ready():
+                print(socket)
+                return
+            time.sleep(0.25)
+        raise RuntimeError("Rootless Docker did not become ready")
+
+
+if __name__ == "__main__":
+    main()

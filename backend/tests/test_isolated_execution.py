@@ -132,6 +132,9 @@ def test_recover_created_container_and_remove_only_selected_child():
     assert set(rows) == {first.name, second.name}
     assert recovered._remove()
     assert recovered._remove()
+    with pytest.raises(ValueError, match="recorded task container is missing"):
+        recovered._ensure()
+    assert set(rows) == {second.name}
     assert rows[second.name]["State"]["Running"]
 
 

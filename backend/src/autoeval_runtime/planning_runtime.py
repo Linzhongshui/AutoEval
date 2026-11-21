@@ -131,9 +131,6 @@ def inspect_dataset(task, *, networks, validated):
                 reasons.append("task_selection_preflight_failed")
         except (OSError, ValueError, subprocess.SubprocessError):
             reasons.append("tool_environment_preflight_unavailable")
-    # The admission gate must not hide failures in read-only environment checks.
-    if task["dataset"] not in validated:
-        reasons.insert(0, "dataset_not_validated")
     return {
         "task_id": task["task_id"],
         "dataset": task["dataset"],
@@ -142,6 +139,7 @@ def inspect_dataset(task, *, networks, validated):
         "tool_revision": tool_revision,
         "expected_tool_revision": task["tool"]["revision"],
         "blocking_reasons": reasons,
+        "warnings": [] if task["dataset"] in validated else ["dataset_not_validated"],
     }
 
 

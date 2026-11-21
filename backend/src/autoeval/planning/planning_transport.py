@@ -481,6 +481,8 @@ class IsolatedPlanningContainer(PlanningRemoteContainer):
         with self.control.connect() as client:
             row = self._find(client)
             if row is None:
+                if getattr(self, "expected_container_id", None):
+                    raise ValueError("Previously recorded task container is missing")
                 image_id = self.control.command(
                     client, ["docker", "image", "inspect", "--format", "{{.Id}}", self.image_id]
                 ).decode().strip()
@@ -497,8 +499,26 @@ class IsolatedPlanningContainer(PlanningRemoteContainer):
                 for key, value in self.template.get("environment", {}).items():
                     argv += ["--env", key + "=" + value]
                 if self.template["family"] == "harbor":
-                    # The image entrypoint owns a private, in-container Docker daemon.
-                    argv += ["--env", "DOCKER_HOST=unix:///tmp/autoeval-docker.sock", self.image_id]
+                    argv += ["--env", "DOCKER_HOST=unix:///tmp/autoeval-docker.sock"]
+                    if helper := self.template.get("rootless_docker_helper"):
+                        socket = self.control.command(
+                            client, [helper, "ensure", self.owner]
+                        ).decode().strip()
+                        socket_path = PurePosixPath(socket)
+                        if (
+                            not socket_path.is_absolute()
+                            or str(socket_path) != socket
+                            or ".." in socket_path.parts
+                            or "," in socket
+                            or socket_path.parts[-2:] != (self.owner, "docker.sock")
+                        ):
+                            raise ValueError("Invalid Rootless Docker socket")
+                        argv += [
+                            "--mount", f"type=bind,src={socket},dst=/tmp/autoeval-docker.sock,readonly",
+                            "--entrypoint", "/bin/sh", self.image_id, "-c", "exec sleep infinity",
+                        ]
+                    else:
+                        argv += [self.image_id]
                 else:
                     argv += ["--entrypoint", "python3", self.image_id, "-c", "import time; time.sleep(10**8)"]
                 self.control.command(client, argv)
@@ -618,7 +638,11 @@ finally:
             row = self._find(client)
             if row:
                 self.control.command(client, ["docker", "rm", "-fv", row["Id"]])
-            return self._find(client) is None
+            if self._find(client) is not None:
+                return False
+            if helper := self.template.get("rootless_docker_helper"):
+                self.control.command(client, [helper, "remove", self.owner])
+            return True
 
     async def remove(self):
         return await asyncio.to_thread(self._remove)
@@ -677,7 +701,7 @@ def execution_template(settings, resource_id, task):
     targets = [readonly_mount_paths(mount)[1] for mount in mounts]
     if len(set(targets)) != len(targets):
         raise ValueError("Duplicate execution mount target")
-    return {
+    template = {
         "family": family, "revision": entry["revision"], "image_id": image,
         "readonly_mounts": mounts,
         "environment": {
@@ -685,6 +709,17 @@ def execution_template(settings, resource_id, task):
             if key in {"AE_VALIDATED_DATASETS", "AE_HARBOR_NETWORK_CAPACITY"}
         },
     }
+    helper = entry.get("rootless_docker_helper")
+    if helper is not None:
+        if (
+            family != "harbor"
+            or not isinstance(helper, str)
+            or not re.fullmatch(r"/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+", helper)
+            or any(part in {".", ".."} for part in helper.split("/"))
+        ):
+            raise ValueError("Invalid Rootless Docker helper path")
+        template["rootless_docker_helper"] = helper
+    return template
 
 
 def select_execution_template(settings, candidates, supported, task):

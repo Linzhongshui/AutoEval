@@ -96,7 +96,10 @@ async def resolve_inputs(session, settings, body):
         )
         if assignment is None:
             raise HTTPException(
-                422, f"No selected SSH node has a matching execution template for {spec.dataset}"
+                422,
+                f"所选 SSH 节点缺少 {spec.dataset} 的执行模板"
+                f"（{profile.contract['family']} / {profile.contract['revision'][:12]}）。"
+                "请配置节点的工具版本、镜像和数据挂载。模板匹配后，平台会自动创建独立容器。",
             )
         assigned_resource, template = assignment
         full = await session.get(DatasetManifest, profile.full_manifest_id)

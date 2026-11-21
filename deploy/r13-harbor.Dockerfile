@@ -13,6 +13,12 @@ RUN command -v docker && command -v dockerd \
 
 ENV PATH=/opt/autoeval-r13/bin:/opt/venvs/harbor/bin:$PATH
 ENV DOCKER_HOST=unix:///tmp/autoeval-docker.sock
+# Keep the interpreter path used by existing Harbor execution configurations.
+RUN install -d /acceptance/runtime/bin \
+    && rm -f /acceptance/runtime/bin/python \
+    && printf '%s\n' '#!/bin/sh' 'exec /opt/venvs/harbor/bin/python "$@"' > /acceptance/runtime/bin/python \
+    && chmod 0755 /acceptance/runtime/bin/python \
+    && /acceptance/runtime/bin/python -c "from harbor.models.job.config import DatasetConfig"
 RUN python3 -c "import mmengine, harbor, importlib.metadata as m, json; assert json.loads(m.distribution('autoeval-benchmark-adaptor').read_text('direct_url.json'))['vcs_info']['commit_id'] == '955089ab32ef696c231d628f5ad0d9da28f430c4'" \
     && autoeval-adaptor --help | grep -q -- '--preflight-only'
 

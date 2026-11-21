@@ -61,7 +61,7 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
   const [selection, setSelection] = useState<Record<string, { compilation: string; manifest: string }>>({});
   const [enabled, setEnabled] = useState<string[]>([]);
   const [curve, setCurve] = useState("");
-  const [parallel, setParallel] = useState(1);
+  const [requestedParallel, setParallel] = useState(1);
   const [job, setJob] = useState<Job | null>(null);
   const [adviceJob, setAdviceJob] = useState<Job | null>(null);
   const [probeLookup, setProbeLookup] = useState(false);
@@ -121,6 +121,9 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
     setOptions(collected);
   };
   useEffect(() => { void refresh().catch(() => setMessage("测评选项加载失败，请重试。")); }, []);
+  const maxParallel = Math.max(1, Math.min(enabled.length, 4));
+  const parallel = Math.min(requestedParallel, maxParallel);
+  const allParallel = parallel > 1 && parallel === enabled.length;
   const payload = { target_id: target, resource_id: resource, resource_kind: resourceKind,
     resource_ids: resourceIds,
     throughput_profile_id: curve || null, dataset_concurrency: parallel, recommend: false,
@@ -128,7 +131,7 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
       task_id: d.replaceAll("-", "_"), dataset: d, concurrency: concurrency[d] ?? null, compilation_id: selection[d].compilation, manifest_id: selection[d].manifest,
     })) };
   const fingerprint = JSON.stringify(payload);
-  useEffect(() => { setParallel(v => Math.min(v, Math.max(1, enabled.length))); }, [enabled.length]);
+  useEffect(() => { setParallel(v => Math.min(v, maxParallel)); }, [maxParallel]);
   const preflightFingerprint = JSON.stringify({ target_id: target, resource_id: resource, resource_kind: resourceKind, resource_ids: resourceIds, tasks: payload.tasks });
   useEffect(() => {
     generation.current++; if (job) setStaleEstimate(true); setJob(null); setAdviceJob(null);
@@ -199,9 +202,20 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
     const bound = chosen?.runtime_config?.resource_ids;
     if (!manualNodeSelection.current && Array.isArray(bound)) {
       const matching = bound.filter((id): id is string => typeof id === "string" && resources.rows.some(r => r.id === id));
-      if (matching.length) { setResourceIds(ids => [...new Set([...ids, ...matching])]); if (!resource) setResource(matching[0]); }
+      if (matching.length) { setResourceIds(ids => [...new Set([...ids, ...matching])]); setResource(current => current || matching[0]); }
     }
   };
+  const allDatasetsEnabled = datasets.every(dataset => enabled.includes(dataset));
+  const toggleAllDatasets = () => {
+    for (const dataset of datasets) {
+      if (enabled.includes(dataset) === allDatasetsEnabled) {
+        autoFillDataset(dataset, !allDatasetsEnabled);
+      }
+    }
+  };
+  const selectAllButton = <button type="button" className="link dataset-select-all" onClick={toggleAllDatasets}>
+    {allDatasetsEnabled ? "取消全选" : "全选"}
+  </button>;
   useEffect(() => {
     if (!target || !enabled.length) return;
     let changed = false;
@@ -289,7 +303,9 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
     </div>
     {targets.error && <p role="alert">{targets.error}</p>}
     <h2>2. 数据集与样本范围</h2>
-    <p className="muted">勾选后默认选择第一个可用配置。只有一个 SSH 节点时会自动选中。配置齐备后自动检查环境。</p><TableWrap><table className="planning-table"><thead><tr><th>启用</th><th>数据集</th><th>执行配置</th><th>样本范围</th><th>状态</th></tr></thead><tbody>{datasets.map(d => {
+    <p className="muted">勾选后默认选择第一个可用配置。只有一个 SSH 节点时会自动选中。配置齐备后自动检查环境。</p>
+    <div className="dataset-select-all-mobile">{selectAllButton}</div>
+    <TableWrap><table className="planning-table"><thead><tr><th scope="col">{selectAllButton}</th><th>数据集</th><th>执行配置</th><th>样本范围</th><th>状态</th></tr></thead><tbody>{datasets.map(d => {
       const active = enabled.includes(d);
       const chosenConfig = options.compilations.find(c => c.id === selection[d]?.compilation);
       const allowedManifests = chosenConfig?.runtime_config?.manifest_ids;
@@ -340,13 +356,30 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
     <h2>4. 执行策略</h2>
     <div className="execution-strategy">
       <section className="strategy-card strategy-datasets" aria-label="数据集执行设置">
-        <div className="strategy-card-heading"><h3>数据集之间</h3><span>{enabled.length} 个数据集</span></div>
+        <div className="strategy-card-heading"><h3>数据集之间</h3><span>已选 {enabled.length} 个数据集</span></div>
         <div className="strategy-controls">
-          <div><span className="strategy-field-label">执行方式</span><StrategyChoice label="数据集执行策略" parallel={parallel > 1} disabled={enabled.length < 2} onChange={value => setParallel(value ? enabled.length : 1)} /></div>
-          <label>同时运行的数据集数<input aria-label="数据集同时运行数" type="number" min={1} max={Math.max(1, enabled.length)} value={parallel} disabled={parallel <= 1} onChange={e => setParallel(Math.max(1, Math.min(enabled.length || 1, Number(e.target.value))))} /></label>
+          <div><span className="strategy-field-label">执行方式</span><StrategyChoice label="数据集执行策略" parallel={parallel > 1} disabled={enabled.length < 2} onChange={value => setParallel(value ? maxParallel : 1)} /></div>
+          <label>同时运行的数据集上限
+            <select aria-label="数据集同时运行数" value={parallel} disabled={parallel === 1} onChange={e => setParallel(Number(e.target.value))}>
+              {parallel === 1 ? <option value={1}>1 个</option> : Array.from({ length: maxParallel - 1 }, (_, index) => index + 2).map(count =>
+                <option key={count} value={count}>{count} 个</option>
+              )}
+            </select>
+          </label>
         </div>
-        <p className="strategy-help">{enabled.length < 2 ? "当前仅一个数据集，无需数据集并行；样本仍可单独选择并行。" : parallel > 1 ? "多个数据集共享执行资源，同时运行数量仍需通过资源预检。" : "按下方顺序逐个执行，前一个结束后开始下一个。"}</p>
-        <div className="strategy-order"><span className="strategy-field-label">执行顺序</span>{enabled.length ? <ol>{enabled.map((d, i) => <li key={d}><span><small>{i + 1}</small>{d}</span>{enabled.length > 1 && <button type="button" className="link" disabled={i === 0} aria-label={`${d} 前移`} onClick={() => setEnabled(v => { const next = [...v]; [next[i - 1], next[i]] = [next[i], next[i - 1]]; return next; })}>前移</button>}</li>)}</ol> : <p className="muted">请先选择数据集</p>}</div>
+        <p className="strategy-help">{enabled.length === 0 ? "请先选择数据集。" : enabled.length === 1 ? "当前选择了一个数据集，可单独设置样本并行。" : parallel > 1 ? "实际同时运行数量取决于可用资源。" : "按下方顺序逐个执行。"}</p>
+        {enabled.length > 1 && <div className="strategy-order">
+          <span className="strategy-field-label">{allParallel ? "并行运行计划" : parallel > 1 ? "启动优先级" : "执行顺序"}</span>
+          {allParallel ? <ul aria-label="并行数据集">{enabled.map(dataset => <li key={dataset}>{dataset}</li>)}</ul> :
+            <ol>{enabled.map((dataset, index) => <li key={dataset}>
+              <span><small>{index + 1}</small>{dataset}</span>
+              <button type="button" className="link" disabled={index === 0} aria-label={`${dataset} 前移`} onClick={() => setEnabled(order => {
+                const next = [...order];
+                [next[index - 1], next[index]] = [next[index], next[index - 1]];
+                return next;
+              })}>前移</button>
+            </li>)}</ol>}
+        </div>}
       </section>
       {payload.tasks.map(t => <section className={`strategy-card${payload.tasks.length === 1 ? " strategy-sample-single" : ""}`} key={t.dataset} aria-label={`${t.dataset} 样本执行设置`}>
         <div className="strategy-card-heading"><h3>{t.dataset} 样本</h3><span>数据集内部</span></div>
@@ -389,6 +422,8 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
       <div><dt>测评范围</dt><dd>{enabled.length} 个数据集 · {sampleCount.toLocaleString("zh-CN")} 个样本</dd></div>
       <div><dt>候选主机</dt><dd>{selectedHostCount ? `已选 ${selectedHostCount} 台` : "待选择"}</dd></div>
       {result?.execution_ready && <div><dt>执行容器</dt><dd>计划启动 {enabled.length} 个独立容器</dd></div>}
+      <div><dt>数据集并行</dt><dd>{enabled.length ? `最多 ${parallel} 个` : "待选择"}</dd></div>
+      {payload.tasks.length > 0 && <div><dt>样本并行</dt><dd>{payload.tasks.map(({ dataset }) => `${dataset} ${currentConcurrency(dataset)}`).join(" · ")}</dd></div>}
       <div><dt>环境检查</dt><dd className="preflight-summary">
         <span role="status" className={`preflight-status ${preflight ? preflightTone : "idle"}`}>
           {preflight?.state === "completed" && result?.execution_ready && checks.length ? `${passedCount}/${enabled.length} 通过` : preflightLabel}

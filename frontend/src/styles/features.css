@@ -1613,7 +1613,10 @@
   .planning-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .planning-fields > label:last-child { grid-column: 1 / -1; }
 }
+.dataset-select-all { white-space: nowrap; }
+.dataset-select-all-mobile { display: none; }
 @media (max-width: 600px) {
+  .dataset-select-all-mobile { display: block; }
   .planning-fields { grid-template-columns: minmax(0, 1fr); gap: 12px; }
   .planning-fields > label:last-child { grid-column: auto; }
   .planning-table thead { display: none; }
@@ -1950,7 +1953,7 @@ textarea { font: inherit; }
 .strategy-choices button:focus-visible { outline: 2px solid #7761f5; outline-offset: 3px; }
 .strategy-help { color: var(--muted); font-size: 13px; line-height: 1.65; margin: 14px 0 0; }
 .strategy-order { border-top: 1px solid var(--border); margin-top: 18px; padding-top: 16px; }
-.strategy-order ol { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.strategy-order ol, .strategy-order ul { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .strategy-order li { display: flex; gap: 14px; align-items: center; padding: 8px 12px; border-radius: 8px; background: #f7f6fc; }
 .strategy-order li > span { display: flex; align-items: center; gap: 8px; }
 .strategy-order small { color: #7361d3; }

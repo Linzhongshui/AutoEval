@@ -108,3 +108,40 @@ def test_non_real_report_does_not_offer_analysis_start(browser_page):
     expect(page.get_by_text("非真实执行来源，不启用智能分析", exact=False)).to_be_visible()
     expect(page.get_by_role("button", name="启动独立分析", exact=True)).to_have_count(0)
     assert page.evaluate("window.analysisCalls") == []
+
+
+def test_dataset_parallel_strategy_and_summary(browser_page):
+    page, url, _ = browser_page
+    page.route("**/api/**", lambda route: route.fulfill(json={"data": [], "next_offset": None}))
+    page.goto(url + "/#console")
+    table = page.locator(".planning-table")
+    checkboxes = table.get_by_role("checkbox")
+    checkboxes.first.check()
+    table.get_by_role("button", name="全选", exact=True).click()
+    expect(table.get_by_role("checkbox", checked=True)).to_have_count(4)
+    table.get_by_role("button", name="取消全选", exact=True).click()
+    expect(table.get_by_role("checkbox", checked=False)).to_have_count(4)
+    table.get_by_role("button", name="全选", exact=True).click()
+
+    card = page.get_by_role("region", name="数据集执行设置")
+    summary = page.get_by_role("complementary", name="任务摘要")
+    count = card.get_by_label("数据集同时运行数")
+    card.get_by_role("button", name="并行执行").click()
+    expect(count).to_have_value("4")
+    expect(card.get_by_text("并行运行计划")).to_be_visible()
+    expect(card.get_by_role("list", name="并行数据集").get_by_role("listitem")).to_have_count(4)
+    expect(card.get_by_role("button", name="前移")).to_have_count(0)
+    expect(summary).to_contain_text("最多 4 个")
+
+    count.select_option("2")
+    expect(card.get_by_text("启动优先级")).to_be_visible()
+    card.get_by_role("button", name="MMMU-Pro 前移").click()
+    card.get_by_role("button", name="串行执行").click()
+    expect(card.get_by_text("执行顺序")).to_be_visible()
+    expect(card.get_by_role("listitem").first).to_contain_text("MMMU-Pro")
+
+    card.get_by_role("button", name="并行执行").click()
+    page.get_by_role("checkbox", name="启用 AutomationBench").uncheck()
+    expect(count).to_have_value("3")
+    expect(count.locator("option")).to_have_count(2)
+    expect(summary).to_contain_text("最多 3 个")

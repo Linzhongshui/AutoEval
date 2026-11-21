@@ -9,7 +9,7 @@ import { ListPagination } from "../../shared/ui/ListPagination";
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, CircleAlert, Layers, Play } from "lucide-react";
 import { apiGet, apiGetPage, apiPost } from "../../shared/api";
-import type { Config, Resource, Run, RunDetail, Target } from "./types";
+import type { Config, DatasetResult, Resource, Run, RunDetail, Target } from "./types";
 import { datasetProgress, eligibleConfig, eligibleTarget, formatTime, isTerminal, resourceLabel, runLink, withSelected } from "./logic";
 import { useDefaultConfig, useOptions } from "./hooks";
 import { useExplorationSubmission } from "./submitIntent";
@@ -19,6 +19,19 @@ import { CaseHistory } from "../reporting/CaseHistory";
 
 const terminal = (state: string) => isTerminal(state);
 const time = formatTime;
+
+const environmentLabels: Record<string, string> = {
+  waiting_capacity: "等待容量", creating: "正在创建", submitting: "已分配",
+  cleanup_pending: "待清理", cleaned: "已回收", not_created: "未创建",
+};
+
+function DatasetEnvironment({ environment }: { environment: NonNullable<DatasetResult["execution_environment"]> }) {
+  return <>
+    <small>SSH 主机 {environment.host || environment.resource_id}</small>
+    <small title={environment.revision}>{environment.tool} · {environment.revision.slice(0, 12)}</small>
+    <small>{environment.container_id && `容器 ${environment.container_id} · `}{environmentLabels[environment.state] || environment.state}</small>
+  </>;
+}
 
 export function EvaluationRuns({ runId = "", initialTarget = "", allowSubmit = false }: { runId?: string; initialTarget?: string; allowSubmit?: boolean }) {
   const configs = useOptions<Config>("/test-configs", allowSubmit);
@@ -91,7 +104,7 @@ export function EvaluationRuns({ runId = "", initialTarget = "", allowSubmit = f
   );
   useEffect(() => { setOffset(0); }, [statusFilter, resourceFilter, query]);
 
-  // Detail polling stops once the task reaches a terminal state.
+  // Terminal runs can still be reclaiming their dataset containers.
   usePolling(
     async () => {
       try {
@@ -103,7 +116,7 @@ export function EvaluationRuns({ runId = "", initialTarget = "", allowSubmit = f
         setDetailError("任务不存在或查询失败；已显示的状态可能过期，请勿据此重新提交。");
       }
     },
-    { enabled: Boolean(runId) && !terminal(detail?.state || ""), intervalMs: 2000 },
+    { enabled: Boolean(runId) && (!terminal(detail?.state || "") || Boolean(detail?.datasets?.some(d => d.execution_environment?.state === "cleanup_pending"))), intervalMs: 2000 },
   );
   useEffect(() => { setDetail(null); setDetailError(""); }, [runId]);
 
@@ -187,7 +200,7 @@ export function EvaluationRuns({ runId = "", initialTarget = "", allowSubmit = f
               <p className="muted">执行成功与判分通过分别记录；Case 列表保留每次尝试，缺失值不补零。</p>
             </section>
             <div className="task-overview-stats">{[["计划样本", detail.snapshot?.sample_count], ["执行成功", detail.report?.summary.successful_samples], ["执行失败", detail.report?.summary.failed_samples], ["缺测样本", detail.report?.summary.missing_samples], ["判分准确率", typeof detail.report?.summary.accuracy === "number" ? `${formatScore(detail.report.summary.accuracy)}%` : "—"], ["报告有效性", detail.report?.validity || "—"]].map(([label, value]) => <div className="case-stat" key={String(label)}><span>{String(label)}</span><strong>{value === undefined || value === null ? "—" : String(value)}</strong></div>)}</div>
-            {!!detail.datasets?.length && <section className="card stack" aria-label="数据集执行结果"><h3>数据集执行结果</h3><TableWrap><table><thead><tr><th>数据集</th><th>状态</th><th>已归档样本</th><th>准确率</th><th>耗时</th><th>失败原因</th></tr></thead><tbody>{detail.datasets.map(d => <tr key={d.id}><td>{d.dataset}</td><td>{datasetStatus(d.state).label}<small>{datasetProgress(d.summary)}</small></td><td>{String(d.summary?.observed_cases ?? "—")} / {String(d.summary?.expected_cases ?? "—")}</td><td>{typeof d.summary?.accuracy === "number" ? `${formatScore(d.summary.accuracy)}%` : "—"}</td><td>{formatDuration(d.actual_duration_sec)}</td><td>{String(d.summary?.diagnostic ?? d.summary?.reason ?? "—")}</td></tr>)}</tbody></table></TableWrap><p className="muted">各数据集历史执行摘要独立展示，不生成跨数据集综合分；成绩有效性以归档证据核验为准。</p>{detail.dataset_report && <ManagementDrawer title="数据集报告与证据"><p>读取归档对象时核验哈希；不能读取时不以历史摘要替代。</p><button onClick={() => void apiGet(`/evaluation-tasks/${detail.id}/report`).then(setReportEvidence).catch(() => setMessage("报告证据读取或完整性校验失败"))}>读取归档报告</button>{reportEvidence != null && <pre className="snapshot">{JSON.stringify(reportEvidence, null, 2)}</pre>}</ManagementDrawer>}</section>}
+            {!!detail.datasets?.length && <section className="card stack" aria-label="数据集执行结果"><h3>数据集执行结果</h3><TableWrap><table><thead><tr><th>数据集</th><th>状态</th><th>已归档样本</th><th>准确率</th><th>耗时</th><th>失败原因</th></tr></thead><tbody>{detail.datasets.map(d => <tr key={d.id}><td>{d.dataset}{d.execution_environment && <DatasetEnvironment environment={d.execution_environment} />}</td><td>{datasetStatus(d.state).label}<small>{datasetProgress(d.summary)}</small></td><td>{String(d.summary?.observed_cases ?? "—")} / {String(d.summary?.expected_cases ?? d.selected_cases ?? "—")}</td><td>{typeof d.summary?.accuracy === "number" ? `${formatScore(d.summary.accuracy)}%` : "—"}</td><td>{formatDuration(d.actual_duration_sec)}</td><td>{String(d.summary?.diagnostic ?? d.summary?.reason ?? "—")}</td></tr>)}</tbody></table></TableWrap><p className="muted">各数据集历史执行摘要独立展示，不生成跨数据集综合分；成绩有效性以归档证据核验为准。</p>{detail.dataset_report && <ManagementDrawer title="数据集报告与证据"><p>读取归档对象时核验哈希；不能读取时不以历史摘要替代。</p><button onClick={() => void apiGet(`/evaluation-tasks/${detail.id}/report`).then(setReportEvidence).catch(() => setMessage("报告证据读取或完整性校验失败"))}>读取归档报告</button>{reportEvidence != null && <pre className="snapshot">{JSON.stringify(reportEvidence, null, 2)}</pre>}</ManagementDrawer>}</section>}
             {detail.datasets?.some(d => d.summary?.recovery_report_id) && <p className="notice">本任务已从同次执行的原始产物恢复评分与归档；原失败历史保留，未重新调用模型。正式成绩见关联报告。</p>}
             <section id="case-detail" data-testid="case-detail">
               <CaseHistory key={`${detail.id}:${terminal(detail.state)}`} initialRun={detail.id} datasets={detail.datasets?.map(d => d.dataset) ?? []} />

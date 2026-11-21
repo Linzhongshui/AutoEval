@@ -13,10 +13,27 @@ from autoeval.evaluation.resource_allocation import (
     fits,
     resource_for_task,
 )
+from autoeval.evaluation.workflows import ISOLATED_DATASET_QUEUE
 from autoeval.infrastructure.models import EvaluationRun, Outbox, RunSnapshot
 from autoeval.planning.artifacts import current_preflight
 from autoeval.resources.models import TargetBinding
 from autoeval.resources.targets import validate_url
+
+
+async def replay_legacy_submission(request, key, request_hash):
+    """Acknowledge historical submissions without starting a shared-container job."""
+    async with request.app.state.sessions() as session:
+        run = await session.scalar(
+            select(EvaluationRun).where(
+                EvaluationRun.trigger_scope == "local-operator:evaluation",
+                EvaluationRun.idempotency_key == key,
+            )
+        )
+    if run is None:
+        raise HTTPException(422, "请通过 /api/autoeval/v1/evaluation-tasks 提交独立容器测评")
+    if run.request_hash != request_hash:
+        raise HTTPException(409, "Idempotency content conflict")
+    return {"data": {"run_id": str(run.id), "state": run.state}, "request_id": request.state.request_id}
 
 
 async def create_run(session, settings, body, execution_plan_id, key):
@@ -50,6 +67,10 @@ async def create_run(session, settings, body, execution_plan_id, key):
     fresh = await current_preflight(session, inputs)
     if not fresh or not fresh.payload.get("execution_ready"):
         raise HTTPException(409, "Fresh resource preflight required")
+    if fresh.payload.get("execution_templates") != {
+        task["task_id"]: task["execution_template"] for task in inputs["tasks"]
+    }:
+        raise HTTPException(409, "SSH execution templates changed; run preflight again")
     report = None
     if execution_plan_id:
         execution = await session.get(PlanningArtifact, execution_plan_id)
@@ -196,7 +217,7 @@ async def create_run(session, settings, body, execution_plan_id, key):
             run_id=run.id,
             kind="START_RUN",
             dedup_key="planned:" + str(run.id),
-            payload={"workflow_kind": "planned_evaluation"},
+            payload={"workflow_kind": "planned_evaluation", "workflow_queue": ISOLATED_DATASET_QUEUE},
         )
     )
     return {"run_id": str(run.id), "state": "accepted"}

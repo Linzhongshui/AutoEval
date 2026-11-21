@@ -44,7 +44,11 @@ def test_preflight_reports_tool_versions_paths_and_dataset_blockers(tmp_path, mo
     checked = inspect_dataset(task, networks=None, validated={"GPQA"})
     assert checked["data_path"] == str(tmp_path)
     assert checked["tool_revision"] == "a" * 40
+    assert checked["warnings"] == []
     assert checked["blocking_reasons"] == []
+    first_use = inspect_dataset(task, networks=None, validated=set())
+    assert first_use["warnings"] == ["dataset_not_validated"]
+    assert first_use["blocking_reasons"] == []
 
     blocked = inspect_dataset(
         {
@@ -59,7 +63,6 @@ def test_preflight_reports_tool_versions_paths_and_dataset_blockers(tmp_path, mo
         validated=set(),
     )
     assert blocked["blocking_reasons"] == [
-        "dataset_not_validated",
         "dataset_path_missing",
         "harbor_network_unavailable",
     ]
@@ -80,8 +83,8 @@ def test_harbor_preflight_reports_invalid_selection_before_acceptance(tmp_path, 
 
     checked = inspect_dataset(task, networks=1, validated=set())
 
+    assert checked["warnings"] == ["dataset_not_validated"]
     assert checked["blocking_reasons"] == [
-        "dataset_not_validated",
         "task_selection_preflight_failed",
     ]
 

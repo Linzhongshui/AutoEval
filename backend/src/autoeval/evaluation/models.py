@@ -73,3 +73,17 @@ class CapacityLease(Record, Base):
     node_id: Mapped[str] = mapped_column(String(128), index=True)
     demand: Mapped[dict] = mapped_column(JSONB)
     released: Mapped[bool] = mapped_column(default=False)
+
+
+class DatasetExecutionEnvironment(Base):
+    __tablename__ = "dataset_execution_environment"
+
+    dataset_execution_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("dataset_execution.id"), primary_key=True
+    )
+    resource_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ssh_resource_binding.id"))
+    template: Mapped[dict] = mapped_column(JSONB)
+    container_id: Mapped[str | None] = mapped_column(String(64))
+    state: Mapped[str] = mapped_column(String(24), index=True)
+
+    cleanup_attempted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -9,6 +9,35 @@ from autoeval.planning.planning_transport import runtime_files
 from autoeval_runtime.planning_runtime import validate_spec
 
 
+async def test_queued_plan_with_expired_preflight_fails_before_submission(monkeypatch):
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from autoeval.planning import planning_worker as worker
+
+    job = SimpleNamespace(
+        kind="plan", state="pending", cancel_requested=False, payload={"throughput_profile_id": "curve"}
+    )
+    session = AsyncMock()
+    session.get.side_effect = [job, SimpleNamespace()]
+
+    @asynccontextmanager
+    async def sessions():
+        yield session
+
+    adapter = AsyncMock()
+    update = AsyncMock()
+    monkeypatch.setattr(worker, "transport", AsyncMock(return_value=adapter))
+    monkeypatch.setattr(worker, "current_preflight", AsyncMock(return_value=None))
+    monkeypatch.setattr(worker, "set_job", update)
+    await worker.execute_job(sessions, None, "queued-plan")
+    update.assert_awaited_once()
+    assert update.await_args.kwargs["state"] == "failed"
+    assert update.await_args.kwargs["result"]["error_code"] == "plan_preflight_required"
+    adapter.submit.assert_not_awaited()
+
+
 def test_transports_ship_the_standalone_runtime_after_package_refactor():
     import ast
     from types import SimpleNamespace

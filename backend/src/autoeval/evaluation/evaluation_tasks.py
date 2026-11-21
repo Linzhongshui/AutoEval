@@ -1,6 +1,7 @@
 """One public task contract; workflow and historical snapshot formats stay private."""
 
 import uuid
+from typing import Literal
 
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, Header, HTTPException, Request
@@ -32,6 +33,7 @@ class TaskSelection(TaskInput):
 
 
 class SubmitTask(ResourceRef):
+    resource_kind: Literal["customer_ssh"]
     resource_ids: list[uuid.UUID] = Field(default_factory=list, max_length=16)
     ignore_budget: bool = Field(default=False, strict=True)
 
@@ -46,7 +48,7 @@ class SubmitTask(ResourceRef):
 
     target_id: uuid.UUID
     tasks: list[TaskSelection] = Field(min_length=1, max_length=4)
-    dataset_concurrency: int = Field(default=1, ge=1, le=3)
+    dataset_concurrency: int = Field(default=1, ge=1)
 
     @model_validator(mode="after")
     def unique_selection(self):

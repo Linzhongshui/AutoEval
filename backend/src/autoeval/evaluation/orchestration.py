@@ -16,7 +16,8 @@ from temporalio import activity
 
 from autoeval.catalog.datasets import canonical_manifest, read_manifest, write_manifest
 from autoeval.catalog.standard_inputs import digest
-from autoeval.evaluation.models import DatasetExecution
+from autoeval.evaluation.isolated_cleanup import reclaim_child
+from autoeval.evaluation.models import DatasetExecution, DatasetExecutionEnvironment
 from autoeval.evaluation.resource_allocation import acquire, demand_for, release, resource_for_task
 from autoeval.infrastructure.config import get_settings
 from autoeval.infrastructure.contracts import JobRef
@@ -26,8 +27,13 @@ from autoeval.infrastructure.models import EvaluationRun, RunEvent, RunSnapshot
 from autoeval.infrastructure.secrets import FileSecretStore
 from autoeval.planning.artifacts import artifact
 from autoeval.planning.models import PlanningArtifact
-from autoeval.planning.planning_transport import transport
-from autoeval.reporting.unified_outputs import archive_output
+from autoeval.planning.planning_transport import (
+    HarborDaemonUnavailable,
+    execution_template,
+    isolated_transport,
+    transport,
+)
+from autoeval.reporting.unified_outputs import InvalidUnifiedOutput, archive_output
 from autoeval.resources.models import TargetBinding
 
 
@@ -58,6 +64,10 @@ TERMINAL = set(DATASET_TERMINAL)
 async def update_child(sessions, child_id, **values):
     async with sessions() as session, session.begin():
         child = await session.get(DatasetExecution, child_id, with_for_update=True)
+        if values.get("state") in TERMINAL:
+            environment = await session.get(DatasetExecutionEnvironment, child_id)
+            if environment is not None:
+                environment.state = "cleanup_pending"
         for key, value in values.items():
             setattr(child, key, value)
 
@@ -84,9 +94,22 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
 
         ignore_budget = budget_ignored(frozen)
         inputs = frozen["inputs"]
-        adapter = await transport(session, settings, inputs)
+        isolated = all(t.get("execution_template") for t in inputs["tasks"])
+        adapter = None if isolated else await transport(session, settings, inputs)
+        child_ids = dict((await session.execute(
+            select(DatasetExecution.task_id, DatasetExecution.id).where(DatasetExecution.run_id == run_id)
+        )).all())
         adapters = {}
         for item in inputs["tasks"]:
+            if isolated:
+                owner = child_ids[item["task_id"]]
+                environment = await session.get(DatasetExecutionEnvironment, owner)
+                adapters[item["task_id"]] = await isolated_transport(
+                    session, settings, item["assigned_resource_id"],
+                    owner, item["execution_template"],
+                    container_id=environment.container_id if environment else None,
+                )
+                continue
             adapters[item["task_id"]] = (
                 await transport(
                     session,
@@ -141,6 +164,17 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                 child.finished_at = datetime.now(UTC)
             if child.state not in DATASET_ACTIVE:
                 continue
+            if isolated:
+                async with sessions() as session:
+                    environment = await session.get(DatasetExecutionEnvironment, child.id)
+                if environment and environment.state == "creating":
+                    await update_child(
+                        sessions, child.id,
+                        state="cancelled" if cancelled else "pending",
+                        **({"finished_at": datetime.now(UTC)} if cancelled else {}),
+                    )
+                    child.state = "cancelled" if cancelled else "pending"
+                    continue
             from autoeval.billing.transport import execution_route
 
             child_route = execution_route(
@@ -152,11 +186,21 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
             )
             child_secret = child_route["api_key"] if child_route else secret
             job = JobRef(external_job_id=str(child.id), submission_key=str(child.id))
-            observation = (
-                await adapter.cancel(job, "cancel:" + str(child.id))
-                if cancelled
-                else await adapter.status(job)
-            )
+            try:
+                observation = (
+                    await adapter.cancel(job, "cancel:" + str(child.id))
+                    if cancelled
+                    else await adapter.status(job)
+                )
+            except (OSError, ValueError, RuntimeError):
+                if not isolated:
+                    raise
+                await update_child(
+                    sessions, child.id, state="unresolved",
+                    summary={"reason": "SSH execution state could not be verified"},
+                )
+                child.state = "unresolved"
+                continue
             if observation.state in {"unknown", "cleaned"}:
                 await update_child(
                     sessions,
@@ -200,116 +244,32 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
             await publish_lifecycle(
                 sessions, settings, run_id, child, observation.state, final=True
             )
-            summary = None
-            state = observation.state
-            log_reader = getattr(adapter, "collect_log", None)
-            if log_reader and observation.state in TERMINAL:
-                from autoeval.reporting.models import UnifiedArtifact
-
-                log_key = "planning-log:" + str(child.id)
-                async with sessions() as session, session.begin():
-                    existing_log = await session.scalar(
-                        select(UnifiedArtifact).where(
-                            UnifiedArtifact.run_id == run_id,
-                            UnifiedArtifact.collection_key == log_key,
-                        )
-                    )
-                    if existing_log is None:
-                        observed_log = await log_reader(job)
-                        content = (
-                            observed_log["content"]
-                            .replace(secret, "[REDACTED]")
-                            .replace(child_secret, "[REDACTED]")
-                        )
-                        file = {
-                            "path": "job.log",
-                            "content": content,
-                            "sha256": hashlib.sha256(content.encode()).hexdigest(),
-                            "truncated": observed_log["truncated"],
-                        }
-                        bundle = {
-                            "run_id": str(run_id),
-                            "child_id": str(child.id),
-                            "source": "adaptor_tool_log",
-                            "files": [file],
-                        }
-                        sha = digest(bundle)
-                        key = f"execution-logs/{run_id}/{child.id}/{sha}.json"
-                        await asyncio.to_thread(
-                            write_manifest, settings, key, canonical_manifest(bundle)
-                        )
-                        await asyncio.to_thread(
-                            read_manifest, settings, SimpleNamespace(object_key=key, sha256=sha)
-                        )
-                        session.add(
-                            UnifiedArtifact(
-                                run_id=run_id,
-                                collection_key=log_key,
-                                object_key=key,
-                                sha256=sha,
-                                manifest=bundle,
-                            )
-                        )
-            if state == "succeeded":
-                result = await adapter.collect(job)
-                from autoeval.planning.planning_observations import archive_native, publish
-
-                await archive_native(
-                    sessions, settings, run_id, child, result["result"], child_secret
+            try:
+                state, summary = await archive_terminal_child(
+                    sessions, settings, run_id, child, adapter, job, observation.state,
+                    secret, child_secret, heartbeat,
                 )
-                reader = getattr(adapter, "progress", None)
-                if reader:
-                    await publish(sessions, settings, run_id, child.id, await reader(job))
-                unified = result["result"]["unified_result"]
-                async with sessions() as session, session.begin():
-                    await artifact(
-                        session,
-                        settings,
-                        "raw_result",
-                        {"run_id": str(run_id), "task_id": child.task_id, "result": unified},
+            except Exception as exc:  # Isolated jobs retain evidence for retry.
+                if not isolated:
+                    raise
+                if not (child.summary or {}).get("archive_pending"):
+                    await update_child(
+                        sessions, child.id,
+                        summary={
+                            **(child.summary or {}),
+                            "archive_pending": True,
+                            "archive_error_type": type(exc).__name__,
+                        },
                     )
-                try:
-                    from autoeval.reporting.result_identity import normalize_result_identities
-
-                    unified = normalize_result_identities(
-                        unified,
-                        child.payload["dataset"],
-                        child.payload["compilation"]["config"],
-                        child.payload["samples"],
-                    )
-                    raw = canonical_manifest(unified)
-                    summary = await keep_heartbeat(
-                        heartbeat,
-                        archive_output(
-                            sessions,
-                            settings,
-                            run_id,
-                            child.task_id,
-                            raw,
-                            {
-                                child.payload["dataset"]: [
-                                    s["sample_id"] for s in child.payload["samples"]
-                                ]
-                            },
-                            child.payload["dataset"],
-                        ),
-                    )
-                except ValueError:
-                    summary = {
-                        "validity": "failed",
-                        "reason": "Result identity or evidence validation failed; raw result preserved",
-                    }
-                if child.payload["dataset"] == "GPQA":
-                    summary = gpqa_report_summary(summary, unified, child.payload)
-                if result["result"].get("tool_exit_code", 0) != 0:
-                    summary = {
-                        **summary,
-                        "validity": "partial",
-                        "tool_exit_code": result["result"]["tool_exit_code"],
-                        "diagnostic": result["result"].get("diagnostic"),
-                    }
-                if summary["validity"] != "complete":
-                    state = "failed"
+                continue
+            if state == "failed" and summary is None:
+                remote_reason = getattr(observation, "reason", None)
+                reason = (
+                    remote_reason
+                    if remote_reason in {"controlled_job_failed", "native_unified_result_missing_or_ambiguous"}
+                    else "native_execution_failed"
+                )
+                summary = {"validity": "failed", "reason": reason}
             await update_child(
                 sessions, child.id, state=state, summary=summary, finished_at=datetime.now(UTC)
             )
@@ -318,6 +278,9 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
             child.finished_at = datetime.now(UTC)
             # Release capacity only after the transport confirms cleanup. Harbor cancellation
             # can leave daemon-owned trial containers; retain ownership instead of overbooking.
+            if isolated:
+                await reclaim_child(sessions, settings, child.id)
+                continue
             cleanup = await adapter.cleanup(job)
             if cleanup.get("cleaned"):
                 async with sessions() as session, session.begin():
@@ -336,14 +299,27 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
             if child.state != "pending":
                 continue
             async with sessions() as session, session.begin():
+                current_run = await session.get(EvaluationRun, run_id, with_for_update=True)
+                if current_run.cancel_requested_at is not None:
+                    cancelled = True
+                    break
                 if not await acquire(
                     session,
                     child.id,
                     resource_for_task(frozen["resource"], child.task_id),
                     demand_for(child.payload),
                 ):
+                    if inputs["dataset_concurrency"] == 1:
+                        break  # Preserve dataset order while the first pending child waits.
                     continue
                 stored = await session.get(DatasetExecution, child.id, with_for_update=True)
+                if isolated and await session.get(DatasetExecutionEnvironment, child.id) is None:
+                    session.add(DatasetExecutionEnvironment(
+                        dataset_execution_id=child.id,
+                        resource_id=uuid.UUID(child.payload["assigned_resource_id"]),
+                        template=child.payload["execution_template"],
+                        state="creating",
+                    ))
                 stored.state = "submitting"
                 stored.started_at = datetime.now(UTC)
             # The durable submitting intent precedes network I/O. A lost reply is reconciled
@@ -370,6 +346,40 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
 
                 compilation = execution_compilation(compilation)
                 execution_secret = route["api_key"] if route else secret
+                if isolated:
+                    if execution_template(settings, child.payload["assigned_resource_id"], child.payload) != child.payload["execution_template"]:
+                        await update_child(
+                            sessions, child.id, state="failed", finished_at=datetime.now(UTC),
+                            summary={"reason": "SSH execution template changed"},
+                        )
+                        continue
+                    try:
+                        container_id = await adapter.ensure()
+                    except HarborDaemonUnavailable as exc:
+                        async with sessions() as session, session.begin():
+                            environment = await session.get(DatasetExecutionEnvironment, child.id)
+                            environment.container_id = exc.container_id
+                        await update_child(
+                            sessions, child.id, state="failed", finished_at=datetime.now(UTC),
+                            summary={"reason": "Harbor private Docker daemon is unavailable"},
+                        )
+                        await reclaim_child(sessions, settings, child.id)
+                        continue
+                    async with sessions() as session, session.begin():
+                        current_run = await session.get(EvaluationRun, run_id, with_for_update=True)
+                        environment = await session.get(DatasetExecutionEnvironment, child.id)
+                        environment.container_id = container_id
+                        cancelled = current_run.cancel_requested_at is not None
+                        if cancelled:
+                            stored = await session.get(DatasetExecution, child.id, with_for_update=True)
+                            stored.state = "cancelled"
+                            stored.finished_at = datetime.now(UTC)
+                            environment.state = "cleanup_pending"
+                        else:
+                            environment.state = "submitting"
+                    if cancelled:
+                        await reclaim_child(sessions, settings, child.id)
+                        break
                 await adapter.submit(
                     {
                         "kind": "adaptor",
@@ -387,9 +397,126 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
         async with sessions() as session, session.begin():
             run = await session.get(EvaluationRun, run_id, with_for_update=True)
             await advance_run(
-                session, run, "cancelling" if cancelled else "running" if active else "queued"
+                session, run,
+                "cancelling" if run.cancel_requested_at is not None else "running" if active else "queued",
+
             )
         await asyncio.sleep(2)
+
+
+async def archive_terminal_child(
+    sessions, settings, run_id, child, adapter, job, state, secret, child_secret, heartbeat,
+):
+    summary = None
+    log_reader = getattr(adapter, "collect_log", None)
+    if log_reader:
+        from autoeval.reporting.models import UnifiedArtifact
+
+        log_key = "planning-log:" + str(child.id)
+        async with sessions() as session, session.begin():
+            existing_log = await session.scalar(
+                select(UnifiedArtifact).where(
+                    UnifiedArtifact.run_id == run_id,
+                    UnifiedArtifact.collection_key == log_key,
+                )
+            )
+            if existing_log is None:
+                observed_log = await log_reader(job)
+                content = (
+                    observed_log["content"]
+                    .replace(secret, "[REDACTED]")
+                    .replace(child_secret, "[REDACTED]")
+                )
+                file = {
+                    "path": "job.log",
+                    "content": content,
+                    "sha256": hashlib.sha256(content.encode()).hexdigest(),
+                    "truncated": observed_log["truncated"],
+                }
+                bundle = {
+                    "run_id": str(run_id),
+                    "child_id": str(child.id),
+                    "source": "adaptor_tool_log",
+                    "files": [file],
+                }
+                sha = digest(bundle)
+                key = f"execution-logs/{run_id}/{child.id}/{sha}.json"
+                await asyncio.to_thread(
+                    write_manifest, settings, key, canonical_manifest(bundle)
+                )
+                await asyncio.to_thread(
+                    read_manifest, settings, SimpleNamespace(object_key=key, sha256=sha)
+                )
+                session.add(
+                    UnifiedArtifact(
+                        run_id=run_id,
+                        collection_key=log_key,
+                        object_key=key,
+                        sha256=sha,
+                        manifest=bundle,
+                    )
+                )
+    if state == "succeeded":
+        result = await adapter.collect(job)
+        from autoeval.planning.planning_observations import archive_native
+
+        await archive_native(
+            sessions, settings, run_id, child, result["result"], child_secret
+        )
+        unified = result["result"]["unified_result"]
+        async with sessions() as session, session.begin():
+            await artifact(
+                session,
+                settings,
+                "raw_result",
+                {"run_id": str(run_id), "task_id": child.task_id, "result": unified},
+            )
+        try:
+            from autoeval.reporting.result_identity import normalize_result_identities
+
+            try:
+                unified = normalize_result_identities(
+                    unified,
+                    child.payload["dataset"],
+                    child.payload["compilation"]["config"],
+                    child.payload["samples"],
+                )
+            except ValueError as exc:
+                raise InvalidUnifiedOutput(str(exc)) from exc
+            raw = canonical_manifest(unified)
+            summary = await keep_heartbeat(
+                heartbeat,
+                archive_output(
+                    sessions,
+                    settings,
+                    run_id,
+                    child.task_id,
+                    raw,
+                    {
+                        child.payload["dataset"]: [
+                            s["sample_id"] for s in child.payload["samples"]
+                        ]
+                    },
+                    child.payload["dataset"],
+                ),
+            )
+        except InvalidUnifiedOutput:
+            summary = {
+                "validity": "failed",
+                "reason": "Result identity or evidence validation failed; raw result preserved",
+            }
+        if child.payload["dataset"] == "GPQA":
+            summary = gpqa_report_summary(summary, unified, child.payload)
+        if result["result"].get("tool_exit_code", 0) != 0:
+            summary = {
+                **summary,
+                "validity": "partial",
+                "tool_exit_code": result["result"]["tool_exit_code"],
+                "diagnostic": result["result"].get("diagnostic"),
+            }
+        if summary["validity"] != "complete":
+            state = "failed"
+    return state, summary
 
 
 def gpqa_report_summary(summary, unified, task):

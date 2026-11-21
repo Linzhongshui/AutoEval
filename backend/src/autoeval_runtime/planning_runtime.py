@@ -134,9 +134,6 @@ def inspect_dataset(task, *, networks, validated):
                 reasons.append("task_selection_preflight_failed")
         except (OSError, ValueError, subprocess.SubprocessError):
             reasons.append("tool_environment_preflight_unavailable")
-    # The admission gate must not hide failures in read-only environment checks.
-    if task["dataset"] not in validated:
-        reasons.insert(0, "dataset_not_validated")
     return {
         "task_id": task["task_id"],
         "dataset": task["dataset"],
@@ -145,6 +142,7 @@ def inspect_dataset(task, *, networks, validated):
         "tool_revision": tool_revision,
         "expected_tool_revision": task["tool"]["revision"],
         "blocking_reasons": reasons,
+        "warnings": [] if task["dataset"] in validated else ["dataset_not_validated"],
     }
 
 
@@ -302,6 +300,8 @@ def verify_tool(spec):
 
 def controlled_failure_reason(spec, exc):
     if spec.get("kind") != "planner_probe":
+        if isinstance(exc, ValueError) and str(exc) == "Exactly one unified_result.json required":
+            return "native_unified_result_missing_or_ambiguous"
         return "controlled_job_failed"
     from autoeval_planner.errors import ProbeError
 

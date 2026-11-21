@@ -166,54 +166,53 @@ class PlanningRemoteContainer(DockerExecutor):
         return await read_container_progress(self, job)
 
     async def collect_log(self, job):
-        """Read only this owned job's tool log before its files are cleaned."""
+        """Read the owned job's bounded log tail through host SFTP."""
         import uuid
 
         key = str(uuid.UUID(job.submission_key))
-        script = (
-            "import pathlib,sys,json;p=pathlib.Path(sys.argv[1]);"
-            "assert not p.is_symlink();p=p if p.is_file() else p.with_name('output.log');assert not p.is_symlink();raw=p.read_bytes() if p.is_file() else b'';"
-            "print(json.dumps({'content':raw[-2097152:].decode('utf-8',errors='replace'),"
-            "'truncated':len(raw)>2097152}))"
+        script = """
+import json
+import pathlib
+import sys
+p = pathlib.Path(sys.argv[1])
+assert not p.is_symlink()
+p = p if p.is_file() else p.with_name('output.log')
+assert not p.is_symlink()
+limit = 2 * 1024 * 1024
+raw = b''
+size = 0
+if p.is_file():
+    with p.open('rb') as stream:
+        size = stream.seek(0, 2)
+        stream.seek(max(0, size - limit))
+        raw = stream.read(limit)
+print(json.dumps({'content': raw.decode('utf-8', errors='replace'), 'truncated': size > limit}))
+"""
+        return await self._read_staged_json(
+            key,
+            ["docker", "exec", self.container_id, "python3", "-c", script,
+             self.remote_dir + "/jobs/" + key + "/tool.log"],
         )
-        raw = await asyncio.to_thread(
-            self.command,
-            [
-                "exec",
-                self.container_id,
-                "python3",
-                "-c",
-                script,
-                self.remote_dir + "/jobs/" + key + "/tool.log",
-            ],
-        )
-        return json.loads(raw)
 
     async def collect(self, job):
         """Stage large results in a host file before transfer instead of capped stdout."""
         import uuid
 
         key = str(uuid.UUID(job.submission_key))
-        path = f"/tmp/autoeval-collect-{key}-{uuid.uuid4().hex}.json"
-        command = (
-            "umask 077; set -C; "
-            + shlex.join(
-                [
-                    "docker",
-                    "exec",
-                    self.container_id,
-                    "env",
-                    "PYTHONPATH=" + self.remote_dir + "/deps",
-                    "AE_JOB_ROOT=" + self.remote_dir + "/jobs",
-                    "python3",
-                    self.remote_dir + "/job_runtime.py",
-                    "collect",
-                    key,
-                ]
-            )
-            + " > "
-            + shlex.quote(path)
+        return await self._read_staged_json(
+            key,
+            ["docker", "exec", self.container_id, "env",
+             "PYTHONPATH=" + self.remote_dir + "/deps",
+             "AE_JOB_ROOT=" + self.remote_dir + "/jobs",
+             "python3", self.remote_dir + "/job_runtime.py", "collect", key],
         )
+
+    async def _read_staged_json(self, key, arguments):
+        import uuid
+
+        path = f"/tmp/autoeval-collect-{key}-{uuid.uuid4().hex}.json"
+        command = "umask 077; set -C; " + shlex.join(arguments) + " > " + shlex.quote(path)
+        limit = 16 * 1024 * 1024
 
         def read():
             with self.control.connect() as client:
@@ -223,9 +222,11 @@ class PlanningRemoteContainer(DockerExecutor):
                         entry = sftp.lstat(path)
                         if not stat.S_ISREG(entry.st_mode):
                             raise ValueError("Result must be a regular file")
+                        if entry.st_size > limit:
+                            raise ValueError("Result too large")
                         with sftp.open(path, "rb") as stream:
-                            raw = stream.read(16 * 1024 * 1024 + 1)
-                    if len(raw) > 16 * 1024 * 1024:
+                            raw = stream.read(limit + 1)
+                    if len(raw) > limit:
                         raise ValueError("Result too large")
                     return json.loads(raw)
                 finally:
@@ -440,3 +441,302 @@ async def transport(session, settings, inputs):
     if row is None:
         raise ValueError("Docker binding missing")
     return PlanningDocker(settings.docker_executable, row.container_id, row.image_id)
+
+
+class HarborDaemonUnavailable(RuntimeError):
+    def __init__(self, container_id):
+        super().__init__("Harbor private Docker daemon is unavailable")
+        self.container_id = container_id
+
+
+class IsolatedPlanningContainer(PlanningRemoteContainer):
+    """An execution container whose Docker identity is scoped to one subtask."""
+
+    def __init__(self, connection, owner, template):
+        self.owner = str(__import__("uuid").UUID(str(owner)))
+        self.template = template
+        self.name = "autoeval-task-" + self.owner
+        super().__init__(connection, self.name, template["image_id"])
+
+    def _find(self, client):
+        raw = self.control.command(
+            client, ["docker", "ps", "-aq", "--no-trunc", "--filter", "name=^/" + self.name + "$"]
+        ).decode().splitlines()
+        if not raw:
+            return None
+        if len(raw) != 1:
+            raise ValueError("Ambiguous task container")
+        row = json.loads(self.control.command(client, ["docker", "inspect", raw[0]]))[0]
+        expected = getattr(self, "expected_container_id", None)
+        if (
+            (expected is not None and row["Id"] != expected)
+            or row["Name"] != "/" + self.name
+            or row["Image"] != self.image_id
+            or (row["Config"]["Labels"] or {}).get("autoeval.dataset_execution") != self.owner
+        ):
+            raise ValueError("Task container ownership mismatch")
+        return row
+
+    def _ensure(self):
+        with self.control.connect() as client:
+            row = self._find(client)
+            if row is None:
+                if getattr(self, "expected_container_id", None):
+                    raise ValueError("Previously recorded task container is missing")
+                image_id = self.control.command(
+                    client, ["docker", "image", "inspect", "--format", "{{.Id}}", self.image_id]
+                ).decode().strip()
+                if image_id != self.image_id:
+                    raise ValueError("Pinned execution image is unavailable")
+                argv = [
+                    "docker", "create", "--name", self.name,
+                    "--label", "autoeval.dataset_execution=" + self.owner,
+                    "--workdir", "/tmp",
+                ]
+                for mount in self.template.get("readonly_mounts", []):
+                    source, target = readonly_mount_paths(mount)
+                    argv += ["--mount", f"type=bind,src={source},dst={target},readonly"]
+                for key, value in self.template.get("environment", {}).items():
+                    argv += ["--env", key + "=" + value]
+                if self.template["family"] == "harbor":
+                    argv += ["--env", "DOCKER_HOST=unix:///tmp/autoeval-docker.sock"]
+                    if helper := self.template.get("rootless_docker_helper"):
+                        socket = self.control.command(
+                            client, [helper, "ensure", self.owner]
+                        ).decode().strip()
+                        socket_path = PurePosixPath(socket)
+                        if (
+                            not socket_path.is_absolute()
+                            or str(socket_path) != socket
+                            or ".." in socket_path.parts
+                            or "," in socket
+                            or socket_path.parts[-2:] != (self.owner, "docker.sock")
+                        ):
+                            raise ValueError("Invalid Rootless Docker socket")
+                        argv += [
+                            "--mount", f"type=bind,src={socket},dst=/tmp/autoeval-docker.sock,readonly",
+                            "--entrypoint", "/bin/sh", self.image_id, "-c", "exec sleep infinity",
+                        ]
+                    else:
+                        argv += [self.image_id]
+                else:
+                    argv += ["--entrypoint", "python3", self.image_id, "-c", "import time; time.sleep(10**8)"]
+                self.control.command(client, argv)
+                row = self._find(client)
+                if row is None:
+                    raise RuntimeError("Task container creation could not be confirmed")
+            if row["State"]["Status"] == "created":
+                self.control.command(client, ["docker", "start", row["Id"]])
+            elif not row["State"]["Running"]:
+                raise ValueError("Task container stopped")
+            self.container_id = row["Id"]
+            self.expected_container_id = row["Id"]
+            return row["Id"]
+
+    async def ensure(self):
+        container_id = await asyncio.to_thread(self._ensure)
+        if self.template["family"] == "harbor":
+            # Wait for the in-container daemon before handing the runner to Harbor.
+            script = """
+import subprocess
+import time
+
+deadline = time.monotonic() + 9
+while time.monotonic() < deadline:
+    try:
+        probe = subprocess.run(
+            ["docker", "--host", "unix:///tmp/autoeval-docker.sock", "info"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2,
+        )
+        if probe.returncode == 0:
+            raise SystemExit(0)
+    except subprocess.TimeoutExpired:
+        pass
+    time.sleep(0.25)
+raise SystemExit(1)
+"""
+            try:
+                await asyncio.to_thread(
+                    self.command, ["exec", container_id, "python3", "-c", script]
+                )
+            except (OSError, RuntimeError) as exc:
+                raise HarborDaemonUnavailable(container_id) from exc
+        return container_id
+
+    async def preflight(self, tasks=None):
+        result = await super().preflight(tasks)
+        if self.template["family"] != "harbor" or not result["execution_ready"]:
+            return result
+
+        # A live daemon can still lack permission to extract a trial image layer.
+        script = """
+import io
+import subprocess
+import sys
+import tarfile
+
+archive = io.BytesIO()
+with tarfile.open(fileobj=archive, mode="w") as tar:
+    entry = tarfile.TarInfo("autoeval-probe")
+    entry.size = 1
+    tar.addfile(entry, io.BytesIO(b"1"))
+docker = ["docker", "--host", "unix:///tmp/autoeval-docker.sock"]
+tag = "autoeval-private-daemon-probe:" + sys.argv[1]
+try:
+    subprocess.run(
+        docker + ["import", "-", tag], input=archive.getvalue(),
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=8,
+    )
+finally:
+    subprocess.run(
+        docker + ["image", "rm", tag],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=3,
+    )
+"""
+        try:
+            await asyncio.to_thread(
+                self.command, ["exec", self.container_id, "python3", "-c", script, self.owner]
+            )
+        except (OSError, RuntimeError):
+            reason = "harbor_private_daemon_image_import_failed"
+            result["execution_ready"] = False
+            result["blocking_reasons"] = [*result["blocking_reasons"], reason]
+            for check in result["dataset_checks"]:
+                check["blocking_reasons"] = [*check["blocking_reasons"], reason]
+        return result
+
+    async def validate(self, spec):
+        row = await asyncio.to_thread(self._inspect_owned)
+        if not row or not row["State"]["Running"]:
+            raise ValueError("Owned task container is unavailable")
+        self.container_id = row["Id"]
+        if spec.get("kind") != "framework_smoke":
+            validate_spec(spec)
+
+    async def lookup(self, submission_key):
+        # Submission installs the runtime. Inspecting an existing job is read-only.
+        from autoeval.infrastructure.contracts import JobObservation, JobRef
+
+        job = JobRef(external_job_id=submission_key, submission_key=submission_key)
+        result = await self._invoke("status", submission_key)
+        return JobObservation(job=job, state=result["state"], reason=result.get("reason"))
+
+    async def collect(self, job):
+        await self.validate({"kind": "framework_smoke"})
+        return await super().collect(job)
+
+    async def collect_log(self, job):
+        await self.validate({"kind": "framework_smoke"})
+        return await super().collect_log(job)
+
+    def _inspect_owned(self):
+        with self.control.connect() as client:
+            return self._find(client)
+
+    def _remove(self):
+        with self.control.connect() as client:
+            row = self._find(client)
+            if row:
+                self.control.command(client, ["docker", "rm", "-fv", row["Id"]])
+            if self._find(client) is not None:
+                return False
+            if helper := self.template.get("rootless_docker_helper"):
+                self.control.command(client, [helper, "remove", self.owner])
+            return True
+
+    async def remove(self):
+        return await asyncio.to_thread(self._remove)
+
+
+def executor_templates(settings, resource_id):
+    path = settings.planning_container_config
+    if not path:
+        return {}
+    return json.loads(Path(path).read_text(encoding="utf-8")).get(str(resource_id), {}).get(
+        "executors", {}
+    )
+
+
+def readonly_mount_paths(mount):
+    if isinstance(mount, str):
+        paths = mount, mount
+    elif isinstance(mount, dict) and set(mount) == {"source", "target"}:
+        paths = mount["source"], mount["target"]
+    else:
+        raise ValueError("Invalid read-only execution mount")
+    for path in paths:
+        if (
+            not isinstance(path, str)
+            or not path.startswith("/")
+            or "," in path
+            or str(PurePosixPath(path)) != path
+            or ".." in PurePosixPath(path).parts
+            or path in {"/", "//", "/run", "/var", "/var/run"}
+            or path.endswith(".sock")
+        ):
+            raise ValueError("Invalid read-only execution mount")
+    target = PurePosixPath(paths[1])
+    writable = ("/tmp", "/var/lib/docker", "/var/lib/autoeval-private-docker")
+    if any(target.is_relative_to(root) or PurePosixPath(root).is_relative_to(target)
+           for root in writable):
+        raise ValueError("Execution mount overlaps writable runner state")
+    return paths
+
+
+def execution_template(settings, resource_id, task):
+    import re
+
+    from autoeval.evaluation.tool_dispatch import tool_for
+
+    family = tool_for(task).name
+    entry = executor_templates(settings, resource_id).get(family)
+    if not entry or entry.get("revision") != task["tool"]["revision"]:
+        return None
+    if family == "harbor" and entry.get("private_docker") is not True:
+        return None
+    image = entry.get("image_id", "")
+    mounts = entry.get("readonly_mounts", [])
+    if not re.fullmatch(r"sha256:[a-f0-9]{64}", image):
+        raise ValueError("Invalid execution image")
+    targets = [readonly_mount_paths(mount)[1] for mount in mounts]
+    if len(set(targets)) != len(targets):
+        raise ValueError("Duplicate execution mount target")
+    template = {
+        "family": family, "revision": entry["revision"], "image_id": image,
+        "readonly_mounts": mounts,
+        "environment": {
+            key: value for key, value in entry.get("environment", {}).items()
+            if key in {"AE_VALIDATED_DATASETS", "AE_HARBOR_NETWORK_CAPACITY"}
+        },
+    }
+    helper = entry.get("rootless_docker_helper")
+    if helper is not None:
+        if (
+            family != "harbor"
+            or not isinstance(helper, str)
+            or not re.fullmatch(r"/(?:[A-Za-z0-9_.-]+/)*[A-Za-z0-9_.-]+", helper)
+            or any(part in {".", ".."} for part in helper.split("/"))
+        ):
+            raise ValueError("Invalid Rootless Docker helper path")
+        template["rootless_docker_helper"] = helper
+    return template
+
+
+def select_execution_template(settings, candidates, supported, task):
+    for candidate in candidates:
+        resource_id = str(candidate)
+        if supported is not None and resource_id not in supported:
+            continue
+        template = execution_template(settings, resource_id, task)
+        if template is not None:
+            return resource_id, template
+    return None
+
+
+async def isolated_transport(session, settings, resource_id, owner, template, *, container_id=None):
+    row = await session.get(SSHResourceBinding, resource_id)
+    if row is None:
+        raise ValueError("SSH binding missing")
+    adapter = IsolatedPlanningContainer(connection_for(row, settings), owner, template)
+    adapter.expected_container_id = container_id
+    return adapter

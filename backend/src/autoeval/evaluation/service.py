@@ -11,7 +11,7 @@ from autoeval.evaluation.inputs import manifest_dataset_matches as manifest_data
 from autoeval.evaluation.inputs import resolve_inputs as resolve_inputs
 from autoeval.evaluation.inputs import selection_identity as selection_identity
 from autoeval.evaluation.inputs import target_data as target_data
-from autoeval.evaluation.models import DatasetExecution
+from autoeval.evaluation.models import DatasetExecution, DatasetExecutionEnvironment
 from autoeval.evaluation.resource_allocation import acquire as acquire
 from autoeval.evaluation.resource_allocation import demand_for as demand_for
 from autoeval.evaluation.resource_allocation import fits as fits
@@ -22,6 +22,27 @@ from autoeval.infrastructure.domain import RUN_TERMINAL
 from autoeval.infrastructure.models import EvaluationRun, RunEvent, RunSnapshot
 from autoeval.planning.artifacts import artifact as artifact
 from autoeval.planning.artifacts import current_preflight as current_preflight
+
+
+def child_environment_view(child, environment, hosts):
+    template = environment.template if environment else child.payload.get("execution_template")
+    if not template:
+        return None
+    resource_id = str(
+        environment.resource_id if environment else child.payload["assigned_resource_id"]
+    )
+    return {
+        "resource_id": resource_id,
+        "host": hosts.get(resource_id),
+        "tool": template["family"],
+        "revision": template["revision"],
+        "container_id": environment.container_id[:12]
+        if environment and environment.container_id
+        else None,
+        "state": environment.state
+        if environment
+        else ("waiting_capacity" if child.state == "pending" else "not_created"),
+    }
 
 
 async def planned_run_detail(sessions, run_id):
@@ -50,6 +71,30 @@ async def planned_run_detail(sessions, run_id):
         report_id = await session.scalar(
             select(EvaluationReport.id).where(EvaluationReport.run_id == run_id)
         )
+        environments = {
+            row.dataset_execution_id: row
+            for row in await session.scalars(
+                select(DatasetExecutionEnvironment).where(
+                    DatasetExecutionEnvironment.dataset_execution_id.in_([c.id for c in children])
+                )
+            )
+        }
+        from autoeval.resources.models import SSHResourceBinding
+
+        resource_ids = {row.resource_id for row in environments.values()}
+        resource_ids.update(
+            child.payload["assigned_resource_id"]
+            for child in children
+            if child.payload.get("execution_template")
+        )
+        hosts = {
+            str(identifier): host
+            for identifier, host in await session.execute(
+                select(SSHResourceBinding.id, SSHResourceBinding.host).where(
+                    SSHResourceBinding.id.in_(resource_ids)
+                )
+            )
+        }
         from autoeval.evaluation.orchestration import child_view
 
         return {
@@ -57,7 +102,18 @@ async def planned_run_detail(sessions, run_id):
             "id": str(run.id),
             "state": run.state,
             "estimate": snapshot.canonical_body.get("estimate"),
-            "datasets": [child_view(c) for c in children],
+            "datasets": [
+                {
+                    **child_view(child),
+                    "selected_cases": len(child.payload.get("samples", []))
+                    if "samples" in child.payload
+                    else None,
+                    "execution_environment": child_environment_view(
+                        child, environments.get(child.id), hosts
+                    ),
+                }
+                for child in children
+            ],
             "report": reports[0].payload if reports else None,
             "execution_origin": snapshot.canonical_body.get("execution_origin"),
         }

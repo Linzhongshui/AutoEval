@@ -48,6 +48,7 @@ class TaskInput(Strict):
 
 
 class PlanInput(ResourceRef):
+    resource_kind: Literal["customer_ssh"]
     resource_ids: list[uuid.UUID] = Field(default_factory=list, max_length=16)
     ignore_budget: bool = Field(default=False, strict=True)
 
@@ -63,7 +64,7 @@ class PlanInput(ResourceRef):
     target_id: uuid.UUID
     throughput_profile_id: uuid.UUID | None = None
     tasks: list[TaskInput] = Field(min_length=1, max_length=4)
-    dataset_concurrency: int = Field(default=1, ge=1, le=3)
+    dataset_concurrency: int = Field(default=1, ge=1)
     recommend: bool = True
     runs: int = Field(default=100, ge=1, le=100)
     seed: int = Field(default=20261111, ge=0, le=2147483647)

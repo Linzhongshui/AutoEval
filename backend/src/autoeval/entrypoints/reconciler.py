@@ -225,9 +225,8 @@ async def serve():
             settings.temporal_address, namespace=settings.temporal_namespace
         )
         while True:
-            from autoeval.infrastructure.cleanup import ExecutionCleanup, reclaim
-
             from autoeval.evaluation.isolated_cleanup import reclaim_pending
+            from autoeval.infrastructure.cleanup import ExecutionCleanup, reclaim
 
             await reclaim_pending(sessions, settings)
             async with sessions() as session:

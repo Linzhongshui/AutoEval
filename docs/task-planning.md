@@ -9,7 +9,7 @@
 连接验证检查主机指纹、凭据和基础环境。容器工具的版本、固定镜像、挂载与并发容量由部署侧配置，任务预检按所选数据集和节点检查运行环境。
 
 
-本次新增独立的规划和通用编排路径，保留原 GPQA Lite 接口及历史快照。控制台优先展示规划入口，可切换“GPQA Lite 快速验证”入口。AutomationBench 仍未开放。
+控制台统一提交 GPQA、MMMU-Pro、DeepSWE 和 AutomationBench 测评。GPQA Lite 通过样本范围选择。规划器提供可选的耗时估算和参数建议。
 
 ## 启动与依赖
 
@@ -39,7 +39,7 @@ python -m pip install 'git+https://github.com/SJTUyh/AutoEval-Benchmark-Adaptor@
 
 执行端通过发行包的 direct_url.json 核对提交号，不能用同名任意版本替代。还需 Git、对应 AISBench/Harbor 依赖及真实数据；Profile 固定工具提交、评分文件路径和校验和。
 
-执行资源必须完成各数据集真实小样本验收后，由环境配置声明 `AE_VALIDATED_DATASETS=GPQA,MMMU-Pro,DeepSWE`；默认没有已验收数据集，不开放真实执行。该声明不能代替验收记录。Harbor 另需 `AE_HARBOR_NETWORK_CAPACITY` 指定配置的 Docker 地址池容量；缺失时不开放 DeepSWE。`AE_MAX_PROBE_CONCURRENCY` 默认 8，上限由资源预检返回。
+执行模板可通过 `AE_VALIDATED_DATASETS` 声明有历史小样本验收记录的数据集。缺少记录时，控制台显示提示，用户可决定是否先试跑。实际工具、数据或运行环境检查失败仍会阻塞提交。Harbor 还需通过 `AE_HARBOR_NETWORK_CAPACITY` 声明 Docker 地址池容量。`AE_MAX_PROBE_CONCURRENCY` 默认 8，上限由资源预检返回。
 
 预检尊重 Linux cgroup CPU、内存上限，记录可用磁盘、节点启动身份和可用网段，并按所选目标服务、编译配置、Profile 和样本清单绑定快照。返回 Planner/Adaptor 实际与预期提交、各数据集工具提交、数据路径及分项阻塞原因；工具提交、评分文件、数据目录或 Harbor 网段不满足时，相应数据集不可执行。新资源预检会产生新快照，输入或资源变化后旧预检不能用于采纳；采纳和提交要求 5 分钟内的成功预检。
 
@@ -48,7 +48,7 @@ python -m pip install 'git+https://github.com/SJTUyh/AutoEval-Benchmark-Adaptor@
 ## 页面流程
 
 1. 保存模型服务和执行资源；在标准输入管理中编译固定版本配置，选择正确目标服务、工具根目录和数据路径。
-2. 登记全量/Lite 清单与 Profile。每个编译配置只允许一个数据集；一个父任务最多包含三个不同数据集。
+2. 登记全量/Lite 清单与 Profile。每个编译配置对应一个数据集，一个父任务最多包含四个不同数据集。
 3. 选择配置及清单，执行资源预检，选择已有吞吐曲线或启动探测。
 4. 计算当前配置耗时，或搜索更优顺序及并发。检查各数据集的单独耗时、计划内耗时和代表性时间线后采纳；采纳后使用后端返回的执行方案报告刷新预计耗时。
 5. 确认范围及真实调用费用后点击“提交测评”。预检仅是环境检查，不创建运行、不调用模型；只有该按钮会创建任务并跳转到“任务管理 → 测评任务详情”，编排视图仅保留编排记录。修改目标、资源、配置、范围或调度参数会清除旧计划与采纳状态。
@@ -62,6 +62,14 @@ python -m pip install 'git+https://github.com/SJTUyh/AutoEval-Benchmark-Adaptor@
 候选 SSH 主机可以承载多个数据集。正式任务按“测评任务 × 数据集”分配容器，绑定所选工具版本、镜像和只读挂载。预检使用临时容器。每个子任务取得容量租约后新建自己的容器，在其中执行本次选中的全部样本。再次新建相同配置的测评会获得新的子任务和容器。Harbor trial 的资源随所属子任务回收。
 
 控制台在预检后显示匹配主机、工具版本和计划容器数。任务详情显示实际容器短 ID、样本进度和回收状态。创建回执丢失时按子任务身份查回；工具提交结果未知时保留租约并查证。新测评使用 `POST /api/autoeval/v1/evaluation-tasks` 或已有规划提交入口。旧试点提交接口仅回读匹配的历史幂等请求。
+
+### 查看预检进度与复用记录
+
+资源池中 SSH 地址和端口相同的配置，在控制台归为一台主机。四个数据集可以使用同一主机上的不同资源配置。预检表格按数据集列出四个执行节点，提交请求仍携带所选配置的原始资源 ID。
+
+检查期间展开「环境检查记录」可查看入队、Worker 接手、容器准备、工具与数据校验、回收和检查结果的时间。任务摘要显示从入队开始的总耗时。表格显示预检容器短 ID，「查看环境检查详情」中可查到完整 ID、原始检查时间和来源预检任务。正式执行容器的 ID 在提交测评并获得容量后出现在任务详情。
+
+点击「重新检查」时，Worker 按数据集查找已通过且已回收容器的证据。SSH 绑定、镜像、挂载、工具和冻结输入相同，且距离原始检查不足五分钟，就会显示「复用已通过记录」。其余数据集重新执行环境检查。复用保留原始时间，整组预检的有效期取各数据集中最早的到期时间。
 
 ## 接口
 
@@ -84,7 +92,7 @@ python -m pip install 'git+https://github.com/SJTUyh/AutoEval-Benchmark-Adaptor@
 
 规划提交的测评同时出现在任务管理接口 `GET /api/autoeval/v1/runs` 与 `GET /api/autoeval/v1/runs/{id}` 中，详情返回冻结快照的样本数、运行状态、事件与报告入口；编排视图的 `/planning/runs` 保持不变。
 
-PlanInput：target_id、resource_id、resource_kind（docker_local/customer_ssh）、可选 throughput_profile_id、tasks（task_id/compilation_id/manifest_id/dataset）、dataset_concurrency、recommend、runs、seed。模拟默认 100 次、吞吐抖动 0.10、种子 20261111。数据集范围及 attempts 来自编译配置与冻结清单。
+PlanInput：target_id、resource_id、resource_kind（customer_ssh）、候选资源配置列表 resource_ids、可选 throughput_profile_id、tasks（task_id/compilation_id/manifest_id/dataset）、dataset_concurrency、recommend、runs、seed。模拟默认 100 次、吞吐抖动 0.10、种子 20261111。数据集范围及 attempts 来自编译配置与冻结清单。
 
 ## 证据、恢复与口径
 

@@ -42,6 +42,10 @@ uv run uvicorn autoeval.entrypoints.api:app --host 127.0.0.1 --port 8000 --reloa
 
 API 不负责直接消费任务。按所使用的功能在独立终端启动对应进程，部署配置应覆盖相同角色。
 
+SSH 隔离预检使用 `GET /api/autoeval/v1/planning/probes/{job_id}` 查询进度。Worker 在 `result.preflight_progress` 中记录冻结的数据集到资源 ID 的映射，以及带时间戳的容器准备、工具与数据校验、回收和检查结果。控制台按 SSH 地址和端口合并主机展示，每个数据集单列一个执行节点。提交及调度仍使用具体的资源配置 ID。旧预检记录按已有结果显示。
+
+每个数据集通过预检并确认回收临时容器后，Worker 保存来源任务、完整 Docker 容器 ID、实检时间和检查结果。同一 SSH 绑定、执行模板和冻结数据集输入在实检后五分钟内可以复用该记录。多个预检同时请求相同配置时共享同一次实检。组合快照最晚在其中最早的一条证据到期时失效。正式测评仍为每个子任务创建独立执行容器。
+
 | 进程 / 角色 | 命令 | 用途 |
 | --- | --- | --- |
 | Dispatcher | `uv run python -m autoeval.entrypoints.dispatcher` | 投递持久化 Outbox 任务 |

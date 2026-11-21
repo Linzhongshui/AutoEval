@@ -15,11 +15,12 @@ export const duration = (seconds: number | null | undefined) => {
   return [total >= 3600 ? `${Math.floor(total / 3600)}小时` : "", total >= 60 ? `${Math.floor(total % 3600 / 60)}分` : "", `${total % 60}秒`].filter(Boolean).join(" ");
 };
 
-export function EstimateElapsed() {
-  const [start] = useState(Date.now);
+export function ElapsedTime({ label, startedAt }: { label: string; startedAt?: string }) {
+  const [mountedAt] = useState(Date.now);
   const [now, setNow] = useState(Date.now);
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
-  return <span className="estimate-elapsed" aria-label="估算已耗时">已耗时 {duration((now - start) / 1000)}</span>;
+  const start = startedAt ? Date.parse(startedAt) : mountedAt;
+  return <span className="estimate-elapsed" role="timer" aria-label={label} aria-live="off">已耗时 {duration(Math.floor((now - start) / 1000))}</span>;
 }
 
 export function PlanEstimate({ report }: { report: Report }) {

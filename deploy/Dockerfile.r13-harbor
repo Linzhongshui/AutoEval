@@ -28,3 +28,6 @@ RUN if [ -n "$RUNNER_UID$RUNNER_GID" ]; then \
       (getent passwd "$RUNNER_UID" || useradd --no-create-home --home-dir /tmp \
         --shell /bin/sh --uid "$RUNNER_UID" --gid "$RUNNER_GID" harbor-runner); \
     fi
+
+# BFCL initializes these writable caches when AISBench imports its dataset registry.
+ENV BFCL_PROJECT_ROOT=/tmp/bfcl

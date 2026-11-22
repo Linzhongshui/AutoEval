@@ -139,7 +139,8 @@ def test_recover_created_container_and_remove_only_selected_child():
 
 
 @pytest.mark.asyncio
-async def test_failed_removal_retains_lease_until_reconciled(monkeypatch):
+@pytest.mark.parametrize("environment", ["DatasetExecutionEnvironment", "ExecutionShardEnvironment"])
+async def test_failed_removal_retains_lease_until_reconciled(monkeypatch, environment):
     from contextlib import asynccontextmanager
     from unittest.mock import AsyncMock
 
@@ -165,15 +166,16 @@ async def test_failed_removal_retains_lease_until_reconciled(monkeypatch):
         "isolated_transport",
         AsyncMock(return_value=SimpleNamespace(remove=remove)),
     )
+    model = getattr(isolated_cleanup, environment)
     monkeypatch.setattr(isolated_cleanup, "release", release)
 
-    await isolated_cleanup.reclaim_child(sessions, None, owner)
+    await isolated_cleanup.reclaim_child(sessions, None, owner, model=model)
     assert row.state == "cleanup_pending"
     release.assert_not_awaited()
     assert row.cleanup_attempted_at is not None
 
-    await isolated_cleanup.reclaim_child(sessions, None, owner)
-    await isolated_cleanup.reclaim_child(sessions, None, owner)
+    await isolated_cleanup.reclaim_child(sessions, None, owner, model=model)
+    await isolated_cleanup.reclaim_child(sessions, None, owner, model=model)
     assert row.state == "cleaned"
     assert remove.await_count == 2
     assert release.await_count == 1

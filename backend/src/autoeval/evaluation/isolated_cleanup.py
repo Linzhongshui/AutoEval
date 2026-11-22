@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import select
 
-from autoeval.evaluation.models import DatasetExecutionEnvironment
+from autoeval.evaluation.models import DatasetExecutionEnvironment, ExecutionShardEnvironment
 from autoeval.evaluation.resource_allocation import release
 from autoeval.planning.planning_transport import isolated_transport
 
@@ -13,26 +13,27 @@ log = logging.getLogger(__name__)
 
 
 async def reclaim_pending(sessions, settings):
-    model = DatasetExecutionEnvironment
-    async with sessions() as session:
-        owners = list(
-            await session.scalars(
-                select(model.dataset_execution_id)
-                .where(model.state == "cleanup_pending")
-                .order_by(
-                    model.cleanup_attempted_at.asc().nulls_first(), model.dataset_execution_id
+    for model, owner_column in (
+        (DatasetExecutionEnvironment, DatasetExecutionEnvironment.dataset_execution_id),
+        (ExecutionShardEnvironment, ExecutionShardEnvironment.shard_id),
+    ):
+        async with sessions() as session:
+            owners = list(
+                await session.scalars(
+                    select(owner_column)
+                    .where(model.state == "cleanup_pending")
+                    .order_by(model.cleanup_attempted_at.asc().nulls_first(), owner_column)
+                    .limit(100)
                 )
-                .limit(100)
             )
-        )
-    for owner in owners:
-        await reclaim_child(sessions, settings, owner)
+        for owner in owners:
+            await reclaim_child(sessions, settings, owner, model=model)
 
 
-async def reclaim_child(sessions, settings, owner):
+async def reclaim_child(sessions, settings, owner, *, model=DatasetExecutionEnvironment):
     try:
         async with sessions() as session, session.begin():
-            row = await session.get(DatasetExecutionEnvironment, owner, with_for_update=True)
+            row = await session.get(model, owner, with_for_update=True)
             if row is None or row.state != "cleanup_pending":
                 return
             row.cleanup_attempted_at = datetime.now(UTC)

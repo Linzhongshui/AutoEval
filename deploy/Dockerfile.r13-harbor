@@ -18,3 +18,13 @@ RUN /opt/venvs/harbor/bin/python -c 'import harbor; from automationbench_adapter
 
 # The private rootless runner executes as the SSH user against this pinned checkout.
 RUN git config --system --add safe.directory /benchmark
+
+# Supply the remote rootless daemon owner's numeric IDs when building its runner.
+ARG RUNNER_UID
+ARG RUNNER_GID
+RUN if [ -n "$RUNNER_UID$RUNNER_GID" ]; then \
+      test -n "$RUNNER_UID" && test -n "$RUNNER_GID" && \
+      (getent group "$RUNNER_GID" || groupadd --gid "$RUNNER_GID" harbor-runner) && \
+      (getent passwd "$RUNNER_UID" || useradd --no-create-home --home-dir /tmp \
+        --shell /bin/sh --uid "$RUNNER_UID" --gid "$RUNNER_GID" harbor-runner); \
+    fi

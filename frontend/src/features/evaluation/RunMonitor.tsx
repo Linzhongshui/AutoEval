@@ -39,6 +39,9 @@ const SNAPSHOT_LABEL: Record<string, string> = {
   last_observed: "最后观测",
 };
 const STATUS_LABEL: Record<string, string> = {
+  completed: "已结束",
+  running: "执行中",
+  cancelled: "已取消",
   finish: "已完成",
   finished: "已完成",
   inferencing: "推理中",
@@ -55,7 +58,7 @@ const stamp = (value?: number | string | null) => {
   return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("zh-CN");
 };
 
-function MonitorProgress({ value, error = false, stage, terminal = false }: { value: Monitor | null; error?: boolean; stage?: string; terminal?: boolean }) {
+function MonitorProgress({ value, error = false, stage, terminal = false, compact = false }: { compact?: boolean; value: Monitor | null; error?: boolean; stage?: string; terminal?: boolean }) {
   const total = value?.total_count;
   const done = value?.finish_count;
   const known = typeof total === "number" && Number.isInteger(total) && total > 0
@@ -65,16 +68,16 @@ function MonitorProgress({ value, error = false, stage, terminal = false }: { va
   const kind = value?.snapshot_kind || "live";
   const waiting = terminal ? "未记录样本进度" : value?.collection_status === "waiting_tool" ? "等待作业启动" : stale ? "等待恢复采集" : "等待样本计数";
   return <div className={`run-progress ${kind}${stale ? " stale" : ""}`} data-testid="run-progress">
-    <div className="run-progress-head"><span>样本执行进度</span><b>{known ? `${done} / ${total} · ${percent}%` : waiting}</b></div>
+    <div className="run-progress-head">{!compact && <span>样本执行进度</span>}<b>{known ? `${done} / ${total} · ${percent}%` : waiting}</b></div>
     <div className={`run-progress-track${known ? "" : " unknown"}`} role="progressbar"
       aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100} aria-label="工具执行进度"
       aria-valuetext={known ? `已完成 ${done} / ${total} 个样本，${percent}%${stale ? "，数据已过期" : ""}` : waiting}>
       <i style={known ? { width: `${percent}%` } : undefined} />
     </div>
-    <small>{stage && <>当前阶段：{stage} · </>}
+    {!compact && <small>{stage && <>当前阶段：{stage} · </>}
       {stale ? "数据已过期，保留最后观测值" : known ? value?.source === "archived_case_executions" ? "进度来自已归档执行记录，不代表历史实时监控或评分通过" : "进度来自工具执行记录，执行完成不代表评分通过" : terminal ? "任务已结束，未记录有效样本计数" : "样本计数尚未返回，当前阶段与耗时持续更新"}
       {value?.snapshot_kind === "final" ? " · 终态已归档" : value?.snapshot_kind === "last_observed" ? " · 仅最后观测（非终态）" : ""}
-    </small>
+    </small>}
   </div>;
 }
 
@@ -217,11 +220,22 @@ export function RunMonitor({ runId, terminal }: { runId: string; terminal: boole
   if (value.collection_status === "not_collected" && !value.log) return <p className="muted" role="status">{error || "本次运行未采集工具监控。"}</p>;
 
   const multi = (value.datasets?.length || 0) > 1;
-  const finalCount = value.datasets?.filter(item => item.snapshot_kind === "final").length || 0;
-  const allFinal = multi && finalCount === value.datasets!.length;
+  const groups = new Map<string, NonNullable<Monitor["datasets"]>>();
+  for (const item of value.datasets ?? []) {
+    const name = item.dataset || item.task_name || `执行记录 ${item.attempt ?? groups.size + 1}`;
+    const group = groups.get(name);
+    if (group) group.push(item);
+    else groups.set(name, [item]);
+  }
+  const datasets = Array.from(groups, ([name, records]) => {
+    records.sort((a, b) => (b.attempt ?? 0) - (a.attempt ?? 0));
+    return { name, records, latest: records[0] };
+  });
+  const finalCount = datasets.filter(({ latest }) => latest.snapshot_kind === "final").length;
+  const allFinal = multi && finalCount === datasets.length;
   const kind = multi ? allFinal ? "final" : "live" : value.snapshot_kind || "live";
   const headerKind = multi ? allFinal ? "全部数据集终态已归档" : finalCount ? "部分数据集已结束" : "数据集执行中" : KIND_LABEL[kind] || kind;
-  const headerStatus = multi ? `${finalCount} / ${value.datasets!.length} 个数据集已结束` : STATUS_LABEL[value.tool_status || ""] || value.tool_status || "状态未知";
+  const headerStatus = multi ? `${finalCount} / ${datasets.length} 个数据集已结束` : STATUS_LABEL[value.tool_status || ""] || value.tool_status || "状态未知";
   const kindTone = value.stale || error ? "orange" : kind === "final" ? "green" : kind === "live" ? "blue" : "orange";
   const evidenceRow = typeof evidence === "object" && evidence !== null ? (evidence as Record<string, unknown>) : null;
   const selectedSnapshot = snapshots.find((row) => row.id === selected);
@@ -238,11 +252,23 @@ export function RunMonitor({ runId, terminal }: { runId: string; terminal: boole
           <span className="muted">{headerStatus}</span>
         </div>
       </div>
-      {value.datasets && value.datasets.length > 1 ? value.datasets.map(item => <section className="card stack" key={item.attempt}>
-        <h4>{item.dataset || item.task_name} · {STATUS_LABEL[item.tool_status || ""] || item.tool_status || "等待中"}</h4>
-        <MonitorProgress value={item} error={Boolean(error)} terminal={item.snapshot_kind === "final"} />
-        <p className="muted">{item.source === "executor_lifecycle" ? "远程作业状态采集；不是工具原生样本进度" : item.source} · {item.observed_at || "等待采集"}{item.stale ? " · 数据已过期" : ""}</p>
-      </section>) : <MonitorProgress value={value} error={Boolean(error)} terminal={terminal} />}
+      {multi ? <div className="dataset-monitor-list" aria-label="数据集最新执行进度">
+        {datasets.map(({ name, records, latest }) => <details key={name}>
+          <summary>
+            <span className="dataset-monitor-name">{name}</span>
+            <span className="dataset-monitor-state">{STATUS_LABEL[latest.tool_status || ""] || latest.tool_status || "等待中"}{latest.stale && " · 已过期"}</span>
+            <MonitorProgress value={latest} compact error={Boolean(error)} terminal={latest.snapshot_kind === "final"} />
+          </summary>
+          <ol className="dataset-monitor-history" aria-label={`${name} 监控记录`}>
+            {records.map((item, index) => <li key={item.attempt ?? index}>
+              <b>{index === 0 ? "最新记录" : "历史记录"} · {STATUS_LABEL[item.tool_status || ""] || item.tool_status || "等待中"}</b>
+              <MonitorProgress value={item} compact terminal={item.snapshot_kind === "final"} />
+              <small>{stamp(item.observed_at)} · {item.source || "来源未知"} · {KIND_LABEL[item.snapshot_kind || "live"] || item.snapshot_kind}{item.stale && " · 数据已过期"}</small>
+            </li>)}
+          </ol>
+        </details>)}
+        <small className="muted">进度按各数据集最新记录展示。展开数据集可查看采集时间和历史记录。</small>
+      </div> : <MonitorProgress value={value} error={Boolean(error)} terminal={terminal} />}
       {(value.stale || error) && (
         <p className="notice" role="status">数据已过期 / 不可达，以下为最后观测值；采集失败不会触发测评重启。</p>
       )}
@@ -351,7 +377,7 @@ export function RunMonitor({ runId, terminal }: { runId: string; terminal: boole
 
       {tab === "log" && (
         <>
-          {(value.datasets?.length ?? 0) > 1 && <label>日志数据集 <select aria-label="日志数据集" value={logDataset} onChange={e => { setLogDataset(e.target.value); setLog(null); void loadLog(e.target.value); }}><option value="">请选择数据集</option>{value.datasets?.map(d => <option key={d.dataset} value={d.dataset}>{d.dataset}</option>)}</select></label>}
+          {(value.datasets?.length ?? 0) > 1 && <label>日志数据集 <select aria-label="日志数据集" value={logDataset} onChange={e => { setLogDataset(e.target.value); setLog(null); void loadLog(e.target.value); }}><option value="">请选择数据集</option>{datasets.map(({ name }) => <option key={name} value={name}>{name}</option>)}</select></label>}
           {logMessage && <p role="status" className="muted">{logMessage}</p>}
           {log && (
             <>

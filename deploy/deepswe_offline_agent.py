@@ -1,6 +1,7 @@
 """Harbor MiniSwe with a hash-locked, offline installer for the DeepSWE runner."""
 
 import hashlib
+from dataclasses import replace
 from pathlib import Path
 
 from harbor.agents.installed.mini_swe_agent import MiniSweAgent
@@ -10,6 +11,33 @@ TRIAL_WHEELHOUSE = "/tmp/autoeval-deepswe-wheelhouse"
 
 
 class OfflineMiniSweAgent(MiniSweAgent):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.model_name == "deepseek-flash" and self.extra_env.get("OPENAI_BASE_URL"):
+            self.model_name = "deepseek/" + self.model_name
+
+    @property
+    def model_connection(self):
+        access = super().model_connection
+        if self.model_name != "deepseek/deepseek-flash" or not self.extra_env.get(
+            "OPENAI_BASE_URL"
+        ):
+            return access
+        endpoint = self.extra_env["OPENAI_BASE_URL"]
+        credential = self.extra_env.get("OPENAI_API_KEY")
+        if not credential or self._max_tokens is None:
+            raise ValueError("DeepSWE requires the configured gateway token and output limit")
+        return replace(
+            access,
+            api_key=credential,
+            env={
+                **access.env,
+                "DEEPSEEK_API_BASE": endpoint,
+                "DEEPSEEK_API_KEY": credential,
+                "MSWEA_MODEL_RETRY_STOP_AFTER_ATTEMPT": "1",
+            },
+        )
+
     async def install(self, environment):
         if not WHEELHOUSE.is_dir():
             return await super().install(environment)

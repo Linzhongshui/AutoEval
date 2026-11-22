@@ -2698,6 +2698,8 @@ export interface components {
         };
         /** ReportView */
         ReportView: {
+            /** Dataset Concurrency */
+            dataset_concurrency?: number | null;
             /** Dataset Results */
             dataset_results?: {
                 [key: string]: unknown;
@@ -2987,6 +2989,11 @@ export interface components {
             resource_kind: string | null;
             /** Datasets */
             datasets: string[];
+            /**
+             * Follow Up Enabled
+             * @default false
+             */
+            follow_up_enabled: boolean;
         };
         /** TaskSelection */
         TaskSelection: {
@@ -3654,6 +3661,7 @@ export interface operations {
             query?: {
                 offset?: number;
                 limit?: number;
+                include_summary?: boolean;
             };
             header?: never;
             path: {
@@ -3719,6 +3727,8 @@ export interface operations {
         parameters: {
             query?: {
                 dataset_key?: string | null;
+                round_number?: number | null;
+                shard_id?: string | null;
             };
             header?: never;
             path: {

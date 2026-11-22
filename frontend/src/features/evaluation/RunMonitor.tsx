@@ -25,13 +25,18 @@ type Monitor = {
   job_dir_available?: boolean;
   log?: { endpoint: string; sha256: string } | null;
 };
-type Snapshot = { id: string; kind: string; sha256: string; created_at: string };
+type Snapshot = { id: string; kind: string; sha256: string; created_at: string; dataset?: string | null; summary?: string; summary_status?: string };
 type ArchivedLog = { content: string; sha256: string; source: string };
 
 const KIND_LABEL: Record<string, string> = {
   final: "终态已归档",
   last_observed: "仅最后观测（非终态）",
   live: "实时观测",
+};
+const SNAPSHOT_LABEL: Record<string, string> = {
+  live: "过程快照",
+  final: "终态快照",
+  last_observed: "最后观测",
 };
 const STATUS_LABEL: Record<string, string> = {
   finish: "已完成",
@@ -73,7 +78,7 @@ function MonitorProgress({ value, error = false, stage, terminal = false }: { va
   </div>;
 }
 
-type ProgressEvent = { type: string; created_at: string };
+type ProgressEvent = { type: string; created_at: string; dataset?: string | null; summary?: string; summary_status?: string };
 const PHASES = ["提交与排队", "环境准备", "测评执行", "结果归档", "任务完成"];
 const PHASE_INDEX: Record<string, number> = { accepted: 0, queued: 0, preparing: 1, running: 2, aggregating: 3, completed: 4 };
 const duration = (milliseconds: number) => {
@@ -185,7 +190,7 @@ export function RunMonitor({ runId, terminal }: { runId: string; terminal: boole
   const loadSnapshots = async (offset: number) => {
     setSnapshotMessage("正在读取归档快照…");
     try {
-      const page = await apiGetPage<Snapshot[]>(`/runs/${runId}/monitor/snapshots?limit=${PAGE}&offset=${offset}`);
+      const page = await apiGetPage<Snapshot[]>(`/runs/${runId}/monitor/snapshots?limit=${PAGE}&offset=${offset}&include_summary=true`);
       setSnapshots(page.data); setNext(page.next_offset); setSnapshotOffset(offset);
       setSnapshotMessage(page.data.length ? "" : "本次运行暂无归档快照。");
     } catch {
@@ -219,7 +224,9 @@ export function RunMonitor({ runId, terminal }: { runId: string; terminal: boole
   const headerStatus = multi ? `${finalCount} / ${value.datasets!.length} 个数据集已结束` : STATUS_LABEL[value.tool_status || ""] || value.tool_status || "状态未知";
   const kindTone = value.stale || error ? "orange" : kind === "final" ? "green" : kind === "live" ? "blue" : "orange";
   const evidenceRow = typeof evidence === "object" && evidence !== null ? (evidence as Record<string, unknown>) : null;
+  const selectedSnapshot = snapshots.find((row) => row.id === selected);
   const projection = evidenceRow && typeof evidenceRow.projection === "object" ? evidenceRow.projection : evidence;
+  const detail = projection as Partial<Monitor> | null;
   const raw = evidenceRow?.raw;
 
   return (
@@ -289,10 +296,15 @@ export function RunMonitor({ runId, terminal }: { runId: string; terminal: boole
                   <button
                     type="button"
                     className={`link ${selected === row.id ? "active" : ""}`}
+                    aria-pressed={selected === row.id}
                     onClick={() => void openSnapshot(row.id)}
                   >
-                    <span className={`badge ${row.kind === "final" ? "green" : row.kind === "live" ? "blue" : "orange"}`}>{row.kind}</span>
+                    <span className={`badge ${row.kind === "final" ? "green" : row.kind === "live" ? "blue" : "orange"}`}>{SNAPSHOT_LABEL[row.kind] ?? row.kind}</span>
                     <span>{stamp(row.created_at)}</span>
+                    <span className="monitor-snapshot-dataset">数据集 · {row.dataset || "未记录"}</span>
+                    <span className="monitor-snapshot-summary">
+                      {row.summary || (row.summary_status === "unavailable" ? "摘要暂不可用" : "未记录进展")}
+                    </span>
                     <span className="mono">{row.sha256.slice(0, 12)}</span>
                   </button>
                 </li>
@@ -309,7 +321,20 @@ export function RunMonitor({ runId, terminal }: { runId: string; terminal: boole
           {evidence !== null && (
             <div className="monitor-evidence">
               <h4>快照内容 · 已通过完整性校验</h4>
-              <details open>
+              <p>{detail?.progress_description?.trim() || detail?.progress_text?.trim() || "未记录进展"}</p>
+              <dl className="detail-properties">
+                <div><dt>数据集</dt><dd>{selectedSnapshot?.dataset || "未记录"}</dd></div>
+                <div><dt>采集时间</dt><dd>{stamp(detail?.observed_at)}</dd></div>
+                {selectedSnapshot && <div><dt>校验指纹</dt><dd className="mono">{selectedSnapshot.sha256.slice(0, 12)}</dd></div>}
+                {detail?.log_available !== undefined && (
+                  <div><dt>日志</dt><dd>{detail.log_available ? "已归档" : "未归档"}</dd></div>
+                )}
+                {detail?.job_dir_available !== undefined && (
+                  <div><dt>作业目录</dt><dd>{detail.job_dir_available ? "可用" : "不可用"}</dd></div>
+                )}
+              </dl>
+              {!!detail?.diagnostics?.length && <p>诊断：{detail.diagnostics.join("、")}</p>}
+              <details>
                 <summary>投影字段</summary>
                 <pre className="snapshot" data-testid="monitor-evidence">{JSON.stringify(projection, null, 2)}</pre>
               </details>

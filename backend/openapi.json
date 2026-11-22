@@ -899,6 +899,16 @@
               "default": 20,
               "title": "Limit"
             }
+          },
+          {
+            "name": "include_summary",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Include Summary"
+            }
           }
         ],
         "responses": {
@@ -1006,6 +1016,39 @@
                 }
               ],
               "title": "Dataset Key"
+            }
+          },
+          {
+            "name": "round_number",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Round Number"
+            }
+          },
+          {
+            "name": "shard_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Shard Id"
             }
           }
         ],
@@ -8085,6 +8128,17 @@
       },
       "ReportView": {
         "properties": {
+          "dataset_concurrency": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Concurrency"
+          },
           "dataset_results": {
             "anyOf": [
               {
@@ -8817,6 +8871,11 @@
             },
             "type": "array",
             "title": "Datasets"
+          },
+          "follow_up_enabled": {
+            "type": "boolean",
+            "title": "Follow Up Enabled",
+            "default": false
           }
         },
         "type": "object",

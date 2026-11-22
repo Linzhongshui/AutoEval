@@ -7,12 +7,13 @@ from playwright.sync_api import sync_playwright
 
 
 @pytest.mark.skipif(not os.getenv("AE_BROWSER_URL"), reason="Explicit browser URL required")
-@pytest.mark.parametrize("operation", ["resume", "case-retry"])
+@pytest.mark.parametrize("operation", ["resume", "case-retry", "blocked-case"])
 def test_confirm_from_original_task(operation):
     requests = []
+    blocked = operation == "blocked-case"
     base = "/evaluation-tasks/task"
     target = {"dataset_key": "GPQA", "sample_id": "q2"}
-    missing = {**target, "category": "remaining", "has_attempts": False}
+    missing = {**target, "category": "unknown" if blocked else "remaining", "has_attempts": False}
 
     def api(route):
         path = route.request.url.split("/api/autoeval/v1", 1)[-1].split("?", 1)[0]
@@ -29,7 +30,7 @@ def test_confirm_from_original_task(operation):
         elif path == base:
             data = {
                 "id": "task",
-                "state": "cancelled",
+                "state": "failed" if blocked else "cancelled",
                 "run_mode": "exploration",
                 "follow_up_enabled": True,
                 "snapshot": {"parameters": {}, "sample_count": 2, "remote_model": "Fixture"},
@@ -42,10 +43,10 @@ def test_confirm_from_original_task(operation):
                 "source_round": 1,
                 "scope_sha256": ("b" if "case-retry" in path else "a") * 64,
                 "sample_count": 1,
-                "blockers": [],
+                "blockers": ["samples_unresolved"] if blocked else [],
                 "samples": [missing],
             }
-        elif path == base + "/" + operation:
+        elif route.request.method == "POST":
             requests.append((route.request.post_data_json, route.request.headers))
             route.fulfill(status=202, json={"data": {"run_id": "task", "round": 2}})
             return
@@ -77,7 +78,7 @@ def test_confirm_from_original_task(operation):
         page = browser.new_page()
         page.route("**/api/autoeval/v1/**", api)
         origin = os.environ["AE_BROWSER_URL"].rstrip("/")
-        if operation == "case-retry":
+        if operation != "resume":
             page.goto(origin + "/#run/task")
             page.get_by_text("执行轮次", exact=True).click()
             page.get_by_text("第 1 轮 · 首次执行", exact=True).wait_for()
@@ -88,12 +89,18 @@ def test_confirm_from_original_task(operation):
             table.get_by_role("columnheader", name="证据与轨迹", exact=True).wait_for()
             table.get_by_role("columnheader", name="重试", exact=True).wait_for()
             pending = table.get_by_role("row").filter(has_text="q2")
-            pending.get_by_text("待执行", exact=True).wait_for()
+            pending.get_by_text("待核对" if blocked else "待执行", exact=True).wait_for()
             pending.get_by_role("button", name="重试此 Case", exact=True).click()
             page.get_by_role("dialog", name="重试此 Case").get_by_text(
                 "GPQA · q2", exact=False
             ).wait_for()
-            page.get_by_role("button", name="确认重试此 Case", exact=True).click()
+            confirm = page.get_by_role("button", name="确认重试此 Case", exact=True)
+            if blocked:
+                assert confirm.is_disabled()
+                assert not requests
+                browser.close()
+                return
+            confirm.click()
         else:
             page.goto(origin + "/#tasks")
             page.get_by_role("row").get_by_role("button", name="续跑测评", exact=True).click()

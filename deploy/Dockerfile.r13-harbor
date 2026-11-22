@@ -15,3 +15,6 @@ RUN runner=/benchmark/ais_bench/benchmark/runners/harbor_runner.py \
     && sed -i 's/self\.logger\.exception(/self.logger.error(__import__("traceback").format_exc() + /g' "$runner"
 
 RUN /opt/venvs/harbor/bin/python -c 'import harbor; from automationbench_adapter.agent import AutomationBenchOfficialAgent; from harbor.environments.docker.docker import DockerEnvironment; assert harbor.__file__.startswith("/opt/autoeval-harbor-f59cb89/src/")'
+
+# The private rootless runner executes as the SSH user against this pinned checkout.
+RUN git config --system --add safe.directory /benchmark

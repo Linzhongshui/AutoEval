@@ -1,6 +1,7 @@
 """Report-object health is independent of immutable historical execution validity."""
 
 import asyncio
+from types import SimpleNamespace
 
 from botocore.exceptions import BotoCoreError, ClientError
 
@@ -10,6 +11,37 @@ from autoeval.catalog.datasets import read_manifest
 async def report_evidence_status(settings, report, run, snapshot):
     status, _ = await verified_report_body(settings, report, run, snapshot)
     return status
+
+
+async def verify_follow_up_cases(settings, dataset, task, combined):
+    index = dataset["case_index"]
+    if [entry["sample_id"] for entry in index] != [
+        sample["sample_id"] for sample in task["samples"]
+    ]:
+        return False
+    cases = []
+    seen = set()
+    for entry in index:
+        for reference in entry["attempts"]:
+            if reference["id"] in seen:
+                return False
+            seen.add(reference["id"])
+            record = await asyncio.to_thread(read_manifest, settings, SimpleNamespace(**reference))
+            if (
+                record.get("schema_version") != "unified-case.v1"
+                or record.get("dataset_key") != task["dataset"]
+                or record.get("sample_id") != entry["sample_id"]
+            ):
+                return False
+            cases.append(
+                {
+                    **record["raw"],
+                    "dataset": record["dataset_key"],
+                    "case_id": record["sample_id"],
+                    "attempt": record["attempt_no"],
+                }
+            )
+    return cases == combined["cases"]
 
 
 async def verified_report_body(settings, report, run, snapshot):
@@ -28,8 +60,6 @@ async def verified_report_body(settings, report, run, snapshot):
         ):
             return "invalid", None
         if body.get("schema_version") == "task-report.v2":
-            from types import SimpleNamespace
-
             from autoeval.catalog.datasets import canonical_manifest
             from autoeval.reporting.task_reports import checksum, dataset_context, scored_summary
 
@@ -56,7 +86,15 @@ async def verified_report_body(settings, report, run, snapshot):
                     raw = await asyncio.to_thread(
                         read_manifest, settings, SimpleNamespace(**d["archive"])
                     )
-                    if scored_summary(canonical_manifest(raw), task) != d["summary"]:
+                    follow_up = (getattr(report, "version", None) or 1) > 1
+                    if scored_summary(
+                        canonical_manifest(raw), task, require_attempt_group=follow_up
+                    ) != d["summary"]:
+                        return "invalid", None
+                    if follow_up and (
+                        body.get("round") != report.version
+                        or not await verify_follow_up_cases(settings, d, task, raw)
+                    ):
                         return "invalid", None
                 elif d["validity"] == "complete":
                     return "invalid", None
@@ -69,5 +107,5 @@ async def verified_report_body(settings, report, run, snapshot):
         ), None
     except BotoCoreError:
         return "unavailable", None
-    except (ValueError, TypeError, OSError, KeyError, StopIteration):
+    except (AttributeError, ValueError, TypeError, OSError, KeyError, StopIteration):
         return "invalid", None

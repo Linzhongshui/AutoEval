@@ -8,6 +8,7 @@ import copy
 import hashlib
 import json
 import uuid
+from collections import Counter
 
 from sqlalchemy import select
 
@@ -47,7 +48,7 @@ def dataset_context(frozen, task):
     return value
 
 
-def scored_summary(raw, task):
+def scored_summary(raw, task, *, require_attempt_group=False):
     cases, summary = parse_output(
         raw, {task["dataset"]: [s["sample_id"] for s in task["samples"]]}, task["dataset"]
     )
@@ -59,6 +60,27 @@ def scored_summary(raw, task):
         ):
             latest[case["sample_id"]] = case
     scores = [c["score"] for c in latest.values()]
+    metric_conversion = "verified_case_accuracy"
+    if require_attempt_group:
+        successful_attempts = Counter(
+            case["sample_id"]
+            for case in cases
+            if case["status"] == "success" and case["score"] is not None
+        )
+        observed_attempts = Counter(case["sample_id"] for case in cases)
+        required = task["attempts"]
+        incomplete_groups = sum(
+            observed_attempts[sample_id] != required or successful_attempts[sample_id] != required
+            for sample_id in latest
+        )
+        summary["incomplete_attempt_groups"] = incomplete_groups
+        if incomplete_groups:
+            summary["validity"] = "partial"
+        if task["compilation"]["config"]["subcommand"] == "harbor_agent":
+            # The pinned adaptor averages trial scores. A fixed number of trials
+            # per sample gives every sample the same weight across shards.
+            scores = [case["score"] for case in cases]
+            metric_conversion = "verified_harbor_trial_accuracy"
     verified = summary["validity"] == "complete" and all(
         type(v) in (int, float) and v in (0, 1) for v in scores
     )
@@ -74,7 +96,7 @@ def scored_summary(raw, task):
         "failed_samples": summary["failed_cases"],
         "missing_samples": summary["missing_cases"],
         "metric_scope": "selected_manifest",
-        "metric_conversion": "verified_case_accuracy" if verified else "not_verified",
+        "metric_conversion": metric_conversion if verified else "not_verified",
     }
 
 
@@ -300,7 +322,7 @@ async def publish_task_report(session, settings, run_id, *, revision_ids=()):
             )
         },
     }
-    old = await session.scalar(select(EvaluationReport).where(EvaluationReport.run_id == run_id))
+    old = await session.scalar(select(EvaluationReport).where(EvaluationReport.run_id == run_id, EvaluationReport.is_current))
     previous = await asyncio.to_thread(read_manifest, settings, old) if old else None
     body = {
         "schema_version": "task-report.v2",
@@ -339,6 +361,56 @@ async def publish_task_report(session, settings, run_id, *, revision_ids=()):
     session.add(row)
     await session.flush()
     return row
+
+
+async def publish_follow_up_report(session, settings, run_id, round_number, snapshot, body):
+    """Publish verified report bytes and switch the task's current version atomically."""
+    await session.get_one(EvaluationRun, run_id, with_for_update=True)
+    body = {
+        **body,
+        "schema_version": "task-report.v2",
+        "run_id": str(run_id),
+        "snapshot_sha256": snapshot.sha256,
+        "execution_origin": snapshot.canonical_body["execution_origin"],
+        "round": round_number,
+    }
+    report_digest = checksum(body)
+    current = await session.scalar(
+        select(EvaluationReport).where(
+            EvaluationReport.run_id == run_id, EvaluationReport.is_current
+        )
+    )
+    existing = await session.scalar(
+        select(EvaluationReport).where(
+            EvaluationReport.run_id == run_id, EvaluationReport.version == round_number
+        )
+    )
+    if existing is not None:
+        if existing.sha256 != report_digest:
+            raise ValueError("Follow-up report conflicts with the existing round version")
+        await asyncio.to_thread(read_manifest, settings, existing)
+        return existing
+    if current is not None and current.version >= round_number:
+        raise ValueError("A later report version is already current")
+    report = EvaluationReport(
+        run_id=run_id,
+        version=round_number,
+        is_current=True,
+        validity=body["validity"],
+        snapshot_sha256=snapshot.sha256,
+        summary=body["summary"],
+        object_key=f"reports/{run_id}/{report_digest}.json",
+        sha256=report_digest,
+        execution_origin=body["execution_origin"],
+    )
+    await asyncio.to_thread(write_manifest, settings, report.object_key, canonical_manifest(body))
+    await asyncio.to_thread(read_manifest, settings, report)
+    if current is not None:
+        current.is_current = False
+        await session.flush()
+    session.add(report)
+    await session.flush()
+    return report
 
 
 async def apply_recovered_state(session, settings, report):

@@ -16,6 +16,7 @@ from autoeval.evaluation.workflows import (
     ISOLATED_DATASET_QUEUE,
     AnalysisWorkflow,
     DockerDiagnosticWorkflow,
+    EvaluationFollowUpWorkflow,
     GpqaExplorationWorkflow,
     LangfuseImportWorkflow,
     MonitoredGpqaWorkflow,
@@ -58,6 +59,7 @@ def role_options(settings):
             "task_queue": settings.gpqa_workflow_queue,
             "workflows": [
                 PlannedEvaluationWorkflow,
+                EvaluationFollowUpWorkflow,
                 RunWorkflow,
                 AnalysisWorkflow,
                 MonitoredGpqaWorkflow,
@@ -84,7 +86,7 @@ def role_options(settings):
         },
         "isolated-execution": {
             "task_queue": ISOLATED_DATASET_QUEUE,
-            "workflows": [PlannedEvaluationWorkflow],
+            "workflows": [PlannedEvaluationWorkflow, EvaluationFollowUpWorkflow],
             "activities": [execute_planned_evaluation],
         },
         "planning-execution": {

@@ -206,3 +206,9 @@ in the SSH resource template. The build verifies adaptor provenance and
 that the CLI actually exposes its preflight command.
 Provision the node with its approved container runtime policy and preloaded
 trial images before running the Harbor preflight.
+
+## 续跑与单 Case 重试
+
+部署 API、dispatcher 和执行 worker 到同一版本，数据库迁移到 `0041` 对应的迁移头后，使用 `AE_EVALUATION_FOLLOW_UP_ENABLED=true` 开放确认。预览接口只读，确认请求需携带预览的来源轮次、选择摘要和 `Idempotency-Key`。任务与报告使用原任务 ID，历史报告继续按各自报告 ID 读取。
+
+`samples_unresolved` 表示无法核对历史请求是否已发出，`resource_changed` 表示执行节点当前配置与冻结模板不一致。两者都会阻止受理。回滚前关闭确认入口，核对已受理轮次、未释放租约和报告版本；保留证据及数据库，使用兼容版本继续处理已受理轮次。

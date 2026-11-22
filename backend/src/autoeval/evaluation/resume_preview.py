@@ -141,7 +141,9 @@ async def preview_scope(session, settings, run, operation, target):
                 operation == "case_retry" or decision.category != "reusable"
             ):
                 selected.add(identity[1])
-        if selected and task.get("execution_template"):
+        if task.get("execution_template") and (
+            selected or (target and target["dataset_key"] == task["dataset"])
+        ):
             try:
                 current = execution_template(settings, task["assigned_resource_id"], task)
             except (KeyError, ValueError, OSError):

@@ -60,6 +60,22 @@ def inputs():
     return task, original, native
 
 
+def test_follow_up_requires_all_frozen_attempts():
+    task, original, native = inputs()
+    task["attempts"] = 2
+    recovered, _ = tr.restore_native_scores(original, task, native)
+    partial = tr.scored_summary(canonical_manifest(recovered), task, require_attempt_group=True)
+    assert partial["validity"] == "partial"
+    assert partial["incomplete_attempt_groups"] == 1
+    assert partial["accuracy"] is None
+    recovered["cases"].append({**recovered["cases"][0], "attempt": 2, "score": 0})
+    recovered["case_count"] = 2
+    complete = tr.scored_summary(canonical_manifest(recovered), task, require_attempt_group=True)
+    assert complete["validity"] == "complete"
+    assert complete["accuracy"] == 50
+    assert complete["metric_conversion"] == "verified_harbor_trial_accuracy"
+
+
 def test_native_recovery_preserves_history_and_unknown_tokens():
     task, original, native = inputs()
     saved = copy.deepcopy(original)

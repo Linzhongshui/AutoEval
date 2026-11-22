@@ -92,7 +92,7 @@ async def execute_gpqa_exploration(run_id: str, resume: bool = False):
                 select(EvaluationRun).where(EvaluationRun.id == identifier).with_for_update()
             )
             existing_report = await session.scalar(
-                select(EvaluationReport).where(EvaluationReport.run_id == identifier)
+                select(EvaluationReport).where(EvaluationReport.run_id == identifier, EvaluationReport.is_current)
             )
             if row.state in {"completed", "failed", "cancelled"}:
                 if existing_report is not None:
@@ -379,7 +379,7 @@ async def execute_gpqa_exploration(run_id: str, resume: bool = False):
             )
             existing_report = await session.scalar(
                 select(EvaluationReport)
-                .where(EvaluationReport.run_id == identifier)
+                .where(EvaluationReport.run_id == identifier, EvaluationReport.is_current)
                 .with_for_update()
             )
             if existing_report is not None:

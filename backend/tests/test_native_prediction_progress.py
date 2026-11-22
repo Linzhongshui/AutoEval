@@ -65,6 +65,55 @@ def test_conflicting_case_identity_is_not_silently_replaced():
         )
 
 
+async def test_nonzero_slice_uses_original_ids_for_intent_and_results(tmp_path, monkeypatch):
+    from autoeval.planning.planning_observations import case_contract
+    from autoeval_runtime.planning_runtime import restore_accuracy_indices
+    from autoeval_runtime.sample_dispatch import install
+
+    task = {
+        "dataset": "GPQA",
+        "compilation": {"config": {"params": {"abbr": "model-run", "dataset_test_range": "[4:6]"}}},
+        "samples": [{"tool_case_id": str(i), "sample_id": f"sample:{i}"} for i in (4, 5)],
+    }
+    selection = case_contract(task)
+    fsynced = []
+    calls = []
+
+    class Inferencer:
+        async def do_request(self, data):
+            assert (tmp_path / "4").is_file()
+            assert len(fsynced) == 2
+            calls.append(data["index"])
+
+    # Directory fsync is only available on the Linux executor.
+    import os
+
+    original_open = os.open
+    monkeypatch.setattr(
+        "autoeval_runtime.sample_dispatch.os.open",
+        lambda path, flags, *rest: (
+            original_open(tmp_path / "4", flags)
+            if path == tmp_path
+            else original_open(path, flags, *rest)
+        ),
+    )
+    monkeypatch.setattr("autoeval_runtime.sample_dispatch.os.fsync", fsynced.append)
+    install(Inferencer, tmp_path, selection)
+    inferencer = Inferencer()
+    await inferencer.do_request({"index": 0, "data_abbr": selection["dataset_abbr"]})
+    with pytest.raises(ValueError):
+        await inferencer.do_request({"index": 3, "data_abbr": selection["dataset_abbr"]})
+    assert calls == [0]
+    assert not (tmp_path / "0").exists()
+
+    payload = json.dumps(row(0))
+    file = {"content": payload, "sha256": hashlib.sha256(payload.encode()).hexdigest()}
+    assert set(selected([file], selection)) == {"4"}
+    unified = {"cases": [{"case_id": "0"}]}
+    restore_accuracy_indices(unified, selection)
+    assert unified["cases"] == [{"case_id": "4", "native_case_id": "0"}]
+
+
 def test_runtime_publishes_observed_counts_and_archives_native_files_without_models(
     tmp_path, monkeypatch
 ):
@@ -112,7 +161,7 @@ def test_runtime_publishes_observed_counts_and_archives_native_files_without_mod
             "case_contract": contract(),
             "compilation": {
                 "adaptor_revision": runtime.ADAPTOR_REVISION,
-                "config": {"subcommand": "llm_accuracy", "params": {}},
+                "config": {"subcommand": "llm_accuracy", "params": {"ais_bench_root": str(tmp_path)}},
             },
         },
     )

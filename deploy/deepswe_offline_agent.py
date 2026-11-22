@@ -1,34 +1,13 @@
 """Harbor MiniSwe with a hash-locked, offline installer for the DeepSWE runner."""
 
 import hashlib
-import os
 from dataclasses import replace
 from pathlib import Path
-from urllib.parse import urlsplit
 
 from harbor.agents.installed.mini_swe_agent import MiniSweAgent
 
 WHEELHOUSE = Path("/acceptance/deepswe-lite-wheelhouse-20261120")
 TRIAL_WHEELHOUSE = "/tmp/autoeval-deepswe-wheelhouse"
-
-
-def agent_phase_model_hosts(model_cfg, agent_name, env):
-    """Use the deployment-approved origin only for MiniSwe's model-call phase."""
-    hosts = list(model_cfg.get("extra_allowed_hosts") or [])
-    if hosts or agent_name != "mini-swe-agent":
-        return hosts
-    origin = os.environ.get("AE_DEEPSWE_MODEL_ORIGIN")
-    if not origin:
-        return hosts
-    endpoint = urlsplit(env.get("OPENAI_BASE_URL") or "")
-    if (
-        endpoint.scheme == "https"
-        and endpoint.hostname
-        and endpoint.username is None
-        and f"https://{endpoint.netloc}" == origin
-    ):
-        return [endpoint.hostname]
-    return hosts
 
 
 class OfflineMiniSweAgent(MiniSweAgent):

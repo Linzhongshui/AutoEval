@@ -2114,3 +2114,25 @@ textarea { font: inherit; }
 .badcase-answer-diff pre { max-height: 320px; overflow: auto; margin: 6px 0 14px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: #fafaff; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
 .badcase-answer-diff .button { margin-top: 4px; }
 @media(max-width:900px) { .badcase-answer-diff { grid-template-columns: minmax(0, 1fr); } }
+
+.dataset-monitor-list { display: grid; }
+.dataset-monitor-list > details { border-bottom: 1px solid var(--border); }
+.dataset-monitor-list summary { display: grid; grid-template-columns: .75rem minmax(8rem, 1fr) minmax(6rem, .6fr) minmax(10rem, 1.4fr); align-items: center; gap: 12px; padding: 10px 8px; cursor: pointer; }
+.dataset-monitor-list summary::-webkit-details-marker { display: none; }
+.dataset-monitor-list summary::before { content: ""; width: 7px; height: 7px; border: solid var(--muted); border-width: 0 1.5px 1.5px 0; transform: rotate(-45deg); }
+.dataset-monitor-list details[open] > summary::before { transform: rotate(45deg); }
+.dataset-monitor-list summary:hover, .dataset-monitor-list details[open] > summary { background: var(--surface-soft, #f7f8fc); }
+.dataset-monitor-name { font-weight: 650; overflow-wrap: anywhere; }
+.dataset-monitor-state, .dataset-monitor-history small { font-size: 13px; color: var(--muted); }
+.dataset-monitor-list .run-progress { display: flex; align-items: center; flex-direction: row-reverse; gap: 12px; margin: 0; padding: 0; min-width: 0; }
+.dataset-monitor-list .run-progress-head { font-size: 13px; white-space: nowrap; }
+.dataset-monitor-list .run-progress-track { flex: 1; height: 6px; margin: 0; }
+.dataset-monitor-history { margin: 0 0 8px 20px; padding: 0 14px; list-style: none; border-left: 2px solid var(--border); }
+.dataset-monitor-history li { display: grid; grid-template-columns: 1fr minmax(10rem, 1fr); gap: 4px 12px; padding: 6px 0; }
+.dataset-monitor-history small { grid-column: 1 / -1; overflow-wrap: anywhere; }
+.dataset-monitor-list > small { margin-top: 8px; }
+@media (max-width: 650px) {
+  .dataset-monitor-list summary { grid-template-columns: .75rem 1fr auto; gap: 4px 10px; }
+  .dataset-monitor-list summary .run-progress { grid-column: 2 / -1; }
+  .dataset-monitor-history li { grid-template-columns: 1fr; }
+}

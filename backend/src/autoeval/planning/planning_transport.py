@@ -522,7 +522,35 @@ class IsolatedPlanningContainer(PlanningRemoteContainer):
         self.owner = str(__import__("uuid").UUID(str(owner)))
         self.template = template
         self.name = "autoeval-task-" + self.owner
-        super().__init__(connection, self.name, template["image_id"])
+        self.shared_workdir = (
+            f"/var/tmp/autoeval-harbor-job-{self.owner}"
+            if template.get("shared_trial_workdir") else None
+        )
+        super().__init__(connection, self.name, template["image_id"], self.shared_workdir)
+
+    def _shared_workdir_command(self, client, action):
+        # The SSH account also owns the private rootless daemon. Match its numeric
+        # identity so mode-0700 trial directories remain accessible to both runners.
+        script = """import os, pathlib, shutil, stat, sys
+path = pathlib.Path(sys.argv[1])
+if sys.argv[2] == 'ensure':
+    path.mkdir(mode=0o700, exist_ok=True)
+try:
+    info = path.lstat()
+except FileNotFoundError:
+    if sys.argv[2] == 'remove':
+        sys.exit(0)
+    raise
+if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
+    raise ValueError('Unsafe Harbor trial directory')
+if sys.argv[2] == 'remove':
+    shutil.rmtree(path)
+else:
+    print(f'{os.getuid()}:{os.getgid()}')
+"""
+        return self.control.command(
+            client, ["/usr/bin/python3", "-c", script, self.shared_workdir, action]
+        ).decode().strip()
 
     def _find(self, client):
         raw = self.control.command(
@@ -579,6 +607,13 @@ class IsolatedPlanningContainer(PlanningRemoteContainer):
                             or socket_path.parts[-2:] != (self.owner, "docker.sock")
                         ):
                             raise ValueError("Invalid Rootless Docker socket")
+                        if self.template.get("shared_trial_workdir"):
+                            identity = self._shared_workdir_command(client, "ensure")
+                            path = self.shared_workdir
+                            argv += [
+                                "--user", identity, "--env", "HOME=/tmp",
+                                "--mount", f"type=bind,src={path},dst={path}",
+                            ]
                         argv += [
                             "--mount", f"type=bind,src={socket},dst=/tmp/autoeval-docker.sock,readonly",
                             "--entrypoint", "/bin/sh", self.image_id, "-c", "exec sleep infinity",
@@ -708,6 +743,8 @@ finally:
                 return False
             if helper := self.template.get("rootless_docker_helper"):
                 self.control.command(client, [helper, "remove", self.owner])
+                if self.template.get("shared_trial_workdir"):
+                    self._shared_workdir_command(client, "remove")
             return True
 
     async def remove(self):
@@ -785,6 +822,8 @@ def execution_template(settings, resource_id, task):
         ):
             raise ValueError("Invalid Rootless Docker helper path")
         template["rootless_docker_helper"] = helper
+        if entry.get("shared_trial_workdir") is True:
+            template["shared_trial_workdir"] = True
     return template
 
 

@@ -659,3 +659,23 @@ async def test_preflight_progress_preserves_container_cleanup(monkeypatch, repor
         assert result["preflight_evidence"]["container_id"] == "a" * 64
     assert stages == ["preparing", "checking", "cleaning"]
     adapter.remove.assert_awaited_once()
+
+@pytest.mark.parametrize("shared", [False, True])
+def test_rootless_harbor_workdir_is_frozen_per_template(tmp_path, shared):
+    import json
+
+    resource = str(uuid4())
+    harbor = {
+        "revision": "fixed", "image_id": "sha256:" + "a" * 64, "private_docker": True,
+        "rootless_docker_helper": "/opt/harbor/helper",
+    }
+    if shared:
+        harbor["shared_trial_workdir"] = True
+    config = tmp_path / "templates.json"
+    config.write_text(json.dumps({resource: {"executors": {"harbor": harbor}}}))
+    task = {"compilation": {"config": {"subcommand": "harbor_agent"}}, "tool": {"revision": "fixed"}}
+    settings = SimpleNamespace(planning_container_config=str(config))
+    template = execution_template(settings, resource, task)
+    assert ("shared_trial_workdir" in template) == shared
+    if shared:
+        assert template["shared_trial_workdir"] is True

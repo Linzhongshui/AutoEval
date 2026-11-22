@@ -30,4 +30,4 @@ DeepSWE 使用隔离网络调用模型时，可在构建 runner 时传入 `--bui
 
 回滚前先停止受理新分片，等待使用新模板的在途分片完成归档和目录回收，再恢复资源配置和上一版服务镜像。
 
-对于 bs-module-cache-flags 的固定样本镜像，执行节点可将已核对发布方镜像 ID 的 Docker 归档只读挂载到 /opt/autoeval-cache/deepswe-85f743fa1c3b.tar。使用 deploy/harbor-offline-docker.sh 时，Harbor 检查镜像操作系统前会按需载入归档，并再次校验分片内的镜像 ID。
+对于 `abs-module-cache-flags` 的固定样本镜像，执行节点可将已核对发布方镜像 ID 的 Docker 归档只读挂载到 /opt/autoeval-cache/deepswe-85f743fa1c3b.tar。使用 deploy/harbor-offline-docker.sh 时，Harbor 检查镜像操作系统前会按需载入归档，并再次校验分片内的镜像 ID。

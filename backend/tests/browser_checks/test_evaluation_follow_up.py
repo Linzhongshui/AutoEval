@@ -94,8 +94,15 @@ def test_confirm_from_original_task(operation):
             page.get_by_role("dialog", name="重试此 Case").get_by_text(
                 "GPQA · q2", exact=False
             ).wait_for()
+            dialog = page.get_by_role("dialog", name="重试此 Case")
+            bounds = dialog.bounding_box()
+            viewport = page.viewport_size
+            assert abs(bounds["x"] + bounds["width"] / 2 - viewport["width"] / 2) < 2
+            assert abs(bounds["y"] + bounds["height"] / 2 - viewport["height"] / 2) < 2
             confirm = page.get_by_role("button", name="确认重试此 Case", exact=True)
             if blocked:
+                dialog.get_by_text("当前无法重试此 Case。", exact=True).wait_for()
+                assert "重新执行 0 个样本" not in dialog.inner_text()
                 assert confirm.is_disabled()
                 assert not requests
                 browser.close()

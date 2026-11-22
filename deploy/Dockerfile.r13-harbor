@@ -36,3 +36,10 @@ COPY deepswe_offline_agent.py /opt/autoeval-harbor-f59cb89/src/harbor/agents/ins
 RUN factory=/opt/autoeval-harbor-f59cb89/src/harbor/agents/factory.py \
     && grep -q 'harbor.agents.installed.mini_swe_agent:MiniSweAgent' "$factory" \
     && sed -i 's/harbor.agents.installed.mini_swe_agent:MiniSweAgent/harbor.agents.installed.deepswe_offline_agent:OfflineMiniSweAgent/g' "$factory"
+
+ARG DEEPSWE_MODEL_ORIGIN=""
+ENV AE_DEEPSWE_MODEL_ORIGIN=$DEEPSWE_MODEL_ORIGIN
+RUN task=/benchmark/ais_bench/benchmark/tasks/custom_tasks/harbor_agent_task.py \
+    && grep -Fq '"extra_allowed_hosts": list(model_cfg.get("extra_allowed_hosts") or []),' "$task" \
+    && sed -i '/^        model_names = model_cfg.get("model_names")/i\        from harbor.agents.installed.deepswe_offline_agent import agent_phase_model_hosts' "$task" \
+    && sed -i 's/list(model_cfg.get("extra_allowed_hosts") or \[\])/agent_phase_model_hosts(model_cfg, agent_name, env)/' "$task"

@@ -6,11 +6,11 @@ export type CaseTarget = Pick<components["schemas"]["CaseRetryConfirmation"], "d
 type Preview = components["schemas"]["FollowUpPreview"];
 
 const reasons: Record<string, string> = {
-  resource_changed: "执行资源配置已变更，请核对原任务快照",
+  resource_changed: "当前执行资源与原任务冻结的配置不一致。",
   source_active: "当前轮次还在执行",
   source_not_cancelled: "原任务尚未确认取消",
   cleanup_pending: "原作业资源尚未全部释放",
-  samples_unresolved: "部分样本的执行结果或证据仍待核对",
+  samples_unresolved: "无法确认原请求是否已派发，请核对原作业的请求记录和归档证据。",
   budget_expired: "原执行预算已到期",
   budget_exhausted: "原执行预算已用尽",
   budget_unavailable: "原执行预算不可用",
@@ -64,14 +64,15 @@ export function FollowUpConfirmation({
 
   const lost = preview?.samples.filter(sample => sample.category === "evidence_lost") ?? [];
   const title = target ? "重试此 Case" : "续跑测评";
-  return <dialog ref={dialog} aria-label={title} className="management-drawer" onCancel={event => {
+  return <dialog ref={dialog} aria-label={title} className="follow-up-dialog" onCancel={event => {
     event.preventDefault();
     if (!busy) onClose();
   }}>
     <h2>{title}</h2>
-    {target && <p>{target.dataset_key} · {target.sample_id}。新报告采用本轮结果，历史尝试仍可查看。</p>}
+    {target && <p>{target.dataset_key} · {target.sample_id}</p>}
     {preview && <>
-      <p>将重新执行 {preview.sample_count} 个样本，沿用原任务冻结配置。</p>
+      {preview.blockers.length ? <p role="status">当前无法{target ? "重试此 Case" : "续跑测评"}。</p> :
+        <p>将沿用原任务配置重新执行 {preview.sample_count} 个样本。{target && "新报告将采用本轮结果，历史尝试仍可查看。"}</p>}
       {!target && <p>可复用 {preview.samples.filter(sample => sample.category === "reusable").length} 个样本。</p>}
       {!!lost.length && <details><summary>{lost.length} 个样本的归档证据已丢失</summary>
         <ul>{lost.map(sample => <li key={JSON.stringify([sample.dataset_key, sample.sample_id])}>{sample.dataset_key} · {sample.sample_id}</li>)}</ul>
@@ -80,7 +81,7 @@ export function FollowUpConfirmation({
     </>}
     {!preview && !error && <p role="status">正在核对原任务…</p>}
     {error && <p role="alert">{error}</p>}
-    <button type="button" disabled={busy} onClick={onClose}>关闭</button>
-    <button type="button" disabled={busy || !preview || !!preview.blockers.length} onClick={() => void confirm()}>确认{title}</button>
+    <footer className="inline"><button type="button" autoFocus disabled={busy} onClick={onClose}>关闭</button>
+    <button type="button" className="primary" disabled={busy || !preview || !!preview.blockers.length} onClick={() => void confirm()}>确认{title}</button></footer>
   </dialog>;
 }

@@ -2,6 +2,14 @@
 
 官方任务源为 https://github.com/datacurve-ai/deep-swe，固定提交 `0b9fabbb63b9104d678fe965e1632f2dd9eaa2ea`。服务器已校验并解包任务至 `~/autoeval-platform/datasets/deepswe-v1.1-0b9fabbb/tasks`。
 
+从固定提交导出任务时使用 Git 对象中的原始文件。下面的命令在 DeepSWE 仓库目录中执行，生成可直接传到 Linux 节点的归档。
+
+```sh
+git -c core.autocrlf=false archive --format=tar --output=deepswe-tasks.tar 0b9fabbb63b9104d678fe965e1632f2dd9eaa2ea tasks
+```
+
+安装脚本在复制前校验 Lite 样本的验证脚本和测试补丁。Windows 工作区的 CRLF 转换会导致 Bash 解析失败，继而缺少原生评分文件。服务器使用该固定提交的独立目录作为只读挂载来源。
+
 在执行服务器运行：
 
 ```sh

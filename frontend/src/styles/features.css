@@ -1653,9 +1653,11 @@
 .unified-summary { margin: 0; font-size: 12px; line-height: 1.7; }
 .monitor-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .monitor-list > li { margin: 0; }
-.monitor-list > li > button { display: grid; grid-template-columns: 72px minmax(0, 1fr) 96px; align-items: center; gap: 12px; width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: white; text-align: left; }
+.monitor-list > li > button { display: grid; grid-template-columns: 84px 165px minmax(100px, 1fr) minmax(0, 3fr) 96px; align-items: center; gap: 12px; width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: white; text-align: left; }
 .monitor-list > li > button:hover { background: #f7f6ff; }
 .monitor-list > li > button.active { border-color: var(--primary); background: #f4f1ff; }
+.monitor-list .monitor-snapshot-dataset { overflow-wrap: anywhere; }
+.monitor-list .monitor-snapshot-summary { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
 .monitor-list .badge { justify-self: start; }
 .mono { font-family: Consolas, "SFMono-Regular", monospace; font-size: 12px; }
 .monitor-evidence h4 { margin: 12px 0 8px; font-size: 14px; }
@@ -1685,8 +1687,9 @@
 .case-evidence-actions button:disabled { opacity: .5; cursor: not-allowed; }
 .case-evidence-note { display: block; margin-top: 7px; color: var(--muted); font-size: 11px; }
 @media (max-width: 600px) {
-  .monitor-list > li > button { grid-template-columns: 64px minmax(0, 1fr); }
-  .monitor-list > li > button .mono { grid-column: 2; }
+  .monitor-list > li > button { grid-template-columns: 84px minmax(0, 1fr); }
+  .monitor-list > li > button .mono { display: none; }
+  .monitor-list .monitor-snapshot-dataset, .monitor-list .monitor-snapshot-summary { grid-column: 1 / -1; }
 }
 
 /* Tool-observed sample progress; unknown counts remain indeterminate. */

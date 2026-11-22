@@ -11,6 +11,7 @@ from temporalio.exceptions import WorkflowAlreadyStartedError
 
 from autoeval.evaluation.workflows import (
     DockerDiagnosticWorkflow,
+    EvaluationFollowUpWorkflow,
     GpqaExplorationWorkflow,
     LangfuseImportWorkflow,
     MonitoredGpqaWorkflow,
@@ -47,6 +48,7 @@ async def deliver_once(sessions, client, *, run_id=None) -> bool:
         try:
             workflow_kind = row.payload.get("workflow_kind")
             workflow_entry = {
+                "evaluation_follow_up": EvaluationFollowUpWorkflow.run,
                 "monitored_gpqa_v1": MonitoredGpqaWorkflow.run,
                 "langfuse_import": LangfuseImportWorkflow.run,
                 "planned_evaluation": PlannedEvaluationWorkflow.run,
@@ -59,6 +61,11 @@ async def deliver_once(sessions, client, *, run_id=None) -> bool:
                 request = row.payload["import_id"]
                 workflow_id = f"demo/trace/{request}/{row.payload.get('retry_no', 0)}"
                 default_queue = "demo.langfuse.v1"
+            elif workflow_kind == "evaluation_follow_up":
+                round_id = row.payload["round_id"]
+                request = {"run_id": str(row.run_id), "round_id": round_id}
+                workflow_id = f"demo/run/{row.run_id}/round/{round_id}"
+                default_queue = "demo.workflow.v1"
             elif row.kind == "ANALYZE_REPORT":
                 analysis_id = row.payload["analysis_id"]
                 request = {

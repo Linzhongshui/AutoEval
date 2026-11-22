@@ -26,6 +26,7 @@ router = APIRouter(prefix="/api/autoeval/v1/reports", tags=["reports"])
 
 
 class ReportView(BaseModel):
+    dataset_concurrency: int | None = None
     dataset_results: list[dict] | None = None
     id: str
     run_id: str
@@ -83,6 +84,7 @@ async def catalog(
                         EvaluationRun.trigger_scope.in_(
                             ["local-operator:evaluation", "local-operator:orchestration"]
                         ),
+                        EvaluationReport.is_current,
                         EvaluationReport.execution_origin == "real",
                         *(
                             [EvaluationReport.review_status == review_status]

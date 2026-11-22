@@ -3,11 +3,13 @@
 import ast
 import asyncio
 import base64
+import errno
 import hashlib
 import importlib.metadata
 import json
 import shlex
 import stat
+import uuid
 from pathlib import Path, PurePosixPath
 
 from autoeval.resources import ResourceBinding
@@ -34,7 +36,8 @@ def runtime_files():
             pieces.append(ast.get_source_segment(source, node))
     contract = "import hashlib\nimport json\n" + "\n\n".join(pieces)
     engine = (
-        Path(__file__).with_name("planning_engine.py")
+        Path(__file__)
+        .with_name("planning_engine.py")
         .read_text(encoding="utf-8")
         .replace("from autoeval.catalog.standard_inputs import", "from planning_contract import")
     )
@@ -46,15 +49,15 @@ def runtime_files():
         "planning_calculation.py": engine.encode(),
         "planning_contract.py": contract.encode(),
         "native_predictions.py": RUNTIME.with_name("native_predictions.py").read_bytes(),
+        "aisbench_native.py": RUNTIME.with_name("aisbench_native.py").read_bytes(),
+        "sample_dispatch.py": RUNTIME.with_name("sample_dispatch.py").read_bytes(),
     }
 
 
 async def read_container_progress(adapter, job):
-    import uuid
-
     key = str(uuid.UUID(job.submission_key))
     root = (
-        adapter.remote_dir + "/jobs"
+        await adapter.job_root(key)
         if isinstance(adapter, PlanningRemoteContainer)
         else "/work/autoeval-jobs"
     )
@@ -120,6 +123,17 @@ class PlanningRemoteContainer(DockerExecutor):
             raise ValueError("Planning runtime root must be an absolute directory")
         self.remote_dir = str(path / sha)
 
+    def container_environment(self, job_root):
+        return [
+            "env",
+            "AE_JOB_ROOT=" + job_root,
+            "sh",
+            "-c",
+            'export PYTHONPATH="$1${PYTHONPATH:+:$PYTHONPATH}"; shift; exec "$@"',
+            "autoeval-runtime",
+            self.remote_dir + "/deps",
+        ]
+
     def command(self, arguments, payload=None):
         with self.control.connect() as client:
             if arguments[0] == "exec":
@@ -128,9 +142,7 @@ class PlanningRemoteContainer(DockerExecutor):
                     arguments = [*arguments[:index], "python3", *arguments[index + 1 :]]
                 arguments = [
                     *arguments[:index],
-                    "env",
-                    "PYTHONPATH=" + self.remote_dir + "/deps",
-                    "AE_JOB_ROOT=" + self.remote_dir + "/jobs",
+                    *self.container_environment(self.remote_dir + "/jobs"),
                     *arguments[index:],
                 ]
             return self.control.command(client, ["docker", *arguments], payload)
@@ -162,6 +174,56 @@ class PlanningRemoteContainer(DockerExecutor):
         if actual != {k: hashlib.sha256(v).hexdigest() for k, v in self.files.items()}:
             raise ValueError("Runtime readback mismatch")
 
+    async def job_root(self, submission_key):
+        key = str(uuid.UUID(submission_key))
+        runtime_root = str(PurePosixPath(self.remote_dir).parent)
+        script = """import json, pathlib, re, sys
+root = pathlib.Path(sys.argv[1])
+found = []
+if root.is_dir():
+    for bucket in root.iterdir():
+        if not re.fullmatch(r'[a-f0-9]{64}', bucket.name) or bucket.is_symlink():
+            continue
+        jobs = bucket / 'jobs'
+        job = jobs / sys.argv[2]
+        if jobs.is_symlink() or job.is_symlink():
+            raise ValueError('Unsafe job path')
+        if job.is_dir():
+            found.append(str(jobs))
+print(json.dumps(found))
+"""
+        raw = await asyncio.to_thread(
+            self.command,
+            ["exec", self.container_id, "python3", "-c", script, runtime_root, key],
+        )
+        found = json.loads(raw)
+        if len(found) > 1:
+            raise ValueError("Job exists in multiple pinned runtime versions")
+        return found[0] if found else self.remote_dir + "/jobs"
+
+    async def _invoke(self, action, key, payload=None):
+        key = str(uuid.UUID(key))
+        await self.validate({"kind": "framework_smoke", "duration_seconds": 0})
+        if action in {"cancel", "cleanup"}:
+            await self.install_runtime()
+        root = await self.job_root(key)
+        raw = await asyncio.to_thread(
+            self.command,
+            [
+                "exec",
+                "-i",
+                self.container_id,
+                "env",
+                f"AE_JOB_ROOT={root}",
+                "python3",
+                self.remote_dir + "/job_runtime.py",
+                action,
+                key,
+            ],
+            json.dumps(payload).encode() if payload is not None else None,
+        )
+        return json.loads(raw)
+
     async def progress(self, job):
         return await read_container_progress(self, job)
 
@@ -170,6 +232,7 @@ class PlanningRemoteContainer(DockerExecutor):
         import uuid
 
         key = str(uuid.UUID(job.submission_key))
+        root = await self.job_root(key)
         script = """
 import json
 import pathlib
@@ -191,19 +254,16 @@ print(json.dumps({'content': raw.decode('utf-8', errors='replace'), 'truncated':
         return await self._read_staged_json(
             key,
             ["docker", "exec", self.container_id, "python3", "-c", script,
-             self.remote_dir + "/jobs/" + key + "/tool.log"],
+             root + "/" + key + "/tool.log"],
         )
 
     async def collect(self, job):
         """Stage large results in a host file before transfer instead of capped stdout."""
-        import uuid
-
         key = str(uuid.UUID(job.submission_key))
+        root = await self.job_root(key)
         return await self._read_staged_json(
             key,
-            ["docker", "exec", self.container_id, "env",
-             "PYTHONPATH=" + self.remote_dir + "/deps",
-             "AE_JOB_ROOT=" + self.remote_dir + "/jobs",
+            ["docker", "exec", self.container_id, *self.container_environment(root),
              "python3", self.remote_dir + "/job_runtime.py", "collect", key],
         )
 
@@ -395,15 +455,21 @@ class PlanningSSH(SSHExecutor):
                             f"AE_JOB_ROOT={self.root}/jobs",
                             "python3",
                             self.remote_runtime,
-                            "status",
+                            "collect_dispatch",
                             job.submission_key,
                         ],
                     )
                 )
-                if state["state"] == "succeeded":
+                if state["state"] in {"succeeded", "failed", "cancelled"}:
                     path = f"{self.root}/jobs/{job.submission_key}/result.json"
                     with client.open_sftp() as sftp:
-                        if not stat.S_ISREG(sftp.lstat(path).st_mode):
+                        try:
+                            entry = sftp.lstat(path)
+                        except OSError as exc:
+                            if exc.errno != errno.ENOENT or state["state"] == "succeeded":
+                                raise
+                            return state
+                        if not stat.S_ISREG(entry.st_mode):
                             raise ValueError("Result must be a regular file")
                         with sftp.open(path, "rb") as stream:
                             raw = stream.read(16 * 1024 * 1024 + 1)

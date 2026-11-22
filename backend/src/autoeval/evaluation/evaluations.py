@@ -55,7 +55,7 @@ async def list_runs(request: Request, offset: int = 0, limit: int = 50):
                 await session.execute(
                     select(EvaluationRun, RunSnapshot, EvaluationReport.id)
                     .join(RunSnapshot, RunSnapshot.run_id == EvaluationRun.id)
-                    .outerjoin(EvaluationReport, EvaluationReport.run_id == EvaluationRun.id)
+                    .outerjoin(EvaluationReport, (EvaluationReport.run_id == EvaluationRun.id) & EvaluationReport.is_current)
                     .where(
                         EvaluationRun.trigger_scope.in_(
                             ["local-operator:evaluation", "local-operator:orchestration"]

@@ -32,6 +32,7 @@ export type Profile = {
 };
 
 export type Run = {
+  follow_up_enabled?: boolean;
   report_id?: string | null;
   id: string;
   state: string;
@@ -49,6 +50,7 @@ export type RunSnapshot = {
   remote_model: string;
   resource_kind: string;
   sample_count: number;
+  dataset_concurrency?: number;
   parameters: Record<string, unknown>;
   manifest_id: string;
   manifest_sha256: string;

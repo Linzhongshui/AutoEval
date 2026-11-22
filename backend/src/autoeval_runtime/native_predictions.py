@@ -63,6 +63,9 @@ def selected(files, contract):
             raise ValueError("Native prediction checksum mismatch")
         for row in records(file["content"]):
             key = str(row.get("id"))
+            mapping = contract.get("slice_index_to_tool_id")
+            if mapping is not None:
+                key = mapping.get(key)
             if row.get("data_abbr") != contract["dataset_abbr"] or key not in allowed:
                 continue
             if type(row.get("success")) is not bool or (

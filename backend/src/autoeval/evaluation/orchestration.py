@@ -17,8 +17,17 @@ from temporalio import activity
 from autoeval.catalog.datasets import canonical_manifest, read_manifest, write_manifest
 from autoeval.catalog.standard_inputs import digest
 from autoeval.evaluation.isolated_cleanup import reclaim_child
-from autoeval.evaluation.models import DatasetExecution, DatasetExecutionEnvironment
+from autoeval.evaluation.models import (
+    CapacityLease,
+    DatasetExecution,
+    DatasetExecutionEnvironment,
+    ExecutionRound,
+    ExecutionShard,
+    ExecutionShardEnvironment,
+)
 from autoeval.evaluation.resource_allocation import acquire, demand_for, release, resource_for_task
+from autoeval.evaluation.resume_budget import follow_up_budget_blocker, follow_up_target_blocker
+from autoeval.evaluation.resume_evidence import ConfirmedEvidenceChanged, verify_confirmed_reuse
 from autoeval.infrastructure.config import get_settings
 from autoeval.infrastructure.contracts import JobRef
 from autoeval.infrastructure.db import create_database
@@ -61,11 +70,17 @@ async def keep_heartbeat(callback, awaitable, *, interval_seconds=30):
 TERMINAL = set(DATASET_TERMINAL)
 
 
-async def update_child(sessions, child_id, **values):
+async def update_child(sessions, owner, **values):
+    child_id = owner.id
+    env_model = (
+        ExecutionShardEnvironment
+        if isinstance(owner, ExecutionShard)
+        else DatasetExecutionEnvironment
+    )
     async with sessions() as session, session.begin():
-        child = await session.get(DatasetExecution, child_id, with_for_update=True)
+        child = await session.get(type(owner), child_id, with_for_update=True)
         if values.get("state") in TERMINAL:
-            environment = await session.get(DatasetExecutionEnvironment, child_id)
+            environment = await session.get(env_model, child_id)
             if environment is not None:
                 environment.state = "cleanup_pending"
         for key, value in values.items():
@@ -81,7 +96,15 @@ async def advance_run(session, run, state, details=None):
         )
 
 
-async def execute(sessions, settings, run_id, heartbeat=lambda: None):
+async def execute(sessions, settings, run_id, heartbeat=lambda: None, *, round_id=None):
+    job_query = (
+        select(ExecutionShard)
+        .where(ExecutionShard.round_id == round_id)
+        .order_by(ExecutionShard.position)
+        if round_id
+        else select(DatasetExecution).where(DatasetExecution.run_id == run_id)
+    )
+    env_model = ExecutionShardEnvironment if round_id else DatasetExecutionEnvironment
     async with sessions() as session:
         existing_run = await session.get(EvaluationRun, run_id)
         if existing_run and existing_run.state in RUN_TERMINAL:
@@ -90,27 +113,48 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
         if not snapshot or snapshot.sha256 != digest(snapshot.canonical_body):
             raise ValueError("Frozen snapshot integrity mismatch")
         frozen = snapshot.canonical_body
+        if round_id is not None and existing_run.cancel_requested_at is None:
+            current = await session.get_one(ExecutionRound, round_id)
+            started = await session.scalar(
+                job_query.where(ExecutionShard.started_at.is_not(None)).limit(1)
+            )
+            if current.operation == "resume" and started is None:
+                try:
+                    await keep_heartbeat(
+                        heartbeat, verify_confirmed_reuse(session, settings, current)
+                    )
+                except ConfirmedEvidenceChanged:
+                    await stop_before_dispatch(sessions, run_id, round_id)
+                    return
         from autoeval.billing.transport import budget_ignored
 
         ignore_budget = budget_ignored(frozen)
         inputs = frozen["inputs"]
         isolated = all(t.get("execution_template") for t in inputs["tasks"])
-        adapter = None if isolated else await transport(session, settings, inputs)
-        child_ids = dict((await session.execute(
-            select(DatasetExecution.task_id, DatasetExecution.id).where(DatasetExecution.run_id == run_id)
-        )).all())
+        adapter = None
+        initial_children = list(await session.scalars(job_query))
+        if round_id and not initial_children:
+            from autoeval.evaluation.resume_finish import finish_round
+
+            await finish_round(sessions, settings, run_id, round_id, frozen, [], False)
+            return
         adapters = {}
-        for item in inputs["tasks"]:
+        for child in initial_children:
+            item = child.payload
             if isolated:
-                owner = child_ids[item["task_id"]]
-                environment = await session.get(DatasetExecutionEnvironment, owner)
-                adapters[item["task_id"]] = await isolated_transport(
-                    session, settings, item["assigned_resource_id"],
-                    owner, item["execution_template"],
+                environment = await session.get(env_model, child.id)
+                adapters[child.id] = await isolated_transport(
+                    session,
+                    settings,
+                    item["assigned_resource_id"],
+                    child.id,
+                    item["execution_template"],
                     container_id=environment.container_id if environment else None,
                 )
                 continue
-            adapters[item["task_id"]] = (
+            if not item.get("assigned_resource_id") and adapter is None:
+                adapter = await transport(session, settings, inputs)
+            adapters[child.id] = (
                 await transport(
                     session,
                     settings,
@@ -147,18 +191,15 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                     )
                     await session.commit()
             cancelled = run.cancel_requested_at is not None
-            children = list(
-                await session.scalars(
-                    select(DatasetExecution).where(DatasetExecution.run_id == run_id)
-                )
-            )
-        by_id = {c.task_id: c for c in children}
-        children = [by_id[t["task_id"]] for t in inputs["tasks"]]
+            children = list(await session.scalars(job_query))
+        if not round_id:
+            by_id = {c.task_id: c for c in children}
+            children = [by_id[t["task_id"]] for t in inputs["tasks"]]
         for child in children:
-            adapter = adapters[child.task_id]
+            adapter = adapters[child.id]
             if child.state == "pending" and cancelled:
                 await update_child(
-                    sessions, child.id, state="cancelled", finished_at=datetime.now(UTC)
+                    sessions, child, state="cancelled", finished_at=datetime.now(UTC)
                 )
                 child.state = "cancelled"
                 child.finished_at = datetime.now(UTC)
@@ -166,10 +207,11 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                 continue
             if isolated:
                 async with sessions() as session:
-                    environment = await session.get(DatasetExecutionEnvironment, child.id)
+                    environment = await session.get(env_model, child.id)
                 if environment and environment.state == "creating":
                     await update_child(
-                        sessions, child.id,
+                        sessions,
+                        child,
                         state="cancelled" if cancelled else "pending",
                         **({"finished_at": datetime.now(UTC)} if cancelled else {}),
                     )
@@ -196,7 +238,9 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                 if not isolated:
                     raise
                 await update_child(
-                    sessions, child.id, state="unresolved",
+                    sessions,
+                    child,
+                    state="unresolved",
                     summary={"reason": "SSH execution state could not be verified"},
                 )
                 child.state = "unresolved"
@@ -204,7 +248,7 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
             if observation.state in {"unknown", "cleaned"}:
                 await update_child(
                     sessions,
-                    child.id,
+                    child,
                     state="unresolved",
                     summary={
                         "reason": "Remote state uncertain; lease retained, no automatic resubmission"
@@ -225,9 +269,7 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                                 from autoeval.planning.planning_observations import publish
 
                                 await publish(sessions, settings, run_id, child.id, progress)
-                                await update_child(
-                                    sessions, child.id, summary={"progress": progress}
-                                )
+                                await update_child(sessions, child, summary={"progress": progress})
                         except (OSError, ValueError, RuntimeError):
                             pass  # Observation failure never resubmits the model task.
                 continue
@@ -246,15 +288,25 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
             )
             try:
                 state, summary = await archive_terminal_child(
-                    sessions, settings, run_id, child, adapter, job, observation.state,
-                    secret, child_secret, heartbeat,
+                    sessions,
+                    settings,
+                    run_id,
+                    child,
+                    adapter,
+                    job,
+                    observation.state,
+                    secret,
+                    child_secret,
+                    heartbeat,
+                    reason=getattr(observation, "reason", None),
                 )
             except Exception as exc:  # Isolated jobs retain evidence for retry.
                 if not isolated:
                     raise
                 if not (child.summary or {}).get("archive_pending"):
                     await update_child(
-                        sessions, child.id,
+                        sessions,
+                        child,
                         summary={
                             **(child.summary or {}),
                             "archive_pending": True,
@@ -266,43 +318,57 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                 remote_reason = getattr(observation, "reason", None)
                 reason = (
                     remote_reason
-                    if remote_reason in {"controlled_job_failed", "native_unified_result_missing_or_ambiguous"}
+                    if remote_reason
+                    in {"controlled_job_failed", "native_unified_result_missing_or_ambiguous"}
                     else "native_execution_failed"
                 )
                 summary = {"validity": "failed", "reason": reason}
             await update_child(
-                sessions, child.id, state=state, summary=summary, finished_at=datetime.now(UTC)
+                sessions, child, state=state, summary=summary, finished_at=datetime.now(UTC)
             )
             child.state = state
             child.summary = summary
             child.finished_at = datetime.now(UTC)
-            # Release capacity only after the transport confirms cleanup. Harbor cancellation
-            # can leave daemon-owned trial containers; retain ownership instead of overbooking.
-            if isolated:
-                await reclaim_child(sessions, settings, child.id)
-                continue
-            cleanup = await adapter.cleanup(job)
-            if cleanup.get("cleaned"):
-                async with sessions() as session, session.begin():
-                    await release(session, child.id)
+        cleanup_pending = await clean_terminal_jobs(
+            sessions, settings, children, adapters, env_model, isolated
+        )
+        if all(c.state in TERMINAL for c in children) and (
+            not cleanup_pending
+            or not (round_id or getattr(settings, "evaluation_follow_up_enabled", False))
+        ):
+            if round_id:
+                from autoeval.evaluation.resume_finish import finish_round
+
+                await finish_round(
+                    sessions, settings, run_id, round_id, frozen, children, cancelled
+                )
             else:
-                child.summary = {**(child.summary or {}), "cleanup_pending": True}
-                await update_child(sessions, child.id, summary=child.summary)
-        if all(c.state in TERMINAL for c in children):
-            await finish(sessions, settings, run_id, frozen, children, cancelled)
+                await finish(sessions, settings, run_id, frozen, children, cancelled)
             return
         active = sum(c.state in DATASET_ACTIVE for c in children)
+        active_tasks = {c.task_id for c in children if c.state in DATASET_ACTIVE}
         for child in children:
-            adapter = adapters[child.task_id]
+            adapter = adapters[child.id]
             if cancelled or active >= inputs["dataset_concurrency"]:
                 break
-            if child.state != "pending":
+            if child.state != "pending" or child.task_id in active_tasks:
                 continue
             async with sessions() as session, session.begin():
                 current_run = await session.get(EvaluationRun, run_id, with_for_update=True)
                 if current_run.cancel_requested_at is not None:
                     cancelled = True
                     break
+                if round_id:
+                    blocker = await follow_up_target_blocker(session, settings, frozen)
+                    blocker = blocker or await follow_up_budget_blocker(
+                        session, settings, run_id, frozen
+                    )
+                    if blocker:
+                        stored = await session.get_one(type(child), child.id, with_for_update=True)
+                        stored.state = "failed"
+                        stored.finished_at = datetime.now(UTC)
+                        stored.summary = {"reason": blocker, "dispatch_reconciled": True}
+                        continue
                 if not await acquire(
                     session,
                     child.id,
@@ -312,22 +378,32 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                     if inputs["dataset_concurrency"] == 1:
                         break  # Preserve dataset order while the first pending child waits.
                     continue
-                stored = await session.get(DatasetExecution, child.id, with_for_update=True)
-                if isolated and await session.get(DatasetExecutionEnvironment, child.id) is None:
-                    session.add(DatasetExecutionEnvironment(
-                        dataset_execution_id=child.id,
-                        resource_id=uuid.UUID(child.payload["assigned_resource_id"]),
-                        template=child.payload["execution_template"],
-                        state="creating",
-                    ))
+                stored = await session.get(type(child), child.id, with_for_update=True)
+                if isolated and await session.get(env_model, child.id) is None:
+                    session.add(
+                        env_model(
+                            **(
+                                {"shard_id": child.id}
+                                if round_id
+                                else {"dataset_execution_id": child.id}
+                            ),
+                            resource_id=uuid.UUID(child.payload["assigned_resource_id"]),
+                            template=child.payload["execution_template"],
+                            state="creating",
+                        )
+                    )
                 stored.state = "submitting"
                 stored.started_at = datetime.now(UTC)
             # The durable submitting intent precedes network I/O. A lost reply is reconciled
             # by lookup, never by issuing a new model-generating submission.
             try:
-                from autoeval.planning.planning_observations import case_contract
+                from autoeval.planning.planning_observations import (
+                    case_contract,
+                    harbor_dispatch_contract,
+                )
 
                 contract = case_contract(child.payload)
+                harbor_contract = harbor_dispatch_contract(child.payload)
                 from autoeval.billing.transport import execution_route, route_compilation
 
                 route = execution_route(
@@ -347,9 +423,17 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                 compilation = execution_compilation(compilation)
                 execution_secret = route["api_key"] if route else secret
                 if isolated:
-                    if execution_template(settings, child.payload["assigned_resource_id"], child.payload) != child.payload["execution_template"]:
+                    if (
+                        execution_template(
+                            settings, child.payload["assigned_resource_id"], child.payload
+                        )
+                        != child.payload["execution_template"]
+                    ):
                         await update_child(
-                            sessions, child.id, state="failed", finished_at=datetime.now(UTC),
+                            sessions,
+                            child,
+                            state="failed",
+                            finished_at=datetime.now(UTC),
                             summary={"reason": "SSH execution template changed"},
                         )
                         continue
@@ -357,28 +441,31 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                         container_id = await adapter.ensure()
                     except HarborDaemonUnavailable as exc:
                         async with sessions() as session, session.begin():
-                            environment = await session.get(DatasetExecutionEnvironment, child.id)
+                            environment = await session.get(env_model, child.id)
                             environment.container_id = exc.container_id
                         await update_child(
-                            sessions, child.id, state="failed", finished_at=datetime.now(UTC),
+                            sessions,
+                            child,
+                            state="failed",
+                            finished_at=datetime.now(UTC),
                             summary={"reason": "Harbor private Docker daemon is unavailable"},
                         )
-                        await reclaim_child(sessions, settings, child.id)
+                        await reclaim_child(sessions, settings, child.id, model=env_model)
                         continue
                     async with sessions() as session, session.begin():
                         current_run = await session.get(EvaluationRun, run_id, with_for_update=True)
-                        environment = await session.get(DatasetExecutionEnvironment, child.id)
+                        environment = await session.get(env_model, child.id)
                         environment.container_id = container_id
                         cancelled = current_run.cancel_requested_at is not None
                         if cancelled:
-                            stored = await session.get(DatasetExecution, child.id, with_for_update=True)
+                            stored = await session.get(type(child), child.id, with_for_update=True)
                             stored.state = "cancelled"
                             stored.finished_at = datetime.now(UTC)
                             environment.state = "cleanup_pending"
                         else:
                             environment.state = "submitting"
                     if cancelled:
-                        await reclaim_child(sessions, settings, child.id)
+                        await reclaim_child(sessions, settings, child.id, model=env_model)
                         break
                 await adapter.submit(
                     {
@@ -386,26 +473,51 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None):
                         "compilation": compilation,
                         "tool": child.payload["tool"],
                         "credential": execution_secret,
+                        **(
+                            {"harbor_dispatch_contract": harbor_contract} if harbor_contract else {}
+                        ),
                         **({"case_contract": contract} if contract else {}),
                     },
                     str(child.id),
                 )
-                await update_child(sessions, child.id, state="running")
+                await update_child(sessions, child, state="running")
             except Exception:  # noqa: BLE001 -- isolate third-party errors without leaking credentials
-                await update_child(sessions, child.id, state="unresolved")
+                await update_child(sessions, child, state="unresolved")
+            active_tasks.add(child.task_id)
             active += 1
         async with sessions() as session, session.begin():
             run = await session.get(EvaluationRun, run_id, with_for_update=True)
+            if run.cancel_requested_at:
+                state = "cancelling"
+            elif active:
+                state = "running"
+            elif cleanup_pending:
+                state = "aggregating"
+            else:
+                state = "queued"
+            if round_id:
+                execution_round = await session.get_one(ExecutionRound, round_id)
+                execution_round.state = state
+                execution_round.cancel_requested_at = run.cancel_requested_at
             await advance_run(
-                session, run,
-                "cancelling" if run.cancel_requested_at is not None else "running" if active else "queued",
-
+                session, run, state, {"cleanup_pending": True} if cleanup_pending else None
             )
         await asyncio.sleep(2)
 
 
 async def archive_terminal_child(
-    sessions, settings, run_id, child, adapter, job, state, secret, child_secret, heartbeat,
+    sessions,
+    settings,
+    run_id,
+    child,
+    adapter,
+    job,
+    state,
+    secret,
+    child_secret,
+    heartbeat,
+    *,
+    reason=None,
 ):
     summary = None
     log_reader = getattr(adapter, "collect_log", None)
@@ -441,9 +553,7 @@ async def archive_terminal_child(
                 }
                 sha = digest(bundle)
                 key = f"execution-logs/{run_id}/{child.id}/{sha}.json"
-                await asyncio.to_thread(
-                    write_manifest, settings, key, canonical_manifest(bundle)
-                )
+                await asyncio.to_thread(write_manifest, settings, key, canonical_manifest(bundle))
                 await asyncio.to_thread(
                     read_manifest, settings, SimpleNamespace(object_key=key, sha256=sha)
                 )
@@ -456,14 +566,40 @@ async def archive_terminal_child(
                         manifest=bundle,
                     )
                 )
-    if state == "succeeded":
-        result = await adapter.collect(job)
+    round_id = getattr(child, "round_id", None)
+    result = await adapter.collect(job)
+    collected = result.get("result") or {}
+    if state == "succeeded" and collected.get("unified_result") is None:
+        raise ValueError("Successful job has no unified result")
+    if collected.get("native_files") or collected.get("harbor_native_trials"):
         from autoeval.planning.planning_observations import archive_native
 
-        await archive_native(
-            sessions, settings, run_id, child, result["result"], child_secret
+        await archive_native(sessions, settings, run_id, child, collected, child_secret)
+    if collected.get("unified_result") is None and collected.get("harbor_native_trials"):
+        from autoeval.reporting.result_identity import recover_cancelled_harbor_cases
+
+        collected["unified_result"] = recover_cancelled_harbor_cases(
+            child.payload, collected["harbor_native_trials"], result.get("sample_dispatch")
         )
-        unified = result["result"]["unified_result"]
+    unified = collected.get("unified_result")
+    if collected.get("native_files") and (
+        unified is None or unified.get("score_source") == "aisbench_native_prediction_scoring"
+    ):
+        from autoeval.planning.planning_observations import terminal_prediction_failures
+
+        failures = terminal_prediction_failures(child.payload, collected)
+        if failures and unified:
+            unified["cases"].extend(failures["cases"])
+            unified["case_count"] = len(unified["cases"])
+        elif failures:
+            collected["unified_result"] = failures
+    if collected.get("unified_result") is not None:
+        from autoeval.planning.planning_observations import publish
+
+        reader = getattr(adapter, "progress", None)
+        if reader:
+            await publish(sessions, settings, run_id, child.id, await reader(job))
+        unified = collected["unified_result"]
         async with sessions() as session, session.begin():
             await artifact(
                 session,
@@ -490,14 +626,11 @@ async def archive_terminal_child(
                     sessions,
                     settings,
                     run_id,
-                    child.task_id,
+                    f"round-shard:{child.id}" if round_id else child.task_id,
                     raw,
-                    {
-                        child.payload["dataset"]: [
-                            s["sample_id"] for s in child.payload["samples"]
-                        ]
-                    },
+                    {child.payload["dataset"]: [s["sample_id"] for s in child.payload["samples"]]},
                     child.payload["dataset"],
+                    append_attempts=round_id is not None,
                 ),
             )
         except InvalidUnifiedOutput:
@@ -507,16 +640,97 @@ async def archive_terminal_child(
             }
         if child.payload["dataset"] == "GPQA":
             summary = gpqa_report_summary(summary, unified, child.payload)
-        if result["result"].get("tool_exit_code", 0) != 0:
+        if collected.get("tool_exit_code", 0) != 0:
             summary = {
                 **summary,
                 "validity": "partial",
-                "tool_exit_code": result["result"]["tool_exit_code"],
-                "diagnostic": result["result"].get("diagnostic"),
+                "tool_exit_code": collected["tool_exit_code"],
+                "diagnostic": collected.get("diagnostic"),
             }
-        if summary["validity"] != "complete":
+        elif collected.get("diagnostic") and summary["validity"] != "complete":
+            summary = {**summary, "tool_exit_code": 0, "diagnostic": collected["diagnostic"]}
+        if state == "succeeded" and summary["validity"] != "complete":
             state = "failed"
+    if state == "cancelled" and reason == "cancelled_before_launch":
+        summary = {"reason": reason, "dispatch_reconciled": True}
+    if result.get("sample_dispatch") is not None:
+        from autoeval.planning.planning_observations import archive_dispatch
+
+        not_dispatched = await archive_dispatch(
+            sessions, settings, run_id, child, result["sample_dispatch"]
+        )
+        summary = {**(summary or {}), "confirmed_not_dispatched": not_dispatched}
     return state, summary
+
+
+async def stop_before_dispatch(sessions, run_id, round_id):
+    async with sessions() as session, session.begin():
+        run = await session.get_one(EvaluationRun, run_id, with_for_update=True)
+        current = await session.get_one(ExecutionRound, round_id, with_for_update=True)
+        shards = list(
+            await session.scalars(
+                select(ExecutionShard).where(ExecutionShard.round_id == round_id).with_for_update()
+            )
+        )
+        if any(shard.started_at is not None for shard in shards):
+            raise RuntimeError("Cannot invalidate a scope after dispatch")
+        now = datetime.now(UTC)
+        for shard in shards:
+            shard.state = "cancelled"
+            shard.finished_at = now
+            shard.summary = {"reason": "confirmed_evidence_changed"}
+        current.state = "cancelled"
+        current.cancelled_at = now
+        await advance_run(
+            session,
+            run,
+            "cancelled",
+            {"round": current.number, "reason": "confirmed_evidence_changed"},
+        )
+
+
+async def clean_terminal_jobs(sessions, settings, children, adapters, env_model, isolated):
+    terminal = {child.id: child for child in children if child.state in TERMINAL}
+    if not terminal:
+        return False
+    async with sessions() as session:
+        owners = list(
+            await session.scalars(
+                select(CapacityLease.owner_id).where(
+                    CapacityLease.owner_id.in_(terminal), CapacityLease.released.is_(False)
+                )
+            )
+        )
+    pending = False
+    for owner in owners:
+        child = terminal[owner]
+        if isolated:
+            await reclaim_child(sessions, settings, owner, model=env_model)
+            async with sessions() as session:
+                environment = await session.get(env_model, owner)
+                pending |= environment is None or environment.state != "cleaned"
+            continue
+        job = JobRef(external_job_id=str(owner), submission_key=str(owner))
+        cleanup = await adapters[child.id].cleanup(job)
+        if cleanup.get("cleaned") is not True:
+            pending = True
+            if not (child.summary or {}).get("cleanup_pending"):
+                child.summary = {
+                    **(child.summary or {}),
+                    "cleanup_pending": True,
+                    "cleanup_reason": "remote_cleanup_unconfirmed",
+                }
+                await update_child(sessions, child, summary=child.summary)
+            continue
+        summary = dict(child.summary or {})
+        summary.pop("cleanup_pending", None)
+        summary.pop("cleanup_reason", None)
+        async with sessions() as session, session.begin():
+            stored = await session.get_one(type(child), owner, with_for_update=True)
+            stored.summary = summary or None
+            await release(session, owner)
+        child.summary = summary or None
+    return pending
 
 
 def gpqa_report_summary(summary, unified, task):
@@ -631,7 +845,7 @@ def child_view(child):
 
 
 @activity.defn
-async def execute_planned_evaluation(run_id: str):
+async def execute_planned_evaluation(run_id: str, round_id: str | None = None):
     settings = get_settings()
     engine, sessions = create_database(settings)
     try:
@@ -644,8 +858,23 @@ async def execute_planned_evaluation(run_id: str):
             if not owned:
                 raise RuntimeError("Run is already controlled")
             try:
+                identifier = uuid.UUID(run_id)
+                round_identifier = uuid.UUID(round_id) if round_id else None
+                async with sessions() as session:
+                    current = await session.scalar(
+                        select(ExecutionRound.id)
+                        .where(ExecutionRound.run_id == identifier)
+                        .order_by(ExecutionRound.number.desc())
+                        .limit(1)
+                    )
+                if current != round_identifier:
+                    return
                 await execute(
-                    sessions, settings, uuid.UUID(run_id), lambda: activity.heartbeat(run_id)
+                    sessions,
+                    settings,
+                    identifier,
+                    lambda: activity.heartbeat(run_id),
+                    round_id=round_identifier,
                 )
             finally:
                 await connection.execute(

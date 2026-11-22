@@ -5,10 +5,13 @@ from typing import Literal
 
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, Header, HTTPException, Request
-from pydantic import BaseModel, Field, model_serializer, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 from sqlalchemy import String, cast, func, or_, select
 
-from autoeval.evaluation.models import EvaluationReport
+from autoeval.evaluation.models import EvaluationReport, ExecutionRound, ExecutionShard
+from autoeval.evaluation.orchestration import child_view
+from autoeval.evaluation.resume_preview import preview_scope
+from autoeval.evaluation.resume_submission import submit_follow_up
 from autoeval.evaluation.service import (
     evaluation_retry_cleanup,
     evaluation_run_detail,
@@ -17,7 +20,7 @@ from autoeval.evaluation.service import (
     planned_run_report,
 )
 from autoeval.evaluation.submission import submit_planned_run
-from autoeval.infrastructure.models import EvaluationRun, RunSnapshot
+from autoeval.infrastructure.models import EvaluationRun, RunEvent, RunSnapshot
 from autoeval.infrastructure.responses import (
     Accepted,
     Envelope,
@@ -77,10 +80,118 @@ class TaskListItem(BaseModel):
     remote_model: str | None
     resource_kind: str | None
     datasets: list[str]
+    follow_up_enabled: bool = False
 
 
 router = APIRouter(prefix="/api/autoeval/v1/evaluation-tasks", tags=["evaluation tasks"])
 SCOPES = ["local-operator:evaluation", "local-operator:orchestration"]
+
+
+class FollowUpConfirmation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    source_round: int = Field(ge=1)
+    scope_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
+class CaseRetryConfirmation(FollowUpConfirmation):
+    dataset_key: str = Field(min_length=1, max_length=128)
+    sample_id: str = Field(min_length=1, max_length=256)
+
+
+class FollowUpSample(BaseModel):
+    dataset_key: str
+    sample_id: str
+    sample_sha256: str
+    has_attempts: bool
+    category: str
+    reason: str
+    attempt_ids: tuple[str, ...]
+
+
+class FollowUpPreview(BaseModel):
+    source_round: int
+    operation: str
+    target: dict[str, str]
+    samples: list[FollowUpSample]
+    blockers: list[str]
+    sample_count: int
+    scope_sha256: str
+
+
+class FollowUpAccepted(BaseModel):
+    run_id: str
+    round: int
+    target: dict[str, str]
+
+
+async def follow_up_preview(run_id, request, operation, target):
+    async with request.app.state.sessions() as session:
+        run = await session.get(EvaluationRun, run_id)
+        scope = await preview_scope(session, request.app.state.settings, run, operation, target)
+    return envelope({**scope.selection, "scope_sha256": scope.scope_sha256}, request)
+
+
+@router.get("/{run_id}/resume-preview", response_model=Envelope[FollowUpPreview])
+async def resume_preview(run_id: uuid.UUID, request: Request):
+    return await follow_up_preview(run_id, request, "resume", {})
+
+
+@router.get("/{run_id}/case-retry-preview", response_model=Envelope[FollowUpPreview])
+async def case_retry_preview(
+    run_id: uuid.UUID,
+    request: Request,
+    dataset_key: str,
+    sample_id: str,
+):
+    target = {"dataset_key": dataset_key, "sample_id": sample_id}
+    return await follow_up_preview(run_id, request, "case_retry", target)
+
+
+async def confirm_follow_up(run_id, request, body, key, operation, target):
+    settings = request.app.state.settings
+    if not getattr(settings, "evaluation_follow_up_enabled", False):
+        raise HTTPException(503, "Follow-up execution is unavailable")
+
+    async def resolve_scope(session, run):
+        scope = await preview_scope(session, settings, run, operation, target)
+        if scope.selection["blockers"]:
+            raise HTTPException(409, detail={"blockers": scope.selection["blockers"]})
+        return scope
+
+    async with request.app.state.sessions() as session, session.begin():
+        round_row = await submit_follow_up(
+            session,
+            run_id,
+            operation=operation,
+            source_number=body.source_round,
+            scope_sha256=body.scope_sha256,
+            key=key,
+            target=target,
+            resolve_scope=resolve_scope,
+        )
+        result = {"run_id": str(run_id), "round": round_row.number, "target": target}
+    return envelope(result, request)
+
+
+@router.post("/{run_id}/resume", status_code=202, response_model=Envelope[FollowUpAccepted])
+async def resume_task(
+    run_id: uuid.UUID,
+    request: Request,
+    body: FollowUpConfirmation,
+    idempotency_key: str = Header(min_length=1, max_length=256),
+):
+    return await confirm_follow_up(run_id, request, body, idempotency_key, "resume", {})
+
+
+@router.post("/{run_id}/case-retry", status_code=202, response_model=Envelope[FollowUpAccepted])
+async def retry_case(
+    run_id: uuid.UUID,
+    request: Request,
+    body: CaseRetryConfirmation,
+    idempotency_key: str = Header(min_length=1, max_length=256),
+):
+    target = {"dataset_key": body.dataset_key, "sample_id": body.sample_id}
+    return await confirm_follow_up(run_id, request, body, idempotency_key, "case_retry", target)
 
 
 @router.post("", status_code=202, response_model=Envelope[SubmittedRun])
@@ -141,7 +252,10 @@ async def list_tasks(
         base = (
             select(EvaluationRun, RunSnapshot, EvaluationReport.id)
             .join(RunSnapshot, RunSnapshot.run_id == EvaluationRun.id)
-            .outerjoin(EvaluationReport, EvaluationReport.run_id == EvaluationRun.id)
+            .outerjoin(
+                EvaluationReport,
+                (EvaluationReport.run_id == EvaluationRun.id) & EvaluationReport.is_current,
+            )
             .where(*conditions)
         )
         counts = (
@@ -183,6 +297,13 @@ async def list_tasks(
                         "report_id": str(report_id) if report_id else None,
                         "remote_model": s.canonical_body.get("remote_model"),
                         "resource_kind": s.canonical_body.get("resource_kind"),
+                        "follow_up_enabled": (
+                            s.schema_version == "planned-run.v1"
+                            and bool(s.canonical_body.get("inputs", {}).get("tasks"))
+                            and getattr(
+                                request.app.state.settings, "evaluation_follow_up_enabled", False
+                            )
+                        ),
                         "datasets": [
                             t["dataset"]
                             for t in s.canonical_body.get("inputs", {}).get("tasks", [])
@@ -208,6 +329,9 @@ async def task_detail(run_id: uuid.UUID, request: Request):
         scope = row.trigger_scope
     data = await evaluation_run_detail(sessions, request.app.state.settings, run_id)
     if scope == "local-operator:orchestration":
+        data["follow_up_enabled"] = getattr(
+            request.app.state.settings, "evaluation_follow_up_enabled", False
+        )
         extra = await planned_run_detail(sessions, run_id)
         data.update(
             datasets=extra["datasets"], estimate=extra["estimate"], dataset_report=extra["report"]
@@ -215,6 +339,7 @@ async def task_detail(run_id: uuid.UUID, request: Request):
         async with sessions() as session:
             frozen = await session.scalar(select(RunSnapshot).where(RunSnapshot.run_id == run_id))
             tasks = frozen.canonical_body.get("inputs", {}).get("tasks", [])
+            await project_follow_up_detail(session, run_id, data, tasks)
             data["snapshot"]["dataset_configurations"] = [
                 {
                     **{
@@ -248,6 +373,146 @@ async def task_detail(run_id: uuid.UUID, request: Request):
     return envelope(data, request)
 
 
+async def project_follow_up_detail(session, run_id, data, tasks):
+    current = await session.scalar(
+        select(ExecutionRound)
+        .where(ExecutionRound.run_id == run_id)
+        .order_by(ExecutionRound.number.desc())
+        .limit(1)
+    )
+    if current is None:
+        return
+    data["current_round"] = current.number
+    report = await session.scalar(
+        select(EvaluationReport).where(
+            EvaluationReport.run_id == run_id,
+            EvaluationReport.is_current,
+            EvaluationReport.version == current.number,
+        )
+    )
+    summaries = {
+        dataset["dataset_key"]: dataset["summary"]
+        for dataset in (report.summary.get("dataset_results", []) if report else [])
+    }
+    shards = list(
+        await session.scalars(
+            select(ExecutionShard)
+            .where(ExecutionShard.round_id == current.id)
+            .order_by(ExecutionShard.position)
+        )
+    )
+    original = {dataset["task_id"]: dataset for dataset in data["datasets"]}
+    data["datasets"] = [original[task["task_id"]] for task in tasks if task["task_id"] in original]
+    for task in tasks:
+        name = task["dataset"]
+        dataset = original.get(task["task_id"])
+        if dataset is None:
+            continue
+        if name in summaries:
+            summary = summaries[name]
+            dataset["summary"] = summary
+            dataset["state"] = (
+                "succeeded"
+                if summary["validity"] == "complete"
+                else ("cancelled" if data["state"] == "cancelled" else "failed")
+            )
+            continue
+        children = [shard for shard in shards if shard.task_id == task["task_id"]]
+        if not children and current.operation != "resume":
+            continue
+        reused = sum(
+            sample["dataset_key"] == name and sample["category"] == "reusable"
+            for sample in current.selection["samples"]
+            if current.operation == "resume"
+        )
+        dataset["state"] = next(
+            (
+                state
+                for state in (
+                    "unresolved",
+                    "running",
+                    "submitting",
+                    "pending",
+                    "failed",
+                    "cancelled",
+                )
+                if any(shard.state == state for shard in children)
+            ),
+            "succeeded",
+        )
+        dataset["summary"] = {
+            "expected_cases": len(task["samples"]),
+            "observed_cases": reused
+            + sum((shard.summary or {}).get("observed_cases", 0) for shard in children),
+            "reused_cases": reused,
+        }
+    if report:
+        data["dataset_report"] = {"round": current.number, "report_id": str(report.id)}
+
+
+@router.get("/{run_id}/rounds", response_model=Envelope[dict])
+async def task_rounds(run_id: uuid.UUID, request: Request):
+    async with request.app.state.sessions() as session:
+        run = await session.get(EvaluationRun, run_id)
+        if not run or run.trigger_scope != "local-operator:orchestration":
+            raise HTTPException(404, "Evaluation task not found")
+        rounds = list(
+            await session.scalars(
+                select(ExecutionRound)
+                .where(ExecutionRound.run_id == run_id)
+                .order_by(ExecutionRound.number)
+            )
+        )
+        reports = {
+            report.version: str(report.id)
+            for report in await session.scalars(
+                select(EvaluationReport).where(EvaluationReport.run_id == run_id)
+            )
+        }
+        shards = {}
+        if rounds:
+            for shard in await session.scalars(
+                select(ExecutionShard)
+                .where(ExecutionShard.round_id.in_([r.id for r in rounds]))
+                .order_by(ExecutionShard.position)
+            ):
+                shards.setdefault(shard.round_id, []).append(child_view(shard))
+        first_state = run.state
+        first_cancel = run.cancel_requested_at
+        if rounds:
+            event = await session.scalar(
+                select(RunEvent)
+                .where(RunEvent.run_id == run_id, RunEvent.type == "follow_up_queued")
+                .order_by(RunEvent.seq)
+                .limit(1)
+            )
+            first_state = event.body.get("source_state") if event else None
+            first_cancel = event.body.get("source_cancel_requested_at") if event else None
+        data = [
+            {
+                "number": 1,
+                "operation": "initial",
+                "state": first_state,
+                "cancel_requested_at": first_cancel,
+                "report_id": reports.get(1),
+            }
+        ]
+        data.extend(
+            {
+                "number": row.number,
+                "operation": row.operation,
+                "state": row.state,
+                "target": row.selection.get("target"),
+                "cancel_requested_at": row.cancel_requested_at,
+                "cancelled_at": row.cancelled_at,
+                "report_id": reports.get(row.number),
+                "shards": shards.get(row.id, []),
+            }
+            for row in rounds
+        )
+    return envelope({"rounds": data}, request)
+
+
 @router.get("/{run_id}/report", response_model=Envelope[dict])
 async def task_report(run_id: uuid.UUID, request: Request):
     sessions = request.app.state.sessions
@@ -256,9 +521,25 @@ async def task_report(run_id: uuid.UUID, request: Request):
         if not row or row.trigger_scope not in SCOPES:
             raise HTTPException(404, "Evaluation task not found")
         formal = await session.scalar(
-            select(EvaluationReport).where(EvaluationReport.run_id == run_id)
+            select(EvaluationReport).where(
+                EvaluationReport.run_id == run_id, EvaluationReport.is_current
+            )
         )
         if formal:
+            if formal.version > 1:
+                from autoeval.reporting.report_integrity import verified_report_body
+
+                snapshot = await session.scalar(
+                    select(RunSnapshot).where(RunSnapshot.run_id == run_id)
+                )
+                status, body = await verified_report_body(
+                    request.app.state.settings, formal, row, snapshot
+                )
+                if status != "verified":
+                    raise HTTPException(
+                        503, "Report evidence unavailable or integrity check failed"
+                    )
+                return envelope(body, request)
             import asyncio
 
             from autoeval.catalog.datasets import read_manifest
@@ -295,6 +576,14 @@ async def cancel_task(run_id: uuid.UUID, request: Request):
         accepted = row.state not in {"completed", "failed", "cancelled"}
         if accepted and row.cancel_requested_at is None:
             row.cancel_requested_at = datetime.now(UTC)
+            current_round = await session.scalar(
+                select(ExecutionRound)
+                .where(ExecutionRound.run_id == run_id)
+                .order_by(ExecutionRound.number.desc())
+                .limit(1)
+            )
+            if current_round is not None:
+                current_round.cancel_requested_at = row.cancel_requested_at
         return envelope({"accepted": accepted}, request)
 
 

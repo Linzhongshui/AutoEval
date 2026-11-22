@@ -35,6 +35,7 @@ def report_data(
     return {
         "id": str(row.id),
         "run_id": str(row.run_id),
+        "dataset_concurrency": (snapshot.canonical_body.get("inputs") or {}).get("dataset_concurrency", 1),
         "execution_kind": "planned"
         if snapshot.canonical_body.get("schema_version") == "planned-run.v1"
         else "evaluation",

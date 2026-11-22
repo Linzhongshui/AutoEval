@@ -308,6 +308,45 @@ def native_score_mmmu(request):
     }
 
 
+def score_archived_predictions(files, contract, rows):
+    """Score only terminal predictions with native references for this frozen slice."""
+    dataset = contract["dataset"]
+    if dataset not in {"GPQA", "MMMU-Pro"}:
+        return []
+    scorer = native_score if dataset == "GPQA" else native_score_mmmu
+    cases = []
+    for tool_id, (record, file) in rows(files, contract).items():
+        if (
+            record.get("success") is not True
+            or not isinstance(record.get("uuid"), str)
+            or not record["uuid"]
+            or not isinstance(record.get("gold"), str)
+        ):
+            continue
+        try:
+            scored = scorer(
+                {
+                    "predictions": [record["prediction"]],
+                    "references": [record["gold"]],
+                }
+            )
+            (detail,) = scored["native_result"]["details"]
+            if type(detail["correct"]) is not bool:
+                continue
+        except (IndexError, KeyError, TypeError, ValueError):
+            continue
+        cases.append(
+            {
+                "case_id": tool_id,
+                "attempt": 1,
+                "status": "success",
+                "score": int(detail["correct"]),
+                "native_prediction_sha256": file["sha256"],
+            }
+        )
+    return cases
+
+
 def native_prompt(request):
     from ais_bench.benchmark.configs.datasets.gpqa.gpqa_gen_0_shot_str import gpqa_infer_cfg
     from ais_bench.benchmark.openicl.icl_prompt_template import PromptTemplate

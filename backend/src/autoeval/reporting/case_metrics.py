@@ -28,7 +28,7 @@ def metric_view(original, recovered=None):
 async def current_metrics(session, settings, run_id, rows):
     """Select only archives explicitly referenced by the task's formal report."""
     result = {r.id: (metric_view(r.tool_metadata), None) for r in rows}
-    report = await session.scalar(select(EvaluationReport).where(EvaluationReport.run_id == run_id))
+    report = await session.scalar(select(EvaluationReport).where(EvaluationReport.run_id == run_id, EvaluationReport.is_current))
     if report is None:
         return result
     body = await asyncio.to_thread(read_manifest, settings, report)

@@ -298,7 +298,7 @@ async def execute_unified_fixture(run_id: str):
                 run.state = "cancelled"
                 return {"state": "cancelled"}
             old = await session.scalar(
-                select(EvaluationReport).where(EvaluationReport.run_id == identifier)
+                select(EvaluationReport).where(EvaluationReport.run_id == identifier, EvaluationReport.is_current)
             )
             if not old:
                 old = EvaluationReport(

@@ -69,7 +69,7 @@ async def planned_run_detail(sessions, run_id):
             )
         )
         report_id = await session.scalar(
-            select(EvaluationReport.id).where(EvaluationReport.run_id == run_id)
+            select(EvaluationReport.id).where(EvaluationReport.run_id == run_id, EvaluationReport.is_current)
         )
         environments = {
             row.dataset_execution_id: row
@@ -161,7 +161,7 @@ async def evaluation_run_detail(sessions, settings, run_id):
                 )
             ).all()
             report = await session.scalar(
-                select(EvaluationReport).where(EvaluationReport.run_id == run_id)
+                select(EvaluationReport).where(EvaluationReport.run_id == run_id, EvaluationReport.is_current)
             )
             cleanup = await session.scalar(
                 select(ExecutionCleanup).where(ExecutionCleanup.run_id == run_id)
@@ -202,6 +202,9 @@ async def evaluation_run_detail(sessions, settings, run_id):
                             "execution_origin",
                         )
                     },
+                    "dataset_concurrency": (snapshot.canonical_body.get("inputs") or {}).get(
+                        "dataset_concurrency", 1
+                    ),
                     # Planned runs freeze per-dataset samples instead of a top-level list.
                     "sample_count": len(snapshot.canonical_body.get("samples", []))
                     if snapshot.canonical_body.get("samples") is not None
@@ -253,7 +256,7 @@ async def evaluation_run_report(sessions, settings, run_id):
     try:
         async with sessions() as session:
             report = await session.scalar(
-                select(EvaluationReport).where(EvaluationReport.run_id == run_id)
+                select(EvaluationReport).where(EvaluationReport.run_id == run_id, EvaluationReport.is_current)
             )
             if report is None:
                 raise HTTPException(404, "Report not available")

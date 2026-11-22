@@ -4,6 +4,7 @@ import hashlib
 import importlib.metadata
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -261,7 +262,15 @@ def validate_spec(spec):
         ):
             raise ValueError("Invalid probe budget")
     else:
-        if set(spec) - {"kind", "compilation", "tool", "credential", "case_contract"} or not {
+        if set(spec) - {
+            "kind",
+            "compilation",
+            "tool",
+            "credential",
+            "case_contract",
+            "harbor_dispatch_contract",
+            "skip_aisbench_warmup",
+        } or not {
             "kind",
             "compilation",
             "tool",
@@ -270,6 +279,25 @@ def validate_spec(spec):
             raise ValueError("Unknown adaptor fields")
         if spec["compilation"]["adaptor_revision"] != ADAPTOR_REVISION:
             raise ValueError("Unpinned adaptor")
+        if "skip_aisbench_warmup" in spec and (
+            spec["skip_aisbench_warmup"] is not True
+            or spec["compilation"]["config"]["subcommand"] != "llm_accuracy"
+        ):
+            raise ValueError("Warmup control requires AISBench accuracy")
+
+
+def aisbench_without_warmup(folder, executable):
+    wrapper = folder / "aisbench-python-no-warmup"
+    wrapper.write_text(
+        "#!/bin/sh\n"
+        'if [ "$1" = "-m" ] && [ "$2" = "ais_bench.benchmark.cli.main" ]; then\n'
+        '  set -- "$@" --num-warmups 0\n'
+        "fi\n"
+        f'exec {shlex.quote(executable)} "$@"\n',
+        encoding="utf-8",
+    )
+    wrapper.chmod(0o700)
+    return str(wrapper)
 
 
 def verify_tool(spec):
@@ -328,7 +356,70 @@ def controlled_failure_reason(spec, exc):
     return "remote_probe_failed"
 
 
-def attach_harbor_evidence(output, result, budget, credential=None):
+def read_unified_result(output, credential):
+    candidates = list(output.rglob("unified_result.json"))
+    if len(candidates) != 1 or candidates[0].is_symlink() or not candidates[0].is_file():
+        raise ValueError("Exactly one regular unified_result.json required")
+    with candidates[0].open("rb") as stream:
+        raw = stream.read(16 * 1024 * 1024 + 1)
+    if len(raw) > 16 * 1024 * 1024:
+        raise ValueError("Unified result too large")
+    result = json.loads(raw)
+    if not isinstance(result, dict):
+        raise TypeError("Unified result must be an object")
+    if credential and credential in json.dumps(result, ensure_ascii=False):
+        raise ValueError("Credential present in result")
+    return result, len(raw)
+
+
+def restore_accuracy_indices(result, contract):
+    mapping = (contract or {}).get("slice_index_to_tool_id")
+    if mapping is None:
+        return
+    for case in result.get("cases", []):
+        index = str(case.get("case_id"))
+        if index not in mapping:
+            raise ValueError("Unified output exceeds frozen accuracy slice")
+        case["native_case_id"] = index
+        case["case_id"] = mapping[index]
+
+
+def collect_terminal_harbor_trials(output, credential):
+    """Preserve terminal native scoring files without guessing unified sample scores."""
+    candidates = []
+    root = output.resolve()
+    for path in sorted(output.rglob("result.json")):
+        if (
+            path.is_symlink()
+            or not path.is_file()
+            or not path.resolve().is_relative_to(root)
+            or path.stat().st_size > 8 * 1024 * 1024
+        ):
+            continue
+        try:
+            with path.open("rb") as stream:
+                raw = stream.read(8 * 1024 * 1024 + 1)
+            if len(raw) > 8 * 1024 * 1024 or credential.encode() in raw:
+                continue
+            result = json.loads(raw)
+        except (OSError, ValueError):
+            continue
+        if (
+            isinstance(result, dict)
+            and result.get("trial_name") == path.parent.name
+            and isinstance(result.get("task_name"), str)
+            and result.get("finished_at")
+        ):
+            candidates.append({"trial_dir": path.parent.name})
+    if not candidates:
+        return []
+    attach_harbor_evidence(
+        output, {"cases": candidates}, 8 * 1024 * 1024, credential, include_trajectories=False
+    )
+    return [case["harbor_artifact"] for case in candidates]
+
+
+def attach_harbor_evidence(output, result, budget, credential=None, *, include_trajectories=True):
     """Keep scoring for every case before spending the remainder on trajectories."""
     root = output.resolve()
     directories = {}
@@ -372,7 +463,7 @@ def attach_harbor_evidence(output, result, budget, credential=None):
             raise ValueError("Scoring evidence exceeds collection budget; preserve remote output")
         budget -= size
         case["harbor_artifact"] = artifact
-        if len(paths) == 1:
+        if len(paths) == 1 and include_trajectories:
             trails.append((case, paths[0] / "agent/trajectory.json"))
     for case, path in trails:
         value = content(path)
@@ -390,6 +481,50 @@ def attach_harbor_evidence(output, result, budget, credential=None):
                 "relative_path": str(path.relative_to(output)),
                 "sha256": hashlib.sha256(value.encode()).hexdigest(),
             }
+
+
+def scope_harbor_compose(folder, environment):
+    """Prefix pinned Harbor's Compose project names and journal them before Docker I/O."""
+    import uuid
+
+    docker = shutil.which("docker", path=environment.get("PATH"))
+    if not docker:
+        return
+    try:
+        daemon = subprocess.check_output(
+            [docker, "info", "--format", "{{.ID}}"],
+            env=environment,
+            text=True,
+            stderr=subprocess.DEVNULL,
+            timeout=10,
+        ).strip()
+    except (OSError, subprocess.SubprocessError):
+        return
+    if not daemon:
+        return
+    owner = uuid.UUID(folder.name).hex
+    journal = folder / "compose-projects"
+    journal.mkdir(mode=0o700, exist_ok=True)
+    wrapper_dir = folder / "compose-bin"
+    wrapper_dir.mkdir(mode=0o700, exist_ok=True)
+    wrapper = wrapper_dir / "docker"
+    wrapper.write_text(
+        f"#!{sys.executable}\n"
+        "import hashlib, os, sys\n"
+        "from pathlib import Path\n"
+        "args = sys.argv[1:]\n"
+        "if args[:1] == ['compose'] and '--project-name' in args:\n"
+        "    index = args.index('--project-name') + 1\n"
+        "    digest = hashlib.sha256(args[index].encode()).hexdigest()[:16]\n"
+        f"    project = 'ae-{owner}-' + digest\n"
+        f"    (Path({str(journal)!r}) / project).touch(mode=0o600, exist_ok=True)\n"
+        "    args[index] = project\n"
+        f"os.execv({docker!r}, [{docker!r}, *args])\n",
+        encoding="utf-8",
+    )
+    wrapper.chmod(0o700)
+    (journal / "daemon.json").write_text(json.dumps({"id": daemon}), encoding="utf-8")
+    environment["PATH"] = str(wrapper_dir) + os.pathsep + environment.get("PATH", "")
 
 
 def execute(folder, spec):
@@ -478,6 +613,9 @@ def execute(folder, spec):
         verify_tool(spec)
         config = json.loads(json.dumps(spec["compilation"]["config"]))
         config["params"]["api_key"] = key
+        if spec.get("skip_aisbench_warmup"):
+            executable = config["params"].get("python_executable") or sys.executable
+            config["params"]["python_executable"] = aisbench_without_warmup(folder, executable)
         output = folder / "output"
         output.mkdir(exist_ok=True)
         config["params"]["work_dir"] = str(output)
@@ -506,6 +644,29 @@ def execute(folder, spec):
             "Config.dump = _safe_dump\n"
         )
         environment = dict(os.environ)
+        contract = spec.get("case_contract")
+        tool_root = config["params"]["ais_bench_root"]
+        if config.get("subcommand") == "llm_accuracy" and contract:
+            with (compatibility / "sitecustomize.py").open("a", encoding="utf-8") as stream:
+                stream.write(
+                    "from sample_dispatch import install, is_task_process\n"
+                    f"if is_task_process({tool_root!r}, 'llm_accuracy'):\n"
+                    "    from ais_bench.benchmark.openicl.icl_inferencer.icl_gen_inferencer "
+                    "import GenInferencer\n"
+                    f"    install(GenInferencer, {str(folder / 'sample-dispatch')!r}, {contract!r})\n"
+                )
+        if config.get("subcommand") == "harbor_agent":
+            harbor_contract = spec.get("harbor_dispatch_contract")
+            if harbor_contract:
+                with (compatibility / "sitecustomize.py").open("a", encoding="utf-8") as stream:
+                    stream.write(
+                        "from sample_dispatch import install_harbor, is_task_process\n"
+                        f"if is_task_process({tool_root!r}, 'harbor_agent'):\n"
+                        "    from harbor.trial.trial import Trial\n"
+                        f"    install_harbor(Trial, {str(folder / 'sample-dispatch')!r}, "
+                        f"{harbor_contract['aliases']!r})\n"
+                    )
+            scope_harbor_compose(folder, environment)
         from urllib.parse import urlsplit
 
         endpoint = config["params"].get("url") or config["params"].get("api_base") or ""
@@ -522,7 +683,9 @@ def execute(folder, spec):
                 agent_env["NO_PROXY"] = agent_env["no_proxy"] = bypass
                 config_path.write_text(json.dumps(config))
         environment["PYTHONPATH"] = (
-            str(compatibility) + os.pathsep + environment.get("PYTHONPATH", "")
+            os.pathsep.join(
+                [str(compatibility), str(Path(__file__).parent), environment.get("PYTHONPATH", "")]
+            )
         )
         progress = {
             "job_id": folder.name,
@@ -534,7 +697,6 @@ def execute(folder, spec):
 
         from native_predictions import collect, selected
 
-        contract = spec.get("case_contract")
         start = datetime.now(UTC).timestamp()
         with (folder / "tool.log").open("wb") as log:
             proc = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, env=environment)
@@ -568,23 +730,26 @@ def execute(folder, spec):
         diagnostic = (folder / "tool.log").read_bytes()[-12000:].decode("utf-8", errors="replace")
         if key:
             diagnostic = diagnostic.replace(key, "[REDACTED]")
-        candidates = list(output.rglob("unified_result.json"))
-        if len(candidates) != 1:
-            raise ValueError("Exactly one unified_result.json required")
-        raw = candidates[0].read_bytes()
-        if len(raw) > 16 * 1024 * 1024:
-            raise ValueError("Unified result too large")
-        result = json.loads(raw)
-        if key and key in json.dumps(result):
-            raise ValueError("Credential present in result")
+        result, size = read_unified_result(output, key)
+        restore_accuracy_indices(result, contract)
         if config.get("subcommand") == "harbor_agent":
-            attach_harbor_evidence(output, result, max(0, 12 * 1024 * 1024 - len(raw)), key)
+            attach_harbor_evidence(output, result, max(0, 12 * 1024 * 1024 - size), key)
+        native_files = collect(output, contract) if contract else []
+        if completed.returncode:
+            result_diagnostic = diagnostic
+        elif contract and contract["case_ids"] and not result.get("cases") and not native_files:
+            result_diagnostic = (
+                "AISBench exited successfully but produced no unified cases "
+                "or native prediction files for the frozen selection."
+            )
+        else:
+            result_diagnostic = None
         return {
             "unified_result": result,
-            "native_files": collect(output, contract) if contract else [],
+            "native_files": native_files,
             "case_contract": contract,
             "tool_exit_code": completed.returncode,
-            "diagnostic": diagnostic if completed.returncode else None,
+            "diagnostic": result_diagnostic,
         }
     finally:
         secret_path.unlink(missing_ok=True)

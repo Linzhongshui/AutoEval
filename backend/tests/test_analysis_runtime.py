@@ -115,7 +115,9 @@ async def test_log_reader_uses_exact_owned_job_and_rejects_path_input():
     )
     client = SimpleNamespace(open_sftp=lambda: nullcontext(sftp))
 
-    def command(client, args):
+    def command(client, args, payload=None):
+        if args[:2] == ["docker", "exec"]:
+            return "[]"
         assert args[:2] == ["sh", "-c"]
         calls.append(shlex.split(args[2].split("; ", 2)[2]))
 

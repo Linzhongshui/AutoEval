@@ -428,7 +428,7 @@ async def execute_monitored_gpqa(run_id: str):
                 select(MonitorBinding).where(MonitorBinding.run_id == identifier)
             )
             existing_report = await session.scalar(
-                select(EvaluationReport).where(EvaluationReport.run_id == identifier)
+                select(EvaluationReport).where(EvaluationReport.run_id == identifier, EvaluationReport.is_current)
             )
             existing_cleanup = await session.scalar(
                 select(ExecutionCleanup).where(ExecutionCleanup.run_id == identifier)
@@ -619,7 +619,7 @@ async def execute_monitored_gpqa(run_id: str):
         artifact_sha = await archive_native_artifacts(sessions, settings, identifier, gateway)
         async with sessions() as session, session.begin():
             report = await session.scalar(
-                select(EvaluationReport).where(EvaluationReport.run_id == identifier)
+                select(EvaluationReport).where(EvaluationReport.run_id == identifier, EvaluationReport.is_current)
             )
             if report:
                 if (

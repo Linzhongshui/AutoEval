@@ -69,7 +69,7 @@ export function CaseHistory({ initialRun = "", datasets = [], selectedDataset, s
     if (!showPending) return;
     const controller = new AbortController();
     apiGet<components["schemas"]["FollowUpPreview"]>(`/evaluation-tasks/${encodeURIComponent(initialRun)}/resume-preview`, controller.signal)
-      .then(preview => setPending(preview.samples.filter(row => !row.has_attempts && row.category === "remaining")))
+      .then(preview => setPending(preview.samples.filter(row => !row.has_attempts)))
       .catch(() => { if (!controller.signal.aborted) setPendingError(true); });
     return () => controller.abort();
   }, [initialRun, showPending]);
@@ -181,7 +181,7 @@ export function CaseHistory({ initialRun = "", datasets = [], selectedDataset, s
         {!initialRun && <button type="button" disabled={!run.trim()} onClick={() => setQuery({ run: run.trim(), sample: sample.trim(), state: stateFilter, offset: 0, size: pageSize })}>查询case历史</button>}
         {initialRun && <button type="button" onClick={() => setQuery({ run: initialRun, sample: sample.trim(), state: stateFilter, offset: 0, size: pageSize })}>筛选</button>}
       </div>
-      <p className="case-history-message muted" role="status">{pendingPage.length ? `已加载 ${rows.length} 条执行记录 · ${pendingPage.length} 个待执行样本` : message}<span>执行状态与评分分别记录，缺少评分不补零。</span></p>
+      <p className="case-history-message muted" role="status">{pendingPage.length ? `已加载 ${rows.length} 条执行记录 · ${pendingPage.length} 个无执行记录的样本` : message}<span>执行状态与评分分别记录，缺少评分不补零。</span></p>
       {(rows.length > 0 || pendingPage.length > 0) && (
         <TableWrap data-testid="case-attempts">
           <table className="case-attempt-table">
@@ -214,14 +214,14 @@ export function CaseHistory({ initialRun = "", datasets = [], selectedDataset, s
             {pendingPage.map(row => <tr key={JSON.stringify([row.dataset_key, row.sample_id])}>
               <td><b>{row.dataset_key}</b><small>{row.sample_id}</small></td>
               <td>—</td>
-              <td><span className="case-status pending">待执行</span></td>
+              <td><span className="case-status pending">{row.category === "remaining" ? "待执行" : "待核对"}</span></td>
               <td>—</td><td>—</td><td>—</td><td>—</td><td>—</td>
               {onRetry && <td><button type="button" onClick={() => onRetry(row.dataset_key, row.sample_id)}>重试此 Case</button></td>}
             </tr>)}</tbody>
           </table>
         </TableWrap>
       )}
-      {pendingError && <p role="status">待执行样本读取失败。</p>}
+      {pendingError && <p role="status">未能读取清单中缺少执行记录的样本。</p>}
       {query && (
         <div className="pagination" aria-label="Case 列表分页">
           <span>{combinedTotal !== null ? `共 ${combinedTotal} 条 · 第 ${page} / ${pages} 页` : `第 ${page} 页`}</span>

@@ -1,0 +1,4 @@
+interface:
+  display_name: "部署 AutoEval"
+  short_description: "部署和升级 AutoEval 内网或本地服务，验证固定样本归档与报告"
+  default_prompt: "使用 $deploy-autoeval 部署 AutoEval 并完成无模型端到端验收。"

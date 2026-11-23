@@ -135,6 +135,7 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
     })) };
   const fingerprint = JSON.stringify(payload);
   useEffect(() => { setParallel(v => Math.min(v, maxParallel)); }, [maxParallel]);
+  const requestedCheck = useRef("");
   const preflightFingerprint = JSON.stringify({
     target_id: target, resource_id: resource, resource_kind: resourceKind, resource_ids: resourceIds,
     tasks: payload.tasks.map(({ task_id, dataset, compilation_id, manifest_id }) => ({
@@ -143,7 +144,6 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
   });
   useEffect(() => {
     generation.current++; if (job) setStaleEstimate(true); setJob(null); setAdviceJob(null);
-    if (checkExpired) setCheckRequest(n => n + 1);
   }, [fingerprint]);
   useEffect(() => { setProbeReview(false); setCurve(""); }, [target, resource, resourceKind]);
   const validUntil = preflight?.result?.preflight_valid_until;
@@ -317,11 +317,11 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
     setPreflight(null);
     setCheckExpired(false);
     setMessage("");
-    if (!ready) return;
+    if (!ready || !requestedCheck.current || requestedCheck.current !== preflightFingerprint) return;
     let stopped = false;
-    const timer = setTimeout(() => { void apiPost<Job>("/planning/resources/preflight", JSON.parse(preflightFingerprint))
+    const timer = setTimeout(() => { requestedCheck.current = ""; void apiPost<Job>("/planning/resources/preflight", JSON.parse(preflightFingerprint))
       .then(result => { if (!stopped) setPreflight(result); })
-      .catch(() => { if (!stopped) setMessage("自动环境检查失败，请点击环境检查重试。"); }); }, 350);
+      .catch(() => { if (!stopped) setMessage("环境检查失败，请重试。"); }); }, 350);
     return () => { stopped = true; clearTimeout(timer); };
   // Resource checks follow execution selection, independently of optional estimation inputs.
   }, [preflightFingerprint, ready, checkRequest]);
@@ -360,7 +360,7 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
     <div className="spread"><h2>3. SSH 执行资源</h2><button type="button" onClick={() => onManagePool()}>管理 SSH 资源池</button></div>
     {resources.loading ? <p role="status">正在加载 SSH 节点…</p> : resources.error ? <div className="inline"><p role="alert">{resources.error}</p><button onClick={resources.retry}>重新加载</button></div> : !resources.rows.length ? <div className="notice"><p>资源池暂无可用的 SSH 节点。</p><button type="button" onClick={() => onManagePool(true)}>添加 SSH 节点</button></div> : <ResourceMultiSelect hosts={hosts} showChips={!preflight || (checking && !result?.preflight_progress && !checks.length)} value={resourceIds} onChange={ids => { manualNodeSelection.current = true; setResourceIds(ids); setResource(ids[0] || ""); }} />}
     <div className="planning-actions">
-      <button disabled={busy || !ready || checking} onClick={() => setCheckRequest(n => n + 1)}>{checking ? "正在检查…" : preflight || checkExpired ? "重新检查" : "环境检查"}</button>
+      <button disabled={busy || !ready || checking} onClick={() => { requestedCheck.current = preflightFingerprint; setCheckRequest(n => n + 1); }}>{checking ? "正在检查…" : preflight || checkExpired ? "重新检查" : "环境检查"}</button>
       <p className="muted">仅检查环境，不发起测评。</p>
     </div>
     {preflight && <PreflightNodes hosts={hosts} selectedIds={resourceIds} datasets={enabled} job={preflight} />}

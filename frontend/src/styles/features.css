@@ -2150,3 +2150,12 @@ textarea { font: inherit; }
 .axis-bar.reference {background:#a4aec6}
 .axis-bar b {position:absolute;bottom:100%;left:50%;transform:translateX(-50%);font-size:12px}
 .dataset-axis-layout .performance-inline {display:flex;flex-direction:row;justify-content:flex-start;align-items:center;gap:8px;min-height:0;height:auto;padding:10px 16px;margin:0}
+
+.performance-setup { margin-top: 16px; }
+.performance-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 16px;
+}
+.performance-fields .select-field { min-width: 0; }
+.performance-fields input, .performance-fields select { width: 100%; max-width: none; }

@@ -124,6 +124,7 @@ def test_add_ssh_node_preserves_planning_form():
         expect(page.get_by_label("GPQA 样本范围")).to_have_value("full")
         selector = page.get_by_label("规划执行资源", exact=True)
         submit = page.get_by_role("button", name="提交测评")
+        page.get_by_role("button", name="环境检查", exact=True).click()
         expect(submit).to_be_enabled()
         expect(page.get_by_text("计划启动 1 个独立容器")).to_be_visible()
         expect(config.locator("../small")).to_contain_text("AISBench " + "a" * 12)
@@ -136,6 +137,7 @@ def test_add_ssh_node_preserves_planning_form():
         selector.click()
         page.get_by_role("checkbox", name="test-node").check()
         page.get_by_role("button", name="完成选择").click()
+        page.get_by_role("button", name="环境检查", exact=True).click()
         expect(submit).to_be_enabled()
         submit.click()
         expect(page).to_have_url(page.url.split("#")[0] + "#run/run")
@@ -222,6 +224,7 @@ def test_preflight_elapsed_and_all_pool_nodes():
         page.get_by_text("Test model", exact=True).click()
         for dataset in datasets:
             page.get_by_label("启用 " + dataset).check()
+        page.get_by_role("button", name="环境检查", exact=True).click()
         timer = page.get_by_role("timer", name="环境检查已耗时")
         expect(timer).to_be_visible()
         expect(timer).not_to_have_text(timer.inner_text())
@@ -264,6 +267,7 @@ def test_preflight_elapsed_and_all_pool_nodes():
         expect(summary.get_by_text("已过期", exact=True)).to_be_visible()
         expect(summary.get_by_role("button", name="提交测评")).to_be_disabled()
         page.get_by_role("group", name="数据集执行策略").get_by_role("button", name="并行执行").click()
+        page.get_by_role("button", name="重新检查", exact=True).click()
         expect(timer).to_be_visible()
         expect(nodes.get_by_text("预检通过", exact=True)).to_have_count(0)
         finish = True

@@ -9,7 +9,7 @@ import { StandardInputs } from "../features/catalog/StandardInputs";
 import { Configurations } from "../features/catalog/Configurations";
 import { useProfiles } from "../features/catalog/useProfiles";
 import { SSHResources } from "../features/resources/SSHResources";
-import { TaskPlanning } from "../features/planning/TaskPlanning";
+import { EvaluationConsoleTabs } from "../features/planning/EvaluationConsoleTabs";
 import { EvaluationRuns } from "../features/evaluation/EvaluationRuns";
 import { RealReports } from "../features/reporting/RealReports";
 import { RealLeaderboard } from "../features/reporting/RealLeaderboard";
@@ -52,7 +52,8 @@ export function App() {
   const [workbenchEnabled, setWorkbenchEnabled] = useState(false);
   const [candidateScoresOpen, setCandidateScoresOpen] = useState(false);
   useEffect(() => { if (page !== "leaderboard") setCandidateScoresOpen(false); }, [page]);
-  const [poolReturn, setPoolReturn] = useState(false);
+  const [poolReturn, setPoolReturn] = useState<string | null>(() => history.state?.consoleReturn ?? null);
+  const consolePage = page === "console" || page === "console/performance";
   const [poolRevision, setPoolRevision] = useState(0);
   const poolPage = page === "config/ssh-pool" || page === "config/ssh-pool/add";
   const [toast, setToast] = useState("");
@@ -63,9 +64,21 @@ export function App() {
     window.scrollTo(0, 0);
   };
 
+  const openPool = (path: string, origin: string | null) => {
+    setPoolReturn(origin);
+    go(path);
+    history.replaceState({ ...history.state, consoleReturn: origin }, "");
+  };
+
   useEffect(() => {
-    const onHashChange = () => {
+    const onHashChange = (event?: HashChangeEvent) => {
       const hash = location.hash.slice(1) || "console";
+      if (hash === "config/ssh-pool" || hash === "config/ssh-pool/add") {
+        setPoolReturn(history.state?.consoleReturn ?? null);
+      } else if (event?.oldURL.split("#")[1]?.startsWith("config/ssh-pool")
+        && (hash === "console" || hash === "console/performance")) {
+        setPoolRevision(value => value + 1);
+      }
       if (hash.startsWith("planned-run/")) { location.replace(`#run/${hash.slice(12)}`); return; }
       if (hash.startsWith("evaluate?")) { location.replace("#console"); return; }
       setPage(hash);
@@ -91,6 +104,7 @@ export function App() {
             : menus.find((menu) => menu.id === page)?.label || "控制台";
   const descriptions: Record<string, string> = {
     home: "从一次测评开始，让模型能力与执行证据清晰可见。",
+    "console/performance": "选择模型服务与 SSH 节点，运行普通推理或 AgentX 轨迹回放。",
     console: "选择模型、数据集与执行资源，按当前参数发起测评；可选获取耗时估算和参数建议。",
     "config/ssh-pool": "维护测评使用的 SSH 节点，检查节点连接。",
     "config/ssh-pool/add": "登记节点连接信息与凭据。",
@@ -114,7 +128,7 @@ export function App() {
               key={menu.id}
               href={`#${menu.id}`}
               className={
-                page === menu.id ||
+                page === menu.id || (consolePage && menu.id === "console") ||
                 ((evaluationPage || page.startsWith("planned-run/")) && menu.id === "tasks") ||
                 (page.startsWith("report/") && menu.id === "reports") ||
                 (page.startsWith("config/") && menu.id === "config")
@@ -153,21 +167,20 @@ export function App() {
         </header>
 
         {page === "home" && <Overview go={go} />}
-        {(page === "console" || (poolPage && poolReturn)) && <div hidden={page !== "console"}>
-          <TaskPlanning poolRevision={poolRevision} onManagePool={(add) => {
-            setPoolReturn(true);
-            go(add ? "config/ssh-pool/add" : "config/ssh-pool");
+        {(consolePage || (poolPage && poolReturn)) && <div hidden={!consolePage}>
+          <EvaluationConsoleTabs page={consolePage ? page : poolReturn!} go={go} poolRevision={poolRevision} onManagePool={(add) => {
+            openPool(add ? "config/ssh-pool/add" : "config/ssh-pool", page);
           }} />
         </div>}
         {poolPage && <SSHResources
           adding={page.endsWith("/add")}
-          onAdd={() => go("config/ssh-pool/add")}
-          onCancel={() => go("config/ssh-pool")}
-          onSaved={() => { setPoolRevision(value => value + 1); go(poolReturn ? "console" : "config/ssh-pool"); }}
-          onBack={poolReturn ? () => go("console") : undefined}
+          onAdd={() => openPool("config/ssh-pool/add", poolReturn)}
+          onCancel={() => openPool("config/ssh-pool", poolReturn)}
+          onSaved={() => poolReturn ? go(poolReturn) : openPool("config/ssh-pool", null)}
+          onBack={poolReturn ? () => go(poolReturn) : undefined}
         />}
         {page === "config" && <div className="management-toolbar">
-          <button onClick={() => { setPoolReturn(false); go("config/ssh-pool"); }}>SSH 资源池</button>
+          <button onClick={() => openPool("config/ssh-pool", null)}>SSH 资源池</button>
           <ManagementDrawer title="管理样本清单"><DatasetManifests /></ManagementDrawer>
           <ManagementDrawer title="执行规则与绑定"><ExecutionBindings /></ManagementDrawer>
           {import.meta.env.DEV && <ManagementDrawer title="标准仓输入与版本"><StandardInputs /></ManagementDrawer>}

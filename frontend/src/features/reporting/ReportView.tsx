@@ -1,3 +1,4 @@
+import { PerformanceReport, type NativePerformance } from "./PerformanceReport";
 import { type DatasetChartResult, ReportCharts } from "./ReportCharts";
 import { CopyIdentifier } from "../../shared/ui/CopyIdentifier";
 import { CaseHistory } from "./CaseHistory";
@@ -9,6 +10,7 @@ import { BadcaseComparison } from "./BadcaseComparison";
 import { apiGet, apiPost } from "../../shared/api";
 
 type Summary = {
+  performance?: NativePerformance;
   expected_samples: number;
   executed_attempts: number;
   successful_samples: number;
@@ -35,6 +37,7 @@ type BaselineComparison = {
 };
 
 export type Report = {
+  task_type?: "accuracy" | "performance" | "other";
   dataset_key?: string;
   execution_kind?: string;
   dataset_concurrency?: number | null;
@@ -163,6 +166,8 @@ export function ReportView({ id, go }: { id: string; go: (path: string) => void 
       </div>
     );
   }
+
+  if (report.task_type === "performance") return <PerformanceReport report={report} back={() => go("reports")} />;
 
   const review = async () => {
     setReviewing(true);

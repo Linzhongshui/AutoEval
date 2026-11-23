@@ -19,6 +19,7 @@ const validityLabels: Record<string, string> = {
 export function RealReports({ reportId, open }: { reportId?: string; open: (id: string) => void }) {
   const [query, setQuery] = useState("");
   const [model, setModel] = useState("");
+  const [taskType, setTaskType] = useState("");
   const [analysis, setAnalysis] = useState("");
   const [rows, setRows] = useState<Report[]>([]);
   const [offset, setOffset] = useState(0);
@@ -37,7 +38,7 @@ export function RealReports({ reportId, open }: { reportId?: string; open: (id: 
     (async () => {
       const records: Report[] = []; let position: number | null = 0;
       while (position !== null) {
-        const page: { data: Report[]; next_offset: number | null } = await apiGetPage<Report[]>(`/reports?summary_only=true&limit=200&offset=${position}`, controller.signal);
+        const page: { data: Report[]; next_offset: number | null } = await apiGetPage<Report[]>(`/reports?summary_only=true&limit=200&offset=${position}${taskType ? `&task_type=${taskType}` : ""}`, controller.signal);
         records.push(...page.data);
         if (page.next_offset !== null && page.next_offset <= position) throw Error("报告分页异常");
         position = page.next_offset;
@@ -51,9 +52,9 @@ export function RealReports({ reportId, open }: { reportId?: string; open: (id: 
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [refresh, reportId]);
+  }, [refresh, reportId, taskType]);
 
-  useEffect(() => { setOffset(0); }, [query, model, analysis]);
+  useEffect(() => { setOffset(0); }, [query, model, analysis, taskType]);
 
   if (reportId) {
     return (
@@ -85,8 +86,9 @@ export function RealReports({ reportId, open }: { reportId?: string; open: (id: 
   return (
     <div className="stack" data-testid="real-report-catalog">
       <section className="card report-filters filters" aria-label="报告筛选">
-        <label className="select-field"><span>模型</span><select value={model} onChange={(e) => setModel(e.target.value)}><option value="">全部模型</option>{[...new Set(rows.map((row) => row.remote_model))].map((value) => <option key={value}>{value}</option>)}</select></label>
-        <label className="select-field"><span>分析状态</span><select value={analysis} onChange={(e) => setAnalysis(e.target.value)}><option value="">全部分析状态</option>{[...new Set(rows.map((row) => row.analysis_status))].map((value) => <option key={value} value={value}>{analysisLabel(value)}</option>)}</select></label>
+        <label className="select-field"><span>任务类型</span><select value={taskType} onChange={event => { setOffset(0); setTaskType(event.target.value); }}><option value="">全部</option><option value="accuracy">精度</option><option value="performance">性能</option><option value="other">其他</option></select></label>
+        <label className="select-field"><span>模型</span><select value={model} onChange={(e) => setModel(e.target.value)}><option value="">全部模型</option>{[...new Set([...rows.map(row => row.remote_model), ...(model ? [model] : [])])].map((value) => <option key={value}>{value}</option>)}</select></label>
+        <label className="select-field"><span>分析状态</span><select value={analysis} onChange={(e) => setAnalysis(e.target.value)}><option value="">全部分析状态</option>{[...new Set([...rows.map(row => row.analysis_status), ...(analysis ? [analysis] : [])])].map((value) => <option key={value} value={value}>{analysisLabel(value)}</option>)}</select></label>
         <input aria-label="搜索报告或任务" placeholder="搜索报告或任务" value={query} onChange={(e) => setQuery(e.target.value)} />
         <button onClick={() => setRefresh((value) => value + 1)}>刷新</button>
       </section>
@@ -117,9 +119,9 @@ export function RealReports({ reportId, open }: { reportId?: string; open: (id: 
                   <td>{row.remote_model}</td>
                   <td>
                     <span className={`report-validity-badge ${row.validity === "complete" ? "complete" : row.validity === "partial" ? "partial" : "error"}`}>
-                      {validityLabels[row.validity] || "状态待确认"}
+                      {row.task_type === "performance" ? (row.validity === "complete" ? "性能结果完整" : "性能结果不完整") : validityLabels[row.validity] || "状态待确认"}
                     </span>
-                    <small className="report-context">探索 · 门禁不适用</small>
+                    <small className="report-context">{row.task_type === "performance" ? "性能测评" : "探索 · 门禁不适用"}</small>
                     {row.evidence_status !== "verified" && <small>原始证据暂不可用，成绩不参与比较。</small>}
                   </td>
                   <td>
@@ -129,17 +131,17 @@ export function RealReports({ reportId, open }: { reportId?: string; open: (id: 
                     {row.reviewed_at && <small>{new Date(row.reviewed_at).toLocaleString("zh-CN")}</small>}
                   </td>
                   <td>
-                    {row.summary.successful_samples}/{row.summary.expected_samples}
+                    {row.task_type === "performance" ? "性能测评" : <>{row.summary.successful_samples}/{row.summary.expected_samples}
                     <small>
                       执行 {row.summary.executed_attempts} 次 · 失败 {row.summary.failed_samples} · 缺测 {row.summary.missing_samples}
                     </small>
                     <small>
                       {row.dataset_key || "GPQA"} · {row.summary.subset_scope === "lite" ? "Lite" : row.summary.subset_scope}
-                    </small>
+                    </small></>}
                   </td>
                   <td>
                     {row.evidence_status !== "verified" || row.summary.accuracy === null ? "—" : `${row.summary.accuracy}%`}
-                    {row.validity === "partial" && <small>仅成功样本</small>}
+                    {row.task_type === "accuracy" && row.validity === "partial" && <small>仅成功样本</small>}
                   </td>
                   <td>{new Date(row.created_at).toLocaleString("zh-CN")}</td><td><span className={`report-analysis-badge analysis-${row.analysis_status}`}>{analysisLabel(row.analysis_status)}</span></td>
                   <td>
@@ -148,7 +150,7 @@ export function RealReports({ reportId, open }: { reportId?: string; open: (id: 
                     </button>
                     <button
                       onClick={() => review(row)}
-                      disabled={reviewing === row.id || row.evidence_status !== "verified" || row.validity !== "complete"}
+                      disabled={row.task_type === "performance" || reviewing === row.id || row.evidence_status !== "verified" || row.validity !== "complete"}
                     >
                       {row.review_status === "approved" ? "撤销有效历史" : "录入为有效历史"}
                     </button>

@@ -111,6 +111,7 @@ def normalize(task, identity, source, observed_at, *, snapshot_kind="live"):
         "harbor_monitor",
         "aisbench_native_predictions",
         "executor_lifecycle",
+        "aisbench_performance",
         "harbor_result_files",
     } or snapshot_kind not in {
         "live",

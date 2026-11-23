@@ -27,6 +27,12 @@ async def resolve_inputs(session, settings, body):
     from autoeval.catalog.registry import Asset, AssetVersion
 
     target = await target_data(session, body.target_id)
+    from autoeval.planning.schemas import PerformanceTask
+
+    if isinstance(body, PerformanceTask):
+        from autoeval.evaluation.performance import performance_inputs
+
+        return performance_inputs(settings, body, target)
     tasks = []
     for spec in body.tasks:
         if spec.compilation_id in getattr(settings, "archived_compilation_ids", []):

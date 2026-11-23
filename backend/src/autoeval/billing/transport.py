@@ -46,7 +46,7 @@ def execution_route(settings, run_id, target_id, dataset, section="evaluation", 
 def route_compilation(compilation, route):
     result = copy.deepcopy(compilation)
     params = result["config"]["params"]
-    field = "url" if result["config"]["subcommand"] == "llm_accuracy" else "api_base"
+    field = "url" if result["config"]["subcommand"] in {"llm_accuracy", "llm_perf", "agentx"} else "api_base"
     params[field] = route["base_url"]
     if any(key in params for key in ("host_ip", "host_port", "model_overrides")):
         raise ValueError("Alternate model routing must be removed for budgeted execution")

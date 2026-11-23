@@ -43,6 +43,8 @@ def runtime_files():
     )
     return {
         "planning_runtime.py": RUNTIME.read_bytes(),
+        "performance_model.py": RUNTIME.with_name("performance_model.py").read_bytes(),
+        "performance_adapter.py": RUNTIME.with_name("performance_adapter.py").read_bytes(),
         "planner-package.json": (
             RUNTIME.parents[2] / "tool-locks" / "planner-package.json"
         ).read_bytes(),
@@ -145,6 +147,11 @@ class PlanningRemoteContainer(DockerExecutor):
                     *self.container_environment(self.remote_dir + "/jobs"),
                     *arguments[index:],
                 ]
+            if arguments[-1] == "preflight" and payload and any(
+                t.get("compilation", {}).get("config", {}).get("subcommand") in {"agentx", "llm_perf"}
+                for t in json.loads(payload)
+            ):
+                return self.control.command(client, ["docker", *arguments], payload, timeout=300)
             return self.control.command(client, ["docker", *arguments], payload)
 
     async def validate(self, spec):
@@ -267,6 +274,34 @@ print(json.dumps({'content': raw.decode('utf-8', errors='replace'), 'truncated':
              "python3", self.remote_dir + "/job_runtime.py", "collect", key],
         )
 
+    async def performance_result(self, job, kind):
+        key = str(uuid.UUID(job.submission_key))
+        root = await self.job_root(key)
+        output = f"{root}/{key}/output"
+        parsed = await self._read_staged_json(key, [
+            "docker", "exec", self.container_id, "python3", self.remote_dir + "/performance_adapter.py", output, kind
+        ])
+        return output, parsed
+
+    def copy_performance_file(self, output, name, destination):
+        relative = PurePosixPath(name)
+        if relative.is_absolute() or ".." in relative.parts or "performances" not in relative.parts:
+            raise ValueError("Invalid performance evidence path")
+        # Verify the resolved path in the container before streaming the file over SSH.
+        script = (
+            "import pathlib,sys,shutil; root=pathlib.Path(sys.argv[1]).resolve(); "
+            "p=(root/sys.argv[2]).resolve(strict=True); "
+            "sys.exit(1) if not p.is_relative_to(root) or not p.is_file() else None; "
+            "shutil.copyfileobj(p.open('rb'),sys.stdout.buffer)"
+        )
+        args = ["docker", "exec", self.container_id, "python3", "-c", script, output, name]
+        with self.control.connect() as client:
+            _, source, _ = client.exec_command(shlex.join(args))
+            while chunk := source.read(1024 * 1024):
+                destination.write(chunk)
+            if source.channel.recv_exit_status() != 0:
+                raise OSError("SSH performance artifact read failed")
+
     async def _read_staged_json(self, key, arguments):
         import uuid
 
@@ -387,7 +422,8 @@ class PlanningDocker(DockerExecutor):
 class PlanningSSH(SSHExecutor):
     def __init__(self, connection):
         super().__init__(connection)
-        combined = hashlib.sha256(self.runtime.read_bytes() + RUNTIME.read_bytes()).hexdigest()
+        self.sources = (self.runtime, RUNTIME, RUNTIME.with_name("performance_adapter.py"), RUNTIME.with_name("performance_model.py"))
+        combined = hashlib.sha256(b"".join(p.read_bytes() for p in self.sources)).hexdigest()
         self.remote_runtime = f"{self.root}/runtime/{combined}/job_runtime.py"
 
     def prepare(self, client):
@@ -409,7 +445,7 @@ class PlanningSSH(SSHExecutor):
             ],
         )
         with client.open_sftp() as sftp:
-            for source in (self.runtime, RUNTIME):
+            for source in self.sources:
                 remote = folder + "/" + source.name
                 try:
                     entry = sftp.lstat(remote)

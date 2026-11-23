@@ -34,6 +34,8 @@ async def preview_scope(session, settings, run, operation, target):
     snapshot = await session.scalar(select(RunSnapshot).where(RunSnapshot.run_id == run.id))
     if snapshot is None or snapshot.sha256 != digest(snapshot.canonical_body):
         raise HTTPException(409, "Frozen snapshot unavailable")
+    if snapshot.canonical_body.get("task_type") == "performance":
+        raise HTTPException(409, "性能任务按整次负载执行，不支持样本补测")
     rounds = list(
         await session.scalars(
             select(ExecutionRound)

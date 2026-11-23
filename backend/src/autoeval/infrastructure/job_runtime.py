@@ -196,7 +196,10 @@ def child(folder):
         try:
             result = execute(folder, spec)
             atomic_json(folder / "result.json", result)
-            atomic_json(folder / "exit.json", {"state": "succeeded"})
+            config = spec.get("compilation", {}).get("config", {})
+            perf = config.get("subcommand") in {"llm_perf", "agentx"} and config.get("params", {}).get("kind") in {"inference", "agentx"}
+            exit_state = {"state": "failed", "reason": "native_performance_failed"} if perf and result.get("tool_exit_code") else {"state": "succeeded"}
+            atomic_json(folder / "exit.json", exit_state)
         except Exception as exc:  # noqa: BLE001 -- isolate third-party errors without leaking credentials
             # Persist only allowlisted reason codes, never third-party response text.
             atomic_json(

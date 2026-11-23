@@ -738,6 +738,7 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                             state="failed", reason="native_unified_result_missing_or_ambiguous"
                         )
                     ),
+                    collect=AsyncMock(return_value={"result": {}}),
                     remove=AsyncMock(side_effect=remove_failed_child),
                 )
                 successful_adapter = SimpleNamespace(
@@ -814,6 +815,7 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                         return True
 
                     return SimpleNamespace(ensure=ensure, remove=remove, submit=AsyncMock(),
+                                           collect=AsyncMock(return_value={"result": {}}),
                                            status=AsyncMock(return_value=SimpleNamespace(state="failed")))
 
                 monkeypatch.setattr(orchestration, "isolated_transport", AsyncMock(side_effect=owned_adapter))

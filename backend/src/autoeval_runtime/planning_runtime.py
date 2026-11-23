@@ -16,6 +16,12 @@ PLANNER_REVISION = "0ee9abf49a57c5accc62df8900693cdcea88ea9a"
 ADAPTOR_REVISION = "955089ab32ef696c231d628f5ad0d9da28f430c4"
 
 
+if __package__:
+    from . import performance_adapter
+else:
+    import performance_adapter
+
+
 def installed_revision(distribution):
     try:
         package = importlib.metadata.distribution(distribution)
@@ -110,6 +116,22 @@ def inspect_dataset(task, *, networks, validated):
     config = task["compilation"]["config"]
     params = config["params"]
     runtime = task["compilation"].get("runtime_config", {})
+    if config["subcommand"] in {"llm_perf", "agentx"} and params.get("kind") in {"agentx", "inference"}:
+        reasons = []
+        revision = None
+        try:
+            revision = verify_tool(task)
+            if task["compilation"]["adaptor_revision"] != performance_adapter.adapter_digest():
+                raise ValueError("performance_adapter_mismatch")
+            performance_adapter.check_environment(params)
+        except (ValueError, ImportError, OSError, subprocess.SubprocessError):
+            reasons.append("performance_environment_unavailable")
+        return {
+            "task_id": task["task_id"], "dataset": task["dataset"],
+            "tool_root": params["ais_bench_root"], "data_path": params.get("corpus_path", params["tokenizer_path"]),
+            "tool_revision": revision, "expected_tool_revision": task["tool"]["revision"],
+            "blocking_reasons": reasons, "warnings": [],
+        }
     data_path = (
         runtime.get("datasets_dir")
         if config["subcommand"] == "llm_accuracy"
@@ -203,6 +225,9 @@ def preflight(tasks=None):
     else:
         supported = sorted({c["dataset"] for c in checks if not c["blocking_reasons"]})
     blockers = []
+    if tasks and all(t["compilation"]["config"]["params"].get("kind") in {"agentx", "inference"} for t in tasks):
+        adaptor_ready = all(t["compilation"]["adaptor_revision"] == performance_adapter.adapter_digest() for t in tasks)
+        versions["adaptor"] = {"actual": performance_adapter.adapter_digest(), "expected": tasks[0]["compilation"]["adaptor_revision"]}
     if not adaptor_ready:
         blockers.append("adaptor_revision_mismatch")
     selection_ready = (
@@ -277,7 +302,10 @@ def validate_spec(spec):
             "credential",
         }.issubset(spec):
             raise ValueError("Unknown adaptor fields")
-        if spec["compilation"]["adaptor_revision"] != ADAPTOR_REVISION:
+        config = spec["compilation"].get("config", {})
+        perf = config.get("subcommand") in {"agentx", "llm_perf"} and config.get("params", {}).get("kind") in {"agentx", "inference"}
+        revision = performance_adapter.adapter_digest() if perf else ADAPTOR_REVISION
+        if spec["compilation"]["adaptor_revision"] != revision:
             raise ValueError("Unpinned adaptor")
         if "skip_aisbench_warmup" in spec and (
             spec["skip_aisbench_warmup"] is not True
@@ -608,6 +636,10 @@ def execute(folder, spec):
                 }
             finally:
                 probe_module._run_level = original_level
+        config = spec["compilation"]["config"]
+        if config["subcommand"] in {"agentx", "llm_perf"} and config["params"].get("kind") in {"agentx", "inference"}:
+            verify_tool(spec)
+            return performance_adapter.execute(config["params"], folder, key)
         if installed_revision("autoeval-benchmark-adaptor") != ADAPTOR_REVISION:
             raise ValueError("Adaptor revision mismatch")
         verify_tool(spec)

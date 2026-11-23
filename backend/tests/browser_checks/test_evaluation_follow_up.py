@@ -44,6 +44,8 @@ def test_confirm_from_original_task(operation):
                 "scope_sha256": ("b" if "case-retry" in path else "a") * 64,
                 "sample_count": 1,
                 "blockers": ["samples_unresolved"] if blocked else [],
+                "warnings": ["previous_dispatch_unknown", "using_current_template"]
+                if operation == "case-retry" else [],
                 "samples": [missing],
             }
         elif route.request.method == "POST":
@@ -107,6 +109,8 @@ def test_confirm_from_original_task(operation):
                 assert not requests
                 browser.close()
                 return
+            dialog.get_by_text("本次重试可能产生重复费用", exact=False).wait_for()
+            dialog.get_by_text("该资源当前的执行配置", exact=False).wait_for()
             confirm.click()
         else:
             page.goto(origin + "/#tasks")

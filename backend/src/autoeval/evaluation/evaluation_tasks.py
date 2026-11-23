@@ -114,6 +114,7 @@ class FollowUpPreview(BaseModel):
     target: dict[str, str]
     samples: list[FollowUpSample]
     blockers: list[str]
+    warnings: list[str] = Field(default_factory=list)
     sample_count: int
     scope_sha256: str
 

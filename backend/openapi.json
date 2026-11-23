@@ -7043,6 +7043,13 @@
             "type": "array",
             "title": "Blockers"
           },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          },
           "sample_count": {
             "type": "integer",
             "title": "Sample Count"

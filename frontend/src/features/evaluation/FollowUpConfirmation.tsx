@@ -6,6 +6,8 @@ export type CaseTarget = Pick<components["schemas"]["CaseRetryConfirmation"], "d
 type Preview = components["schemas"]["FollowUpPreview"];
 
 const reasons: Record<string, string> = {
+  previous_dispatch_unknown: "旧作业已结束，但无法确认此前是否调用过模型。本次重试可能产生重复费用。",
+  using_current_template: "本轮将使用该资源当前的执行配置，历史轮次保留原配置。",
   resource_changed: "当前执行资源与原任务冻结的配置不一致。",
   source_active: "当前轮次还在执行",
   source_not_cancelled: "原任务尚未确认取消",
@@ -72,7 +74,8 @@ export function FollowUpConfirmation({
     {target && <p>{target.dataset_key} · {target.sample_id}</p>}
     {preview && <>
       {preview.blockers.length ? <p role="status">当前无法{target ? "重试此 Case" : "续跑测评"}。</p> :
-        <p>将沿用原任务配置重新执行 {preview.sample_count} 个样本。{target && "新报告将采用本轮结果，历史尝试仍可查看。"}</p>}
+        <p>将重新执行 {preview.sample_count} 个样本。{target && "新报告将采用本轮结果，历史尝试仍可查看。"}</p>}
+      {preview.warnings?.map(reason => <p key={reason}>{reasons[reason] ?? reason}</p>)}
       {!target && <p>可复用 {preview.samples.filter(sample => sample.category === "reusable").length} 个样本。</p>}
       {!!lost.length && <details><summary>{lost.length} 个样本的归档证据已丢失</summary>
         <ul>{lost.map(sample => <li key={JSON.stringify([sample.dataset_key, sample.sample_id])}>{sample.dataset_key} · {sample.sample_id}</li>)}</ul>

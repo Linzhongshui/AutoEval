@@ -2150,3 +2150,9 @@ textarea { font: inherit; }
 .axis-bar.reference {background:#a4aec6}
 .axis-bar b {position:absolute;bottom:100%;left:50%;transform:translateX(-50%);font-size:12px}
 .dataset-axis-layout .performance-inline {display:flex;flex-direction:row;justify-content:flex-start;align-items:center;gap:8px;min-height:0;height:auto;padding:10px 16px;margin:0}
+
+.retry-case-list {
+  max-height: 12rem;
+  overflow: auto;
+  overflow-wrap: anywhere;
+}

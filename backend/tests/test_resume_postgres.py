@@ -162,7 +162,10 @@ async def test_cancelled_scope_and_conflicting_confirmations(
             "dataset_concurrency": 3,
             "target": {"model": "fixture", "base_url": "https://fixture.invalid"},
         },
-        "resource": {"node_id": "fixture", "cpu_cores": 8, "mem_mb": 16000, "disk_gb": 100},
+        "resource": {
+            "node_id": "fixture", "cpu_cores": 8, "mem_mb": 16000,
+            "disk_gb": 100, "network_available": 1,
+        },
         "execution_origin": "real",
     }
     objects = {}
@@ -204,10 +207,14 @@ async def test_cancelled_scope_and_conflicting_confirmations(
 
     class Executor:
         async def submit(self, spec, key):
-            assert not active_submissions, "Same dataset shards must retain frozen case concurrency"
+            contract = spec.get("case_contract") or spec["harbor_dispatch_contract"]
+            if contract["dataset"] == "GPQA":
+                assert all("other-q0" in submitted[k] for k in active_submissions), (
+                    "Same dataset shards must retain frozen case concurrency"
+                )
             submission_calls.append(key)
             active_submissions.add(key)
-            submitted[key] = spec["case_contract"]["sample_ids"]
+            submitted[key] = contract["sample_ids"]
             if len(submission_calls) == 1:
                 raise TimeoutError("Lost acknowledgement after remote submission")
 
@@ -220,6 +227,12 @@ async def test_cancelled_scope_and_conflicting_confirmations(
             return SimpleNamespace(state="cancelled", reason=None)
 
         async def collect(self, job):
+            if "other-q0" in submitted.get(job.submission_key, {}):
+                return {"result": {"unified_result": {
+                    "schema_version": 1, "tool": "ais_bench", "subcommand": "harbor_agent",
+                    "case_count": 1, "cases": [{"dataset": "DeepSWE", "case_id": "other-q0",
+                                                "attempt": 1, "status": "success", "score": 1}],
+                }}}
             original = job.submission_key == str(job_id)
             result = {
                 "result": {
@@ -672,6 +685,42 @@ async def test_cancelled_scope_and_conflicting_confirmations(
                         (2, "succeeded"),
                         (3, "failed"),
                     ]
+                later_retry_failed = False
+                other_resource_available = True
+                same_name = {"dataset_key": "DeepSWE", "sample_id": "q0"}
+                targets = [same_name, target, {"dataset_key": "GPQA", "sample_id": "q3"}]
+                endpoint = f"{base}/batch-case-retry"
+                invalid = await client.post(endpoint + "-preview", json={
+                    "cases": [target, {**target, "sample_id": "not-in-manifest"}]
+                })
+                assert invalid.status_code == 404
+                assert (await client.post(endpoint + "-preview", json={"cases": []})).status_code == 422
+                preview = (await client.post(endpoint + "-preview", json={
+                    "cases": [*targets, target]
+                })).json()["data"]
+                assert preview["sample_count"] == 3 and not preview["blockers"]
+                confirmation = {k: preview[k] for k in ("source_round", "scope_sha256")}
+                requests_before = len(submission_calls)
+                headers = {"Idempotency-Key": "batch-q0-q3"}
+                for cases in (targets, list(reversed(targets))):
+                    response = await client.post(endpoint, json={**confirmation, "cases": cases},
+                                                 headers=headers)
+                    assert response.status_code == 202
+                    assert response.json()["data"]["round"] == 8
+                async with app.state.sessions() as session:
+                    batch_id = await session.scalar(
+                        select(ExecutionRound.id).where(ExecutionRound.number == 8)
+                    )
+                await asyncio.wait_for(execute(app.state.sessions, settings, run_id, round_id=batch_id), 45)
+                dispatched = [submitted[k] for k in submission_calls[requests_before:]]
+                assert sorted(list(group.items()) for group in dispatched) == [
+                    [("0", "q0")], [("3", "q3")], [("other-q0", "q0")]
+                ]
+                report = (await client.get(f"{base}/report")).json()["data"]
+                assert report["round"] == 8
+                assert report["datasets"][0]["summary"]["expected_samples"] == 10
+                assert report["datasets"][0]["case_index"][1] == original_index[1]
+                assert report["datasets"][1]["summary"]["accuracy"] == 100
     finally:
         try:
             if bucket_created:

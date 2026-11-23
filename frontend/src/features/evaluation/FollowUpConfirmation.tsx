@@ -3,7 +3,7 @@ import { apiGet, apiPost } from "../../shared/api";
 import type { components } from "../../shared/types/api";
 
 export type CaseTarget = Pick<components["schemas"]["CaseRetryConfirmation"], "dataset_key" | "sample_id">;
-type Preview = components["schemas"]["FollowUpPreview"];
+type Preview = components["schemas"]["FollowUpPreview"] | components["schemas"]["BatchCasePreview"];
 
 const reasons: Record<string, string> = {
   previous_dispatch_unknown: "旧作业已结束，但无法确认此前是否调用过模型。本次重试可能产生重复费用。",
@@ -20,10 +20,11 @@ const reasons: Record<string, string> = {
 };
 
 export function FollowUpConfirmation({
-  runId, target, onClose, onAccepted,
+  runId, target, cases, onClose, onAccepted,
 }: {
   runId: string;
   target?: CaseTarget;
+  cases?: CaseTarget[];
   onClose: () => void;
   onAccepted: () => void;
 }) {
@@ -34,17 +35,21 @@ export function FollowUpConfirmation({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const base = `/evaluation-tasks/${encodeURIComponent(runId)}`;
-  const action = target ? "case-retry" : "resume";
+  const action = cases ? "batch-case-retry" : target ? "case-retry" : "resume";
   const query = target ? `?${new URLSearchParams(target)}` : "";
 
   useEffect(() => { dialog.current?.showModal(); }, []);
   useEffect(() => {
     const controller = new AbortController();
-    apiGet<Preview>(`${base}/${action}-preview${query}`, controller.signal)
+    const path = `${base}/${action}-preview${query}`;
+    const request = cases
+      ? apiPost<Preview>(path, { cases }, undefined, controller.signal)
+      : apiGet<Preview>(path, controller.signal);
+    request
       .then(setPreview)
       .catch(() => { if (!controller.signal.aborted) setError("无法取得执行预览。"); });
     return () => controller.abort();
-  }, [base, action, query]);
+  }, [base, action, query, cases]);
 
   async function confirm() {
     if (!preview || preview.blockers.length || submitting.current) return;
@@ -53,7 +58,7 @@ export function FollowUpConfirmation({
     setError("");
     try {
       await apiPost(`${base}/${action}`, {
-        ...target, source_round: preview.source_round, scope_sha256: preview.scope_sha256,
+        ...target, ...(cases && { cases }), source_round: preview.source_round, scope_sha256: preview.scope_sha256,
       }, key.current);
       onAccepted();
     } catch {
@@ -65,18 +70,21 @@ export function FollowUpConfirmation({
   }
 
   const lost = preview?.samples.filter(sample => sample.category === "evidence_lost") ?? [];
-  const title = target ? "重试此 Case" : "续跑测评";
+  const title = cases ? "批量重试" : target ? "重试此 Case" : "续跑测评";
   return <dialog ref={dialog} aria-label={title} className="follow-up-dialog" onCancel={event => {
     event.preventDefault();
     if (!busy) onClose();
   }}>
     <h2>{title}</h2>
+    {cases && <details><summary>已选择 {cases.length} 个样本</summary>
+      <ul className="retry-case-list">{cases.map(row => <li key={JSON.stringify([row.dataset_key, row.sample_id])}>{row.dataset_key} · {row.sample_id}</li>)}</ul>
+    </details>}
     {target && <p>{target.dataset_key} · {target.sample_id}</p>}
     {preview && <>
-      {preview.blockers.length ? <p role="status">当前无法{target ? "重试此 Case" : "续跑测评"}。</p> :
-        <p>将重新执行 {preview.sample_count} 个样本。{target && "新报告将采用本轮结果，历史尝试仍可查看。"}</p>}
+      {preview.blockers.length ? <p role="status">当前无法{title}。</p> :
+        <p>将重新执行 {preview.sample_count} 个样本。{(target || cases) && "新报告将采用本轮结果，历史尝试仍可查看。"}</p>}
       {preview.warnings?.map(reason => <p key={reason}>{reasons[reason] ?? reason}</p>)}
-      {!target && <p>可复用 {preview.samples.filter(sample => sample.category === "reusable").length} 个样本。</p>}
+      {!target && !cases && <p>可复用 {preview.samples.filter(sample => sample.category === "reusable").length} 个样本。</p>}
       {!!lost.length && <details><summary>{lost.length} 个样本的归档证据已丢失</summary>
         <ul>{lost.map(sample => <li key={JSON.stringify([sample.dataset_key, sample.sample_id])}>{sample.dataset_key} · {sample.sample_id}</li>)}</ul>
       </details>}

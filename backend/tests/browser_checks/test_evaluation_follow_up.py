@@ -7,13 +7,16 @@ from playwright.sync_api import sync_playwright
 
 
 @pytest.mark.skipif(not os.getenv("AE_BROWSER_URL"), reason="Explicit browser URL required")
-@pytest.mark.parametrize("operation", ["resume", "case-retry", "blocked-case"])
+@pytest.mark.parametrize("operation", ["resume", "case-retry", "blocked-case", "batch"])
 def test_confirm_from_original_task(operation):
     requests = []
     blocked = operation == "blocked-case"
     base = "/evaluation-tasks/task"
     target = {"dataset_key": "GPQA", "sample_id": "q2"}
     missing = {**target, "category": "unknown" if blocked else "remaining", "has_attempts": False}
+
+    other = {"dataset_key": "MMMU-Pro", "sample_id": "q2"}
+    batch = [target, other]
 
     def api(route):
         path = route.request.url.split("/api/autoeval/v1", 1)[-1].split("?", 1)[0]
@@ -38,6 +41,12 @@ def test_confirm_from_original_task(operation):
                 "report": None,
                 "datasets": [{"id": "g", "dataset": "GPQA", "state": "cancelled"}],
             }
+            if operation == "batch":
+                data["datasets"].append({"id": "m", "dataset": "MMMU-Pro", "state": "failed"})
+        elif path == base + "/batch-case-retry-preview":
+            assert route.request.post_data_json == {"cases": batch}
+            data = {"source_round": 1, "scope_sha256": "a" * 64, "sample_count": 2,
+                    "blockers": [], "samples": []}
         elif path in {base + "/resume-preview", base + "/case-retry-preview"}:
             data = {
                 "source_round": 1,
@@ -46,7 +55,7 @@ def test_confirm_from_original_task(operation):
                 "blockers": ["samples_unresolved"] if blocked else [],
                 "warnings": ["previous_dispatch_unknown", "using_current_template"]
                 if operation == "case-retry" else [],
-                "samples": [missing],
+                "samples": [missing, {**missing, **other}] if operation == "batch" else [missing],
             }
         elif route.request.method == "POST":
             requests.append((route.request.post_data_json, route.request.headers))
@@ -80,7 +89,19 @@ def test_confirm_from_original_task(operation):
         page = browser.new_page()
         page.route("**/api/autoeval/v1/**", api)
         origin = os.environ["AE_BROWSER_URL"].rstrip("/")
-        if operation != "resume":
+        if operation == "batch":
+            page.goto(origin + "/#run/task")
+            page.get_by_role("checkbox", name="选择本页 Case").check()
+            page.get_by_label("Case数据集筛选").select_option("MMMU-Pro")
+            page.get_by_role("checkbox", name="选择 MMMU-Pro · q2").check()
+            page.get_by_role("button", name="批量重试（2）").click()
+            dialog = page.get_by_role("dialog", name="批量重试")
+            dialog.get_by_text("已选择 2 个样本").click()
+            for item in batch:
+                dialog.get_by_text(f"{item['dataset_key']} · q2", exact=True).wait_for()
+            assert not requests
+            dialog.get_by_role("button", name="确认批量重试").click()
+        elif operation != "resume":
             page.goto(origin + "/#run/task")
             page.get_by_text("执行轮次", exact=True).click()
             page.get_by_text("第 1 轮 · 首次执行", exact=True).wait_for()
@@ -120,6 +141,8 @@ def test_confirm_from_original_task(operation):
         assert len(requests) == 1
         payload, headers = requests[0]
         expected = {"source_round": 1, "scope_sha256": "a" * 64}
+        if operation == "batch":
+            expected["cases"] = batch
         if operation == "case-retry":
             expected.update(target, scope_sha256="b" * 64)
         assert payload == expected

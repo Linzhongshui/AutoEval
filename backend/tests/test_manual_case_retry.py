@@ -55,6 +55,36 @@ async def test_manual_retry_binds_current_template_and_one_historical_sample(mon
     assert shard["compilation"]["config"]["params"]["dataset_test_range"] == "[1:2]"
     assert shard["execution_template"] == template
     assert snapshot.sha256 == digest(frozen)
+    other_task = {**task, "dataset": "MMMU-Pro", "assigned_resource_id": "second-node"}
+    other_job = SimpleNamespace(id=uuid.uuid4(), state="failed", payload=other_task, summary={})
+    multi_body = {"inputs": {"tasks": [task, other_task]}}
+    multi_snapshot = SimpleNamespace(canonical_body=multi_body, sha256=digest(multi_body))
+    other_template = {"image_id": "second-image"}
+    monkeypatch.setattr(
+        resume_preview,
+        "execution_template",
+        lambda _, node, task: other_template if node == "second-node" else template,
+    )
+
+    async def batch_preview():
+        session = SimpleNamespace(
+            scalar=AsyncMock(side_effect=[multi_snapshot, None, None]),
+            scalars=AsyncMock(side_effect=[[], [job, other_job], [], []]),
+        )
+        return await resume_preview.preview_scope(
+            session,
+            None,
+            run,
+            "case_retry",
+            {"cases": [target, {**target, "dataset_key": "MMMU-Pro"}]},
+        )
+
+    batch = await batch_preview()
+    assert batch.selection["sample_count"] == 2
+    assert [shard["samples"] for shard in batch.shards] == [samples[1:], samples[1:]]
+    other_template["image_id"] = "second-image-changed"
+    assert (await batch_preview()).scope_sha256 != batch.scope_sha256
+
     template["image_id"] = "changed-again"
     assert (await preview()).scope_sha256 != result.scope_sha256
     job.state = "running"

@@ -2103,6 +2103,123 @@
         }
       }
     },
+    "/api/autoeval/v1/evaluation-tasks/{run_id}/batch-case-retry-preview": {
+      "post": {
+        "tags": [
+          "evaluation tasks"
+        ],
+        "summary": "Batch Case Preview",
+        "operationId": "batch_case_preview_api_autoeval_v1_evaluation_tasks__run_id__batch_case_retry_preview_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchCaseSelection"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_BatchCasePreview_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/autoeval/v1/evaluation-tasks/{run_id}/batch-case-retry": {
+      "post": {
+        "tags": [
+          "evaluation tasks"
+        ],
+        "summary": "Batch Retry Cases",
+        "operationId": "batch_retry_cases_api_autoeval_v1_evaluation_tasks__run_id__batch_case_retry_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "idempotency-key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256,
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchCaseConfirmation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_BatchCaseAccepted_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/autoeval/v1/evaluation-tasks/{run_id}/resume": {
       "post": {
         "tags": [
@@ -5505,6 +5622,131 @@
         ],
         "title": "ApplyInput"
       },
+      "BatchCaseAccepted": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "round": {
+            "type": "integer",
+            "title": "Round"
+          },
+          "target": {
+            "$ref": "#/components/schemas/BatchCaseSelection"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "round",
+          "target"
+        ],
+        "title": "BatchCaseAccepted"
+      },
+      "BatchCaseConfirmation": {
+        "properties": {
+          "cases": {
+            "items": {
+              "$ref": "#/components/schemas/CaseTarget"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Cases"
+          },
+          "source_round": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Source Round"
+          },
+          "scope_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Scope Sha256"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "cases",
+          "source_round",
+          "scope_sha256"
+        ],
+        "title": "BatchCaseConfirmation"
+      },
+      "BatchCasePreview": {
+        "properties": {
+          "source_round": {
+            "type": "integer",
+            "title": "Source Round"
+          },
+          "operation": {
+            "type": "string",
+            "title": "Operation"
+          },
+          "target": {
+            "$ref": "#/components/schemas/BatchCaseSelection"
+          },
+          "samples": {
+            "items": {
+              "$ref": "#/components/schemas/FollowUpSample"
+            },
+            "type": "array",
+            "title": "Samples"
+          },
+          "blockers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Blockers"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          },
+          "sample_count": {
+            "type": "integer",
+            "title": "Sample Count"
+          },
+          "scope_sha256": {
+            "type": "string",
+            "title": "Scope Sha256"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_round",
+          "operation",
+          "target",
+          "samples",
+          "blockers",
+          "sample_count",
+          "scope_sha256"
+        ],
+        "title": "BatchCasePreview"
+      },
+      "BatchCaseSelection": {
+        "properties": {
+          "cases": {
+            "items": {
+              "$ref": "#/components/schemas/CaseTarget"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Cases"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "cases"
+        ],
+        "title": "BatchCaseSelection"
+      },
       "Bundle": {
         "properties": {
           "repository": {
@@ -5696,6 +5938,18 @@
       },
       "CaseRetryConfirmation": {
         "properties": {
+          "dataset_key": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Dataset Key"
+          },
+          "sample_id": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Sample Id"
+          },
           "source_round": {
             "type": "integer",
             "minimum": 1.0,
@@ -5705,7 +5959,20 @@
             "type": "string",
             "pattern": "^[a-f0-9]{64}$",
             "title": "Scope Sha256"
-          },
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "dataset_key",
+          "sample_id",
+          "source_round",
+          "scope_sha256"
+        ],
+        "title": "CaseRetryConfirmation"
+      },
+      "CaseTarget": {
+        "properties": {
           "dataset_key": {
             "type": "string",
             "maxLength": 128,
@@ -5722,12 +5989,10 @@
         "additionalProperties": false,
         "type": "object",
         "required": [
-          "source_round",
-          "scope_sha256",
           "dataset_key",
           "sample_id"
         ],
-        "title": "CaseRetryConfirmation"
+        "title": "CaseTarget"
       },
       "CatalogRegistration": {
         "properties": {
@@ -6587,6 +6852,40 @@
           "request_id"
         ],
         "title": "Envelope[AppliedPlan]"
+      },
+      "Envelope_BatchCaseAccepted_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/BatchCaseAccepted"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "request_id"
+        ],
+        "title": "Envelope[BatchCaseAccepted]"
+      },
+      "Envelope_BatchCasePreview_": {
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/BatchCasePreview"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "request_id"
+        ],
+        "title": "Envelope[BatchCasePreview]"
       },
       "Envelope_CreatedConfig_": {
         "properties": {

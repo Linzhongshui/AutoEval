@@ -2136,3 +2136,17 @@ textarea { font: inherit; }
   .dataset-monitor-list summary .run-progress { grid-column: 2 / -1; }
   .dataset-monitor-history li { grid-template-columns: 1fr; }
 }
+
+.report-charts.dataset-axis-layout {grid-template-columns:minmax(0,1fr);gap:8px}
+.axis-figure {margin:0}
+.axis-scroll {overflow-x:auto;padding:24px 0 5px}
+.axis-plot {display:flex;padding-left:48px;position:relative}
+.axis-scale {position:absolute;left:0;top:0;height:160px;display:flex;flex-direction:column;justify-content:space-between;color:var(--muted);font-size:11px}
+.axis-scale span {height:0;line-height:0}
+.axis-group {flex:1;min-width:0;text-align:center}
+.axis-group strong,.axis-group>small {display:block;margin-top:8px;overflow-wrap:anywhere}
+.axis-bars {display:flex;justify-content:center;align-items:flex-end;gap:8px;height:160px;border-bottom:1px solid var(--border);background:repeating-linear-gradient(to bottom,var(--border) 0 1px,transparent 1px 25%)}
+.axis-bar {width:28%;max-width:54px;min-height:2px;position:relative;background:#5840fc;border-radius:4px 4px 0 0}
+.axis-bar.reference {background:#a4aec6}
+.axis-bar b {position:absolute;bottom:100%;left:50%;transform:translateX(-50%);font-size:12px}
+.dataset-axis-layout .performance-inline {display:flex;flex-direction:row;justify-content:flex-start;align-items:center;gap:8px;min-height:0;height:auto;padding:10px 16px;margin:0}

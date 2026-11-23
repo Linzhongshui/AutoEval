@@ -8,7 +8,8 @@ from typing import Any, Literal
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, or_, select
+from sqlalchemy import and_, case, cast, func, literal_column, or_, select
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import SQLAlchemyError
 
 from autoeval.analysis import ReportAnalysis, analysis_status_for
@@ -20,12 +21,13 @@ from autoeval.infrastructure.audit import record_audit
 from autoeval.infrastructure.models import EvaluationRun, RunSnapshot
 from autoeval.infrastructure.responses import Envelope, PageEnvelope
 from autoeval.reporting.report_integrity import verified_report_body
-from autoeval.reporting.report_view import report_data
+from autoeval.reporting.report_view import ACCURACY_DATASETS, report_data, report_task_type
 
 router = APIRouter(prefix="/api/autoeval/v1/reports", tags=["reports"])
 
 
 class ReportView(BaseModel):
+    task_type: Literal["accuracy", "performance", "other"]
     dataset_concurrency: int | None = None
     dataset_results: list[dict] | None = None
     id: str
@@ -59,6 +61,41 @@ class ReviewInput(BaseModel):
     note: str | None = Field(default=None, max_length=1000)
 
 
+def task_type_condition(task_type):
+    frozen = RunSnapshot.canonical_body
+    children = frozen["inputs"]["tasks"]
+    tasks = case(
+        (func.jsonb_typeof(children) == "array", children), else_=literal_column("'[]'::jsonb")
+    )
+    item = func.jsonb_array_elements(tasks).table_valued("value").alias("task")
+    child = cast(item.c.value, JSONB)
+
+    def all_in(field, values):
+        return ~select(1).select_from(item).where(func.coalesce(field, "").notin_(values)).exists()
+
+    category = case(
+        (frozen["task_type"].astext.in_(["performance", "accuracy"]), frozen["task_type"].astext),
+        (frozen.has_key("task_type"), "other"),
+        (func.jsonb_typeof(children).notin_(["array", "null"]), "other"),
+        (
+            func.jsonb_array_length(tasks) > 0,
+            case(
+                (
+                    all_in(
+                        child["compilation"]["config"]["subcommand"].astext, ["agentx", "llm_perf"]
+                    ),
+                    "performance",
+                ),
+                (all_in(child["dataset"].astext, ACCURACY_DATASETS), "accuracy"),
+                else_="other",
+            ),
+        ),
+        (frozen["dataset_key"].astext.in_(ACCURACY_DATASETS), "accuracy"),
+        else_="other",
+    )
+    return category == task_type
+
+
 @router.get("", response_model=PageEnvelope[ReportView])
 async def catalog(
     request: Request,
@@ -66,6 +103,7 @@ async def catalog(
     limit: int = 20,
     summary_only: bool = False,
     review_status: str | None = None,
+    task_type: Literal["accuracy", "performance", "other"] | None = None,
 ):
 
     if offset < 0 or not 1 <= limit <= 200:
@@ -92,6 +130,7 @@ async def catalog(
                             else []
                         ),
                     )
+                    .where(task_type_condition(task_type) if task_type else True)
                     .order_by(EvaluationReport.created_at.desc(), EvaluationReport.id.desc())
                     .offset(offset)
                     .limit(limit + 1)
@@ -188,7 +227,9 @@ async def detail(report_id: uuid.UUID, request: Request):
                 select(ReportAnalysis).where(ReportAnalysis.report_id == report_id)
             )
 
-            status, body = await verified_report_body(request.app.state.settings, *row)
+            status, body = await verified_report_body(
+                request.app.state.settings, *row, verify_performance_bytes=True
+            )
             data = report_data(
                 *row,
                 baselines,
@@ -209,6 +250,39 @@ async def detail(report_id: uuid.UUID, request: Request):
     return {"data": data, "request_id": request.state.request_id}
 
 
+@router.get("/{report_id}/performance-csv")
+async def performance_csv(report_id: uuid.UUID, path: str, request: Request):
+    from pathlib import PurePosixPath
+    from urllib.parse import quote
+
+    from fastapi.responses import StreamingResponse
+
+    from autoeval.reporting.performance import verified_csv
+
+    # Apply the same catalog visibility and report integrity checks as the detail page.
+    view = (await detail(report_id, request))["data"]
+    if view["task_type"] != "performance" or view["evidence_status"] != "verified":
+        raise HTTPException(409, "性能报告证据不可用")
+    async with request.app.state.sessions() as session:
+        report = await session.get(EvaluationReport, report_id)
+        try:
+            stream = await asyncio.to_thread(verified_csv, request.app.state.settings, report, path)
+        except KeyError as exc:
+            raise HTTPException(404, "该报告中没有指定 CSV") from exc
+        except (BotoCoreError, ClientError, ValueError) as exc:
+            raise HTTPException(409, "CSV 证据不可用") from exc
+
+    def chunks():
+        with stream:
+            while chunk := stream.read(65536):
+                yield chunk
+
+    name = quote(PurePosixPath(path).name, safe="")
+    return StreamingResponse(chunks(), media_type="text/csv", headers={
+        "Content-Disposition": "attachment; filename*=UTF-8''" + name,
+    })
+
+
 @router.post("/{report_id}/review", response_model=Envelope[dict])
 async def review(report_id: uuid.UUID, body: ReviewInput, request: Request):
     """Mark one immutable report as an approved history source; never edits evidence."""
@@ -225,6 +299,8 @@ async def review(report_id: uuid.UUID, body: ReviewInput, request: Request):
             )
             if run is None or snapshot is None:
                 raise HTTPException(409, "Report source is unavailable")
+            if report_task_type(snapshot.canonical_body) == "performance":
+                raise HTTPException(409, "性能报告不参与精度历史评审")
             previous = row.review_status
             if body.decision == "approve":
                 if previous == "approved":

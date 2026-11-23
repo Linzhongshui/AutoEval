@@ -1292,7 +1292,15 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PlanInput"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/PlanInput"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PerformanceTask"
+                  }
+                ],
+                "title": "Body"
               }
             }
           },
@@ -2256,7 +2264,15 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SubmitTask"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SubmitTask"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PerformanceTask"
+                  }
+                ],
+                "title": "Body"
               }
             }
           }
@@ -5078,6 +5094,27 @@
               ],
               "title": "Review Status"
             }
+          },
+          {
+            "name": "task_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "accuracy",
+                    "performance",
+                    "other"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Task Type"
+            }
           }
         ],
         "responses": {
@@ -5131,6 +5168,56 @@
                 "schema": {
                   "$ref": "#/components/schemas/Envelope_ReportView_"
                 }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/autoeval/v1/reports/{report_id}/performance-csv": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Performance Csv",
+        "operationId": "performance_csv_api_autoeval_v1_reports__report_id__performance_csv_get",
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Report Id"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -5465,6 +5552,79 @@
           "accepted"
         ],
         "title": "Accepted"
+      },
+      "AgentXPerformance": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "agentx",
+            "title": "Kind"
+          },
+          "variant": {
+            "type": "string",
+            "enum": [
+              "256k",
+              "full"
+            ],
+            "title": "Variant"
+          },
+          "run_mode": {
+            "type": "string",
+            "enum": [
+              "smoke",
+              "benchmark"
+            ],
+            "title": "Run Mode",
+            "default": "smoke"
+          },
+          "duration": {
+            "type": "integer",
+            "maximum": 86400.0,
+            "minimum": 1.0,
+            "title": "Duration"
+          },
+          "concurrency": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 256.0,
+                "minimum": 1.0
+              },
+              {
+                "items": {
+                  "type": "integer",
+                  "maximum": 256.0,
+                  "minimum": 1.0
+                },
+                "type": "array",
+                "maxItems": 256,
+                "minItems": 1
+              }
+            ],
+            "title": "Concurrency"
+          },
+          "trace_limit": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Limit"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "variant",
+          "duration",
+          "concurrency"
+        ],
+        "title": "AgentXPerformance"
       },
       "AppliedPlan": {
         "properties": {
@@ -7174,6 +7334,49 @@
         ],
         "title": "IdOnly"
       },
+      "InferencePerformance": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "inference",
+            "title": "Kind"
+          },
+          "input_tokens": {
+            "type": "integer",
+            "maximum": 1048576.0,
+            "minimum": 1.0,
+            "title": "Input Tokens"
+          },
+          "max_output_tokens": {
+            "type": "integer",
+            "maximum": 1048576.0,
+            "minimum": 1.0,
+            "title": "Max Output Tokens"
+          },
+          "concurrency": {
+            "type": "integer",
+            "maximum": 256.0,
+            "minimum": 1.0,
+            "title": "Concurrency"
+          },
+          "requests": {
+            "type": "integer",
+            "maximum": 100000.0,
+            "minimum": 1.0,
+            "title": "Requests"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "input_tokens",
+          "max_output_tokens",
+          "concurrency",
+          "requests"
+        ],
+        "title": "InferencePerformance"
+      },
       "JobAccepted": {
         "properties": {
           "id": {
@@ -7755,6 +7958,57 @@
         ],
         "title": "Parameters"
       },
+      "PerformanceTask": {
+        "properties": {
+          "resource_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Resource Id"
+          },
+          "resource_kind": {
+            "type": "string",
+            "const": "customer_ssh",
+            "title": "Resource Kind"
+          },
+          "target_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Target Id"
+          },
+          "performance": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/InferencePerformance"
+              },
+              {
+                "$ref": "#/components/schemas/AgentXPerformance"
+              }
+            ],
+            "title": "Performance",
+            "discriminator": {
+              "propertyName": "kind",
+              "mapping": {
+                "agentx": "#/components/schemas/AgentXPerformance",
+                "inference": "#/components/schemas/InferencePerformance"
+              }
+            }
+          },
+          "ignore_budget": {
+            "type": "boolean",
+            "title": "Ignore Budget",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "resource_id",
+          "resource_kind",
+          "target_id",
+          "performance"
+        ],
+        "title": "PerformanceTask"
+      },
       "PlanInput": {
         "properties": {
           "resource_id": {
@@ -8135,6 +8389,15 @@
       },
       "ReportView": {
         "properties": {
+          "task_type": {
+            "type": "string",
+            "enum": [
+              "accuracy",
+              "performance",
+              "other"
+            ],
+            "title": "Task Type"
+          },
           "dataset_concurrency": {
             "anyOf": [
               {
@@ -8295,6 +8558,7 @@
         },
         "type": "object",
         "required": [
+          "task_type",
           "id",
           "run_id",
           "execution_kind",

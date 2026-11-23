@@ -1,10 +1,10 @@
 import uuid
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import Field, SecretStr, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field, SecretStr, field_validator, model_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -22,7 +22,17 @@ class Settings(BaseSettings):
     planning_container_config: str | None = None
     model_config = SettingsConfigDict(env_prefix="AE_", env_file=".env", extra="ignore")
     environment: Literal["development", "test", "production"] = "development"
-    auth_mode: Literal["local"] = "local"
+    auth_mode: Literal["local", "oauth"] = "local"
+    # 逗号分隔的纯文本列表（NoDecode 跳过 pydantic-settings 的 JSON 解码）
+    oauth_enabled_providers: Annotated[list[str], NoDecode] = ["github", "gitcode"]
+    admin_accounts: Annotated[list[str], NoDecode] = []
+    github_client_id: SecretStr = SecretStr("")
+    github_client_secret: SecretStr = SecretStr("")
+    gitcode_client_id: SecretStr = SecretStr("")
+    gitcode_client_secret: SecretStr = SecretStr("")
+    oauth_redirect_base: str = "http://127.0.0.1:8000"
+    frontend_origin: str = "http://127.0.0.1:5173"
+    session_ttl_hours: int = Field(default=168, ge=1, le=8760)
     database_url: SecretStr = SecretStr(
         "postgresql+asyncpg://autoeval:autoeval@127.0.0.1:5432/autoeval"
     )
@@ -51,12 +61,17 @@ class Settings(BaseSettings):
     allowed_model_hosts: list[str] = ["api.deepseek.com"]
     docker_executable: str = "docker"
 
+    @field_validator("oauth_enabled_providers", "admin_accounts", mode="before")
+    @classmethod
+    def split_csv_list(cls, value):
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        return value
+
     @model_validator(mode="after")
-    def local_only(self):
-        if self.environment == "production":
-            raise ValueError(
-                "Production identity is not implemented; local auth is development only"
-            )
+    def auth_mode_guard(self):
+        if self.environment == "production" and self.auth_mode == "local":
+            raise ValueError("Production requires OAuth identity; local auth is development only")
         return self
 
 

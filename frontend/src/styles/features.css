@@ -2150,3 +2150,58 @@ textarea { font: inherit; }
 .axis-bar.reference {background:#a4aec6}
 .axis-bar b {position:absolute;bottom:100%;left:50%;transform:translateX(-50%);font-size:12px}
 .dataset-axis-layout .performance-inline {display:flex;flex-direction:row;justify-content:flex-start;align-items:center;gap:8px;min-height:0;height:auto;padding:10px 16px;margin:0}
+
+/* ===== 身份与登录（GitHub / GitCode OAuth） ===== */
+.login-shell { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; background: #f5f6fc; }
+.login-page { width: 100%; display: flex; justify-content: center; }
+.login-card {
+  width: 420px; max-width: 100%; background: #fff; border: 1px solid var(--border);
+  border-radius: 14px; padding: 36px 32px 28px; box-shadow: 0 10px 30px #22224412;
+  display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center;
+}
+.login-logo { width: 46px; height: 46px; }
+.login-card h1 { margin: 6px 0 0; font-size: 22px; }
+.login-sub { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
+.login-loading { margin: 8px 0; color: var(--muted); font-size: 13px; }
+.login-error {
+  display: flex; align-items: flex-start; gap: 8px; width: 100%; text-align: left;
+  background: #fff4f3; border: 1px solid #f5c6c2; color: #a63a2e; border-radius: 9px;
+  padding: 10px 12px; font-size: 13px; line-height: 1.6; box-sizing: border-box;
+}
+.login-error svg { flex: none; margin-top: 2px; }
+.login-local { display: flex; flex-direction: column; align-items: center; gap: 12px; width: 100%; padding: 10px 0 4px; }
+.login-local p { margin: 0; color: var(--muted); font-size: 13px; }
+.login-actions { display: flex; flex-direction: column; gap: 10px; width: 100%; margin-top: 6px; }
+.login-button {
+  display: flex; align-items: center; gap: 12px; width: 100%; box-sizing: border-box;
+  padding: 12px 14px; border: 1px solid var(--border); border-radius: 9px;
+  background: #fafaff; font-size: 14px; font-weight: 600; color: inherit; text-decoration: none;
+}
+.login-button:hover { border-color: var(--primary); background: #f4f0ff; }
+.login-button svg { flex: none; }
+.login-button svg:last-child { margin-left: auto; color: var(--muted); }
+.login-foot { margin: 10px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+
+.breadcrumb-spacer { flex: 1; }
+.user-area { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.user-avatar {
+  width: 24px; height: 24px; border-radius: 50%; object-fit: cover; flex: none;
+  border: 1px solid var(--border); background: #eceafc;
+}
+.user-avatar-fallback {
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; color: var(--primary);
+}
+.user-name { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 13px; }
+.user-role {
+  font-size: 11px; font-weight: 700; color: #8a5b0c; background: #fdf3dd;
+  border: 1px solid #ecd9a8; border-radius: 999px; padding: 1px 8px; white-space: nowrap;
+}
+.user-logout {
+  display: inline-flex; align-items: center; gap: 5px; border: 0; background: none;
+  color: var(--muted); font-size: 12px; cursor: pointer; padding: 4px 6px; border-radius: 6px; white-space: nowrap;
+}
+.user-logout:hover { color: #a63a2e; background: #fff4f3; }
+@media (max-width: 650px) {
+  .user-area { flex-wrap: wrap; justify-content: flex-end; }
+}

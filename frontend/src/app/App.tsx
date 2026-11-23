@@ -34,6 +34,9 @@ import {
 import { Card } from "../shared/ui/Card";
 import { Badge } from "../shared/ui/Badge";
 import { Note } from "../shared/ui/Note";
+import { LoginPage } from "../features/identity/LoginPage";
+import { UserArea } from "../features/identity/UserArea";
+import { useCurrentUser, useGateProviders } from "../features/identity/useCurrentUser";
 import "../styles/index.css";
 
 const menus = [
@@ -56,6 +59,12 @@ export function App() {
   const [poolRevision, setPoolRevision] = useState(0);
   const poolPage = page === "config/ssh-pool" || page === "config/ssh-pool/add";
   const [toast, setToast] = useState("");
+  const { auth, refresh } = useCurrentUser();
+  const loginPage = page === "login" || page.startsWith("login?");
+  const loginError = page.startsWith("login?") ? new URLSearchParams(page.slice(6)).get("error") : null;
+  const providers = useGateProviders(auth.status === "guest");
+  const requiresLogin = auth.status === "guest" && providers !== null && providers.length > 0;
+  useEffect(() => { if (page !== "leaderboard") setCandidateScoresOpen(false); }, [page]);
   const evaluationPage = page === "tasks" || page.startsWith("run/") || page.startsWith("evaluate?");
   const go = (path: string) => {
     location.hash = path;
@@ -101,6 +110,28 @@ export function App() {
     "data-workbench": "评审报告成绩、维护榜单数据及导入官方来源。",
   };
 
+  if (auth.status === "loading") {
+    return <div className="login-shell"><p className="login-loading" role="status">正在校验登录状态…</p></div>;
+  }
+  if (loginPage) {
+    return (
+      <div className="login-shell">
+        <LoginPage error={loginError} onEnter={() => go("console")} />
+      </div>
+    );
+  }
+  if (auth.status === "guest" && providers === null) {
+    return <div className="login-shell"><p className="login-loading" role="status">正在读取登录方式…</p></div>;
+  }
+  if (requiresLogin) {
+    return (
+      <div className="login-shell">
+        <LoginPage error={null} onEnter={() => go("console")} />
+      </div>
+    );
+  }
+  const user = auth.status === "signed-in" ? auth.user : undefined;
+
   return (
     <div className="shell">
       <aside className="sidebar">
@@ -144,6 +175,12 @@ export function App() {
           <ChevronRight size={14} />
           <span>{title}</span>
           <Badge>单工作空间</Badge>
+          {user && (
+            <>
+              <span className="breadcrumb-spacer" />
+              <UserArea user={user} onLoggedOut={refresh} notify={setToast} />
+            </>
+          )}
         </div>
         <header className="page-heading">
           <div>

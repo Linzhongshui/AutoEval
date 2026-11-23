@@ -25,6 +25,7 @@ from autoeval.evaluation.fixture_pipeline import router as fixture_pipeline_rout
 from autoeval.evaluation.monitored_execution import router as monitored_router
 from autoeval.evaluation.runs import router as runs_router
 from autoeval.evaluation.task_monitor import router as task_monitor_router
+from autoeval.identity import router as identity_router
 from autoeval.infrastructure.audit import router as audit_router
 from autoeval.infrastructure.config import Settings, get_settings
 from autoeval.infrastructure.db import create_database
@@ -55,6 +56,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         await app.state.engine.dispose()
 
     app = FastAPI(title="AutoEval Backend", version="0.1.0", lifespan=lifespan)
+    app.include_router(identity_router)
     app.include_router(data_workbench_router)
     app.include_router(standard_inputs_router)
     app.include_router(unified_outputs_router)
@@ -81,13 +83,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(badcase_router)
     app.include_router(badcase_export_router)
 
-    @app.middleware('http')
+    @app.middleware("http")
     async def budget_entrypoints(request: Request, call_next):
-        if (settings.enforce_task_budget and settings.billing_execution_config and request.method == 'POST'
-                and request.url.path.rstrip('/') in {
-                    '/api/autoeval/v1/runs', '/api/autoeval/v1/aisbench-monitored/runs',
-                    '/api/autoeval/v1/planning/probes'}):
-            return JSONResponse({'detail': 'Active budget requires the unified evaluation-tasks flow; direct execution and paid probes are disabled'}, status_code=409)
+        if (
+            settings.enforce_task_budget
+            and settings.billing_execution_config
+            and request.method == "POST"
+            and request.url.path.rstrip("/")
+            in {
+                "/api/autoeval/v1/runs",
+                "/api/autoeval/v1/aisbench-monitored/runs",
+                "/api/autoeval/v1/planning/probes",
+            }
+        ):
+            return JSONResponse(
+                {
+                    "detail": "Active budget requires the unified evaluation-tasks flow; direct execution and paid probes are disabled"
+                },
+                status_code=409,
+            )
         return await call_next(request)
 
     @app.middleware("http")

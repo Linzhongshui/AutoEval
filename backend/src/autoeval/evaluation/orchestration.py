@@ -26,7 +26,11 @@ from autoeval.evaluation.models import (
     ExecutionShardEnvironment,
 )
 from autoeval.evaluation.resource_allocation import acquire, demand_for, release, resource_for_task
-from autoeval.evaluation.resume_budget import follow_up_budget_blocker, follow_up_target_blocker
+from autoeval.evaluation.resume_budget import (
+    follow_up_budget_blocker,
+    follow_up_target_blocker,
+    round_budget_snapshot,
+)
 from autoeval.evaluation.resume_evidence import ConfirmedEvidenceChanged, verify_confirmed_reuse
 from autoeval.infrastructure.config import get_settings
 from autoeval.infrastructure.contracts import JobRef
@@ -113,8 +117,11 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None, *, round_i
         if not snapshot or snapshot.sha256 != digest(snapshot.canonical_body):
             raise ValueError("Frozen snapshot integrity mismatch")
         frozen = snapshot.canonical_body
-        if round_id is not None and existing_run.cancel_requested_at is None:
-            current = await session.get_one(ExecutionRound, round_id)
+        execution_snapshot = frozen
+        current = await session.get_one(ExecutionRound, round_id) if round_id else None
+        if current is not None:
+            execution_snapshot = round_budget_snapshot(frozen, current.operation, current.created_at)
+        if current is not None and existing_run.cancel_requested_at is None:
             started = await session.scalar(
                 job_query.where(ExecutionShard.started_at.is_not(None)).limit(1)
             )
@@ -179,7 +186,7 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None, *, round_i
                 from pathlib import Path
 
                 deadline = datetime.fromisoformat(
-                    frozen["model_budget"]["execution_deadline"]
+                    execution_snapshot["model_budget"]["execution_deadline"]
                     if ignore_budget
                     else (frozen.get("model_budget") or {}).get("deadline")
                     or json.loads(Path(budget_config).read_text())["deadline"]
@@ -361,7 +368,7 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None, *, round_i
                 if round_id:
                     blocker = await follow_up_target_blocker(session, settings, frozen)
                     blocker = blocker or await follow_up_budget_blocker(
-                        session, settings, run_id, frozen
+                        session, settings, run_id, execution_snapshot
                     )
                     if blocker:
                         stored = await session.get_one(type(child), child.id, with_for_update=True)

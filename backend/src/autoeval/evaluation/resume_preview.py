@@ -90,6 +90,8 @@ async def preview_scope(session, settings, run, operation, target):
             break
     if environments_pending or any(not released for released in leases.values()):
         blockers.append("cleanup_pending")
+    manual_retry = operation == "case_retry" and bool(target)
+    warnings = []
     shards = []
     rows = []
     for task in snapshot.canonical_body["inputs"]["tasks"]:
@@ -137,9 +139,20 @@ async def preview_scope(session, settings, run, operation, target):
                     **asdict(decision),
                 }
             )
-            if decision.category != "unknown" and (
-                operation == "case_retry" or decision.category != "reusable"
-            ):
+            if decision.category == "unknown":
+                if (
+                    manual_retry
+                    and decision.reason == "dispatch_unresolved"
+                    and job is not None
+                    and same_sample
+                    and job.state in {"failed", "cancelled"}
+                    and not any(record.state == "started" for record in records)
+                ):
+                    selected.add(identity[1])
+                    warnings.append("previous_dispatch_unknown")
+                elif "samples_unresolved" not in blockers:
+                    blockers.append("samples_unresolved")
+            elif manual_retry or decision.category != "reusable":
                 selected.add(identity[1])
         if task.get("execution_template") and (
             selected or (target and target["dataset_key"] == task["dataset"])
@@ -148,13 +161,15 @@ async def preview_scope(session, settings, run, operation, target):
                 current = execution_template(settings, task["assigned_resource_id"], task)
             except (KeyError, ValueError, OSError):
                 current = None
-            if current != task["execution_template"] and "resource_changed" not in blockers:
-                blockers.append("resource_changed")
+            if current != task["execution_template"]:
+                if manual_retry and current and selected:
+                    task = {**task, "execution_template": current}
+                    warnings.append("using_current_template")
+                elif "resource_changed" not in blockers:
+                    blockers.append("resource_changed")
         shards.extend(remaining_payloads(task, selected))
     if target and not rows:
         raise HTTPException(404, "Sample not in frozen selection")
-    if any(row["category"] == "unknown" for row in rows):
-        blockers.append("samples_unresolved")
     if shards and not blockers:
         target_blocker = await follow_up_target_blocker(session, settings, snapshot.canonical_body)
         if target_blocker:
@@ -172,6 +187,10 @@ async def preview_scope(session, settings, run, operation, target):
         "blockers": blockers,
         "sample_count": sum(len(shard["samples"]) for shard in shards),
     }
+    if warnings:
+        selection["warnings"] = warnings
+    if "using_current_template" in warnings:
+        selection["execution_template_sha256"] = digest(shards[0]["execution_template"])
     return ConfirmedScope(
         snapshot.sha256, digest({"snapshot": snapshot.sha256, **selection}), selection, shards
     )

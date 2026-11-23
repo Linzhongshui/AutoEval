@@ -2292,6 +2292,8 @@ export interface components {
             samples: components["schemas"]["FollowUpSample"][];
             /** Blockers */
             blockers: string[];
+            /** Warnings */
+            warnings?: string[];
             /** Sample Count */
             sample_count: number;
             /** Scope Sha256 */

@@ -74,7 +74,7 @@ npm run dev
 | 看到的现象 | 从哪里查起 |
 | --- | --- |
 | 页面能打开，任务一直“已接收” | 检查分发器是否投递、目标 Temporal 队列是否有对应 Worker，再看执行资源容量及对账记录。[后端进程](backend/README.md#后台进程) |
-| 单 Case 重试无法确认 | 按任务、数据集和样本 ID 核对预览。若提示 `resource_changed`，比对当前节点与冻结模板；若提示 `samples_unresolved`，先查历史作业与请求回执，避免重复发送。[续跑受理条件](backend/README.md#续跑与单-case-重试) |
+| 单 Case 重试无法确认 | 按任务、数据集和样本 ID 核对预览。若旧作业已结束并清理，确认弹窗会提示兼容的资源配置变更和历史请求可能产生的重复费用。仍提示 `resource_changed` 或 `samples_unresolved` 时，核对资源模板、作业状态和样本身份。[续跑受理条件](backend/README.md#续跑与单-case-重试) |
 | 报告缺成绩或没有基线差值 | 查看数据集清单范围、评分、当前证据和基线匹配状态，再查对象存储与归档记录。[报告恢复](docs/task-report-recovery.md) · [标准输入](docs/standard-inputs.md) |
 | 找不到 Harbor 轨迹或首次访问要求登录 | 核对 Langfuse 导入状态、worker 和私有记录访问权限。公开演示与私有正文记录的区别见[接入说明](docs/langfuse-integration.md)和[演示验收记录](docs/automationbench-langfuse-acceptance-2026-11-17.md)。 |
 

@@ -30,7 +30,7 @@ docker image inspect --format '{{.Id}}' autoeval/performance:842d0dd6
 }
 ```
 
-普通推理只需要对应模型的 tokenizer。AgentX 须在 `/data/weka/256k/traces.jsonl` 或 `/data/weka/full/traces.jsonl` 提供匹配的官方语料。预检核对语料 SHA-256、固定 AISBench 版本、适配器摘要、tokenizer 与 AgentX 的 dry-run。使用本地语料时上游决定可比范围。详见[上游固定版本文档](https://github.com/AISBench/benchmark/blob/842d0dd6b87a3a8620b6931aafa1b9089d91485f/docs/source_zh_cn/extended_benchmark/agentx/agentx.md)。
+普通推理只需要对应模型的 tokenizer。AgentX 须在 `/data/weka/256k/traces.jsonl` 或 `/data/weka/full/traces.jsonl` 提供匹配的官方语料。预检核对语料 SHA-256、固定 AISBench 版本、适配器摘要、tokenizer 与 AgentX 的 dry-run。本地语料的有效 benchmark 结果仅供内部对比（`internal_only`）；冒烟作业按 `smoke` 单独记录。控制台按档位数和每档秒数显示配置的测量总时长，预热、档间冷却和归档另计。详见[上游固定版本文档](https://github.com/AISBench/benchmark/blob/842d0dd6b87a3a8620b6931aafa1b9089d91485f/docs/source_zh_cn/extended_benchmark/agentx/agentx.md)。
 
 ## 参数与报告
 

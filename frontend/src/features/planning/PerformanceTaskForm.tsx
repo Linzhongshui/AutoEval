@@ -43,6 +43,12 @@ export function PerformanceTaskForm({ poolRevision, onManagePool }: Props) {
   const pending = useRef<{ body: string; key: string } | null>(null);
   const form = useRef<HTMLFormElement>(null);
   const levels = sessions.trim().split(/[,，\s]+/).map(Number);
+  const validLevels = levels.every(n => Number.isInteger(n) && n >= 1 && n <= 256)
+    && new Set(levels).size === levels.length;
+  const perLevel = Number(seconds);
+  const validDuration = Number.isInteger(perLevel) && perLevel >= (mode === "benchmark" ? 900 : 1)
+    && perLevel <= 86400;
+  const measurementSeconds = perLevel * levels.length;
   const body = JSON.stringify({ target_id: target, resource_id: resource, resource_kind: "customer_ssh",
     performance: kind === "inference"
       ? { kind, input_tokens: Number(input), max_output_tokens: Number(output), requests: Number(requests), concurrency: Number(parallel) }
@@ -71,7 +77,7 @@ export function PerformanceTaskForm({ poolRevision, onManagePool }: Props) {
   const ready = verifiedBody === body && check?.state === "completed" && check.result?.execution_ready;
   async function act(submit: boolean) {
     if (busy || !form.current?.reportValidity() || (submit && !ready)) return;
-    if (kind === "agentx" && (levels.some(n => !Number.isInteger(n) || n < 1 || n > 256) || new Set(levels).size !== levels.length)) {
+    if (kind === "agentx" && !validLevels) {
       setMessage("请输入 1 至 256 之间的不同并发数，多个档位用逗号分隔。"); return;
     }
     setBusy(true); setMessage("");
@@ -111,10 +117,19 @@ export function PerformanceTaskForm({ poolRevision, onManagePool }: Props) {
       <label className="select-field">Weka 语料<select aria-label="Weka 语料" value={variant} onChange={e => setVariant(e.target.value)}><option>256k</option><option>full</option></select></label>
       <label className="select-field">运行模式<select aria-label="运行模式" value={mode} onChange={e => { setMode(e.target.value); setSeconds(e.target.value === "smoke" ? "60" : "900"); }}><option value="smoke">smoke · 链路验证</option><option value="benchmark">benchmark · 正式测评</option></select></label>
       <label className="select-field">会话并发档位<input required value={sessions} placeholder="例如 1,4,8" onChange={e => setSessions(e.target.value)} /></label>
-      <NumberField label="运行时长（秒）" value={seconds} set={setSeconds} min={mode === "benchmark" ? 900 : 1} max={86400} />
+      <NumberField label="每档测量时长（秒）" value={seconds} set={setSeconds} min={mode === "benchmark" ? 900 : 1} max={86400} />
       {mode === "smoke" && <label className="select-field">Trace 数量上限（可选）<input type="number" min="1" value={traces} onChange={e => setTraces(e.target.value)} /></label>}
     </>}
     </div>
+    {kind === "agentx" && <div className="muted" aria-live="polite">
+      <p>{mode === "benchmark"
+        ? "当前使用本地 Weka 语料。有效的 benchmark 结果仅供内部对比（internal_only）。"
+        : "smoke 用于验证回放链路，报告的可比范围为 smoke。"}</p>
+      {validLevels && validDuration && <p>
+        {levels.length} 档 × 每档 {perLevel} 秒，配置的测量时长合计 {measurementSeconds % 60 === 0
+          ? `${measurementSeconds / 60} 分钟` : `${measurementSeconds} 秒`}。预热、档间冷却和归档另计。
+      </p>}
+    </div>}
     <div className="inline"><button type="button" disabled={busy || checking} onClick={() => void act(false)}>环境预检</button>
       <button className="primary" disabled={busy || !ready}>提交性能测评</button></div>
     {check && <p role="status">{checking ? "正在检查执行环境…" : ready ? "环境检查通过" : ["环境检查未通过", check.result?.reason, ...(check.result?.blocking_reasons || []), ...(check.result?.dataset_checks || []).flatMap(row => row.blocking_reasons)].filter(Boolean).join(" · ")}</p>}

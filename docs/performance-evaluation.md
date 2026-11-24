@@ -41,4 +41,4 @@ docker image inspect --format '{{.Id}}' autoeval/performance:842d0dd6
 
 两个请求均需同时提供 `target_id`、`resource_id` 和 `resource_kind="customer_ssh"`。AgentX 的 `concurrency` 可为单个并发数，也可为按顺序执行的档位列表（如 `[1,4]`）。一份报告按档位展示指标、可比范围与 CSV。正式 AgentX 每档至少 900 秒，仅 smoke 接受 trace 数上限。启用预算代理时需为对应目标和数据集标识（`Synthetic` 或 `AgentX`）配置 evaluation grant。报告注明是否经预算网关。
 
-报告管理支持精度、性能及其他类型筛选。性能报告按原生文件归档配置、指标、单位、分位数及 CSV 预览；原始 CSV 下载会校验内容摘要。缺失文件、解析失败与 smoke 范围分别显示。平台的规划用吞吐曲线保持独立。首次真实验收记录了节点、镜像、参数、任务和报告 ID、原生 CSV 摘要及逐项指标核对结果。[普通推理与 AgentX smoke 验收](performance-acceptance-2026-11-23.md)
+报告管理可按任务类型、模型和分析状态组合筛选，也可搜索模型名、任务 ID 或报告 ID。`GET /api/autoeval/v1/reports` 接受 `task_type`、`model`、`analysis_status`、`query`、`offset` 和 `limit`，返回匹配总数、当前页及筛选选项。性能报告按原生文件归档配置、指标、单位、分位数及 CSV 预览；原始 CSV 下载会校验内容摘要。缺失文件、解析失败与 smoke 范围分别显示。平台的规划用吞吐曲线保持独立。首次真实验收记录了节点、镜像、参数、任务和报告 ID、原生 CSV 摘要及逐项指标核对结果。[普通推理与 AgentX smoke 验收](performance-acceptance-2026-11-23.md)

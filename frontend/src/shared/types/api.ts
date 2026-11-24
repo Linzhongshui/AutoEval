@@ -2556,15 +2556,6 @@ export interface components {
             /** Request Id */
             request_id: string;
         };
-        /** PageEnvelope[ReportView] */
-        PageEnvelope_ReportView_: {
-            /** Data */
-            data: components["schemas"]["ReportView"][];
-            /** Next Offset */
-            next_offset: number | null;
-            /** Request Id */
-            request_id: string;
-        };
         /** PageEnvelope[RunListItem] */
         PageEnvelope_RunListItem_: {
             /** Data */
@@ -2780,6 +2771,25 @@ export interface components {
             binding_key: string;
             /** Container Name */
             container_name: string;
+        };
+        /** ReportFilters */
+        ReportFilters: {
+            /** Models */
+            models: string[];
+            /** Analysis Statuses */
+            analysis_statuses: string[];
+        };
+        /** ReportPage */
+        ReportPage: {
+            /** Data */
+            data: components["schemas"]["ReportView"][];
+            /** Next Offset */
+            next_offset: number | null;
+            /** Total */
+            total: number;
+            /** Request Id */
+            request_id: string;
+            filters: components["schemas"]["ReportFilters"];
         };
         /** ReportView */
         ReportView: {
@@ -6431,6 +6441,9 @@ export interface operations {
                 offset?: number;
                 limit?: number;
                 summary_only?: boolean;
+                model?: string | null;
+                analysis_status?: string | null;
+                query?: string | null;
                 review_status?: string | null;
                 task_type?: ("accuracy" | "performance" | "other") | null;
             };
@@ -6446,7 +6459,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PageEnvelope_ReportView_"];
+                    "application/json": components["schemas"]["ReportPage"];
                 };
             };
             /** @description Validation Error */

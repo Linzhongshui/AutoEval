@@ -16,7 +16,6 @@ from autoeval.reporting.report_view import report_task_type
 from autoeval_runtime import performance_adapter as adapter
 from autoeval_runtime.planning_runtime import validate_spec
 
-
 HISTORICAL_TYPES = [
     ({"inputs": {"tasks": [{"compilation": {"config": None}, "dataset": "GPQA"}]}}, "accuracy"),
     ({"inputs": {"tasks": [{"compilation": {"config": None}}]}}, "other"),
@@ -440,5 +439,16 @@ async def test_performance_submission_and_report_catalog_postgres(tmp_path, monk
                     if reports:
                         assert reports[0]["evidence_status"] == "verified"
                         assert reports[0]["summary"]["performance"]["config"] == body["performance"]
+                url = "/api/autoeval/v1/reports"
+                filters = {"task_type": "performance", "model": "fixture", "query": str(run)[:12]}
+                first = (await client.get(url, params=filters)).json()
+                assert first["total"] == 1 and first["next_offset"] is None
+                state = first["data"][0]["analysis_status"]
+                assert "fixture" in first["filters"]["models"]
+                assert state in first["filters"]["analysis_statuses"]
+                for extra in ({"analysis_status": "failed"}, {"query": "%"}, {"model": "absent"}):
+                    assert (await client.get(url, params=filters | extra)).json()["total"] == 0
+                empty = (await client.get(url, params=filters | {"analysis_status": state, "offset": 1})).json()
+                assert empty["data"] == [] and empty["total"] == 1
         finally:
             await tx.rollback()

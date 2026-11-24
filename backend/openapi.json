@@ -5080,6 +5080,54 @@
             }
           },
           {
+            "name": "model",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model"
+            }
+          },
+          {
+            "name": "analysis_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Analysis Status"
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Query"
+            }
+          },
+          {
             "name": "review_status",
             "in": "query",
             "required": false,
@@ -5123,7 +5171,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PageEnvelope_ReportView_"
+                  "$ref": "#/components/schemas/ReportPage"
                 }
               }
             }
@@ -7837,39 +7885,6 @@
         ],
         "title": "PageEnvelope[PlannedRunItem]"
       },
-      "PageEnvelope_ReportView_": {
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/ReportView"
-            },
-            "type": "array",
-            "title": "Data"
-          },
-          "next_offset": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Next Offset"
-          },
-          "request_id": {
-            "type": "string",
-            "title": "Request Id"
-          }
-        },
-        "type": "object",
-        "required": [
-          "data",
-          "next_offset",
-          "request_id"
-        ],
-        "title": "PageEnvelope[ReportView]"
-      },
       "PageEnvelope_RunListItem_": {
         "properties": {
           "data": {
@@ -8386,6 +8401,72 @@
           "container_name"
         ],
         "title": "RegisterExecutor"
+      },
+      "ReportFilters": {
+        "properties": {
+          "models": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Models"
+          },
+          "analysis_statuses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Analysis Statuses"
+          }
+        },
+        "type": "object",
+        "required": [
+          "models",
+          "analysis_statuses"
+        ],
+        "title": "ReportFilters"
+      },
+      "ReportPage": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/ReportView"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "next_offset": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Offset"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/ReportFilters"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "next_offset",
+          "total",
+          "request_id",
+          "filters"
+        ],
+        "title": "ReportPage"
       },
       "ReportView": {
         "properties": {

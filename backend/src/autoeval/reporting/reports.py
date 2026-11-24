@@ -8,7 +8,7 @@ from typing import Any, Literal
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, case, cast, func, literal_column, or_, select
+from sqlalchemy import String, and_, case, cast, func, literal_column, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -19,7 +19,7 @@ from autoeval.catalog.models import BenchmarkBaseline
 from autoeval.evaluation.models import EvaluationReport
 from autoeval.infrastructure.audit import record_audit
 from autoeval.infrastructure.models import EvaluationRun, RunSnapshot
-from autoeval.infrastructure.responses import Envelope, PageEnvelope
+from autoeval.infrastructure.responses import Envelope, TotalPageEnvelope
 from autoeval.reporting.report_integrity import verified_report_body
 from autoeval.reporting.report_view import ACCURACY_DATASETS, report_data, report_task_type
 
@@ -94,12 +94,24 @@ def task_type_expression(frozen):
     )
 
 
-@router.get("", response_model=PageEnvelope[ReportView])
+class ReportFilters(BaseModel):
+    models: list[str]
+    analysis_statuses: list[str]
+
+
+class ReportPage(TotalPageEnvelope[ReportView]):
+    filters: ReportFilters
+
+
+@router.get("", response_model=ReportPage)
 async def catalog(
     request: Request,
     offset: int = 0,
     limit: int = 20,
     summary_only: bool = False,
+    model: str | None = None,
+    analysis_status: str | None = None,
+    query: str | None = None,
     review_status: str | None = None,
     task_type: Literal["accuracy", "performance", "other"] | None = None,
 ):
@@ -111,60 +123,61 @@ async def catalog(
 
     try:
         async with request.app.state.sessions() as session:
-            rows = (
-                await session.execute(
-                    select(EvaluationReport, EvaluationRun, RunSnapshot)
-                    .join(EvaluationRun, EvaluationRun.id == EvaluationReport.run_id)
-                    .join(RunSnapshot, RunSnapshot.run_id == EvaluationRun.id)
-                    .where(
-                        EvaluationRun.trigger_scope.in_(
-                            ["local-operator:evaluation", "local-operator:orchestration"]
-                        ),
-                        EvaluationReport.is_current,
-                        EvaluationReport.execution_origin == "real",
-                        *(
-                            [EvaluationReport.review_status == review_status]
-                            if review_status
-                            else []
-                        ),
-                    )
-                    .where(task_type_expression(RunSnapshot.canonical_body) == task_type if task_type else True)
-                    .order_by(EvaluationReport.created_at.desc(), EvaluationReport.id.desc())
-                    .offset(offset)
-                    .limit(limit + 1)
-                )
-            ).all()
-
-            baselines = (await session.scalars(select(BenchmarkBaseline))).all()
-
-            selected = rows[:limit]
-
-            analyses = (
-                (
-                    await session.scalars(
-                        select(ReportAnalysis).where(
-                            ReportAnalysis.report_id.in_([row[0].id for row in selected])
-                        )
-                    )
-                ).all()
-                if selected
-                else []
+            model_name = RunSnapshot.canonical_body["remote_model"].astext
+            status = func.coalesce(
+                ReportAnalysis.state, analysis_status_for(None, request.app.state.settings)
             )
-
-            jobs = {job.report_id: job for job in analyses}
+            catalog_query = (
+                select(EvaluationReport, EvaluationRun, RunSnapshot, ReportAnalysis)
+                .select_from(EvaluationReport)
+                .join(EvaluationRun, EvaluationRun.id == EvaluationReport.run_id)
+                .join(RunSnapshot, RunSnapshot.run_id == EvaluationRun.id)
+                .outerjoin(ReportAnalysis, ReportAnalysis.report_id == EvaluationReport.id)
+                .where(
+                    EvaluationRun.trigger_scope.in_(
+                        ["local-operator:evaluation", "local-operator:orchestration"]
+                    ),
+                    EvaluationReport.is_current,
+                    EvaluationReport.execution_origin == "real",
+                )
+            )
+            if review_status:
+                catalog_query = catalog_query.where(EvaluationReport.review_status == review_status)
+            if task_type:
+                catalog_query = catalog_query.where(
+                    task_type_expression(RunSnapshot.canonical_body) == task_type
+                )
+            options = (await session.execute(
+                catalog_query.with_only_columns(model_name, status).distinct()
+            )).all()
+            if model:
+                catalog_query = catalog_query.where(model_name == model)
+            if analysis_status:
+                catalog_query = catalog_query.where(status == analysis_status)
+            if query:
+                searchable = func.concat_ws(
+                    " ", cast(EvaluationReport.id, String), cast(EvaluationRun.id, String), model_name
+                )
+                catalog_query = catalog_query.where(searchable.icontains(query, autoescape=True))
+            total = await session.scalar(catalog_query.with_only_columns(func.count()))
+            selected = (await session.execute(
+                catalog_query.order_by(EvaluationReport.created_at.desc(), EvaluationReport.id.desc())
+                .offset(offset).limit(limit)
+            )).all()
+            baselines = (await session.scalars(select(BenchmarkBaseline))).all()
 
         semaphore = asyncio.Semaphore(8)
 
         async def check(row):
             async with semaphore:
-                return await verified_report_body(request.app.state.settings, *row)
+                return await verified_report_body(request.app.state.settings, *row[:3])
 
         evidence = await asyncio.gather(*(check(row) for row in selected))
         data = []
         for row, (status, body) in zip(selected, evidence, strict=True):
-            job = jobs.get(row[0].id)
+            job = row[3]
             item = report_data(
-                *row,
+                *row[:3],
                 baselines,
                 analysis_status=analysis_status_for(
                     job,
@@ -182,7 +195,12 @@ async def catalog(
 
     return {
         "data": data,
-        "next_offset": offset + limit if len(rows) > limit else None,
+        "total": total,
+        "filters": {
+            "models": sorted({name for name, _ in options if name}),
+            "analysis_statuses": sorted({state for _, state in options}),
+        },
+        "next_offset": offset + limit if offset + limit < total else None,
         "request_id": request.state.request_id,
     }
 

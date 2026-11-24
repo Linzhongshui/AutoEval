@@ -132,16 +132,24 @@ def test_filter_and_view_performance_csv(browser_page):
         next_offset = None
         if incoming.path.endswith("/reports"):
             params = parse_qs(incoming.query)
-            filters.append(params.get("task_type", [""])[0])
-            if params.get("offset") == ["7"]:
-                data = [row]
-            else:
-                data = [
-                    *[{**row, "id": f"older-{i}"} for i in range(5)],
-                    {**row, "id": "other-model", "remote_model": "Another model"},
-                    {**row, "id": "other-analysis", "analysis_status": "completed"},
-                ]
-                next_offset = 7
+            filters.append(params)
+            records = [
+                *[{**row, "id": f"older-{i}"} for i in range(5)],
+                {**row, "id": "other-model", "remote_model": "Another model"},
+                {**row, "id": "other-analysis", "analysis_status": "completed"},
+                row,
+            ]
+            for param, field in (("model", "remote_model"), ("analysis_status", "analysis_status")):
+                if param in params:
+                    records = [r for r in records if r[field] == params[param][0]]
+            offset, limit = int(params["offset"][0]), int(params["limit"][0])
+            route.fulfill(json={
+                "data": records[offset:offset + limit],
+                "total": len(records),
+                "next_offset": offset + limit if offset + limit < len(records) else None,
+                "filters": {"models": ["Another model", "Fixture"], "analysis_statuses": ["not_requested", "completed"]},
+            })
+            return
         elif incoming.path.endswith("/reports/perf"):
             data = row
         else:
@@ -155,6 +163,7 @@ def test_filter_and_view_performance_csv(browser_page):
     page.get_by_label("分析状态").select_option("not_requested")
     page.get_by_label("报告每页条数").select_option("5")
     expect(page.get_by_text("共 6 条 · 第 1 / 2 页")).to_be_visible()
+    assert all(request["offset"] == ["0"] for request in filters)
     page.get_by_role("button", name="下一页").click()
     expect(page.get_by_text("共 6 条 · 第 2 / 2 页")).to_be_visible()
     page.get_by_role("button", name="查看报告").click()
@@ -163,4 +172,7 @@ def test_filter_and_view_performance_csv(browser_page):
     expect(page.get_by_role("link", name="下载 agentx_summary.csv")).to_have_attribute(
         "href", "/api/autoeval/v1/reports/perf/performance-csv?path=agentx_summary.csv"
     )
-    assert "performance" in filters
+    assert filters[-1] == {
+        "summary_only": ["true"], "task_type": ["performance"], "model": ["Fixture"],
+        "analysis_status": ["not_requested"], "limit": ["5"], "offset": ["5"],
+    }

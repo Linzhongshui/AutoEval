@@ -26,10 +26,12 @@ from autoeval.evaluation.monitored_execution import router as monitored_router
 from autoeval.evaluation.runs import router as runs_router
 from autoeval.evaluation.task_monitor import router as task_monitor_router
 from autoeval.identity import router as identity_router
+from autoeval.identity.admin import router as admin_router
 from autoeval.identity.guards import require_admin, require_user
 from autoeval.infrastructure.audit import router as audit_router
 from autoeval.infrastructure.config import Settings, get_settings
 from autoeval.infrastructure.db import create_database
+from autoeval.infrastructure.platform_config import load_config_overlay
 from autoeval.planning.routes import router as planning_router
 from autoeval.reporting.badcase_export import router as badcase_export_router
 from autoeval.reporting.badcases import router as badcase_router
@@ -53,6 +55,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(app):
         app.state.settings = settings
         app.state.engine, app.state.sessions = create_database(settings)
+        # 管理员保存的平台配置在启动时叠加到运行时设置（预算开关、归档清单、Langfuse 链接）
+        await load_config_overlay(app.state.sessions, settings)
         yield
         await app.state.engine.dispose()
 
@@ -62,6 +66,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     user_guard = [Depends(require_user)]
     admin_guard = [Depends(require_user), Depends(require_admin)]
     app.include_router(identity_router)
+    # 管理接口在路由内自带 require_admin 依赖（需要 Principal 记录审计 actor）
+    app.include_router(admin_router)
     app.include_router(data_workbench_router, dependencies=user_guard)
     app.include_router(standard_inputs_router, dependencies=user_guard)
     app.include_router(unified_outputs_router, dependencies=user_guard)

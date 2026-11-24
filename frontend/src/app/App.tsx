@@ -28,8 +28,11 @@ import {
   Play,
   SlidersHorizontal,
   Database,
+  Settings2,
+  ShieldAlert,
   Sparkles,
   Trophy,
+  Users,
   Zap,
 } from "lucide-react";
 import { Card } from "../shared/ui/Card";
@@ -37,6 +40,8 @@ import { Badge } from "../shared/ui/Badge";
 import { Note } from "../shared/ui/Note";
 import { LoginPage } from "../features/identity/LoginPage";
 import { UserArea } from "../features/identity/UserArea";
+import { AdminUsers } from "../features/admin/AdminUsers";
+import { AdminConfig } from "../features/admin/AdminConfig";
 import { useCurrentUser, useGateProviders } from "../features/identity/useCurrentUser";
 import "../styles/index.css";
 
@@ -49,6 +54,13 @@ const menus = [
   { id: "leaderboard", label: "测评榜单", icon: Trophy },
   { id: "data-workbench", label: "数据工作台", icon: Database },
 ];
+
+// 管理员专属导航：仅角色为 admin 的登录用户可见（受后端 require_admin 双重校验）
+const adminMenus = [
+  { id: "admin/users", label: "用户管理", icon: Users },
+  { id: "admin/config", label: "平台配置", icon: Settings2 },
+];
+const allMenus = [...menus, ...adminMenus];
 
 export function App() {
   const [page, setPage] = useState(location.hash.slice(1) || "console");
@@ -102,7 +114,7 @@ export function App() {
           ? "测评报告"
           : page.startsWith("config/")
             ? "配置维护"
-            : menus.find((menu) => menu.id === page)?.label || "控制台";
+            : allMenus.find((menu) => menu.id === page)?.label || "控制台";
   const descriptions: Record<string, string> = {
     home: "从一次测评开始，让模型能力与执行证据清晰可见。",
     console: "选择模型、数据集与执行资源，按当前参数发起测评；可选获取耗时估算和参数建议。",
@@ -113,6 +125,8 @@ export function App() {
     reports: "查看测评报告，追溯历史结果。",
     leaderboard: "按来源与比较条件查看模型成绩。",
     "data-workbench": "评审报告成绩、维护榜单数据及导入官方来源。",
+    "admin/users": "查看平台账号、调整角色、停用与恢复账号；所有变更写入审计记录。",
+    "admin/config": "维护预算开关、归档清单与 Langfuse 链接等平台级配置，保存后立即生效。",
   };
 
   if (auth.status === "loading") {
@@ -155,6 +169,7 @@ export function App() {
     );
   }
   const user = auth.status === "signed-in" ? auth.user : undefined;
+  const isAdmin = user?.role === "admin";
 
   return (
     <div className="shell">
@@ -164,7 +179,7 @@ export function App() {
         </div>
         <div className="workspace">工作空间：本地单工作空间</div>
         <nav>
-          {menus.filter(menu => menu.id !== "data-workbench" || workbenchEnabled).map((menu) => (
+          {(isAdmin ? allMenus : menus).filter(menu => menu.id !== "data-workbench" || workbenchEnabled).map((menu) => (
             <a
               key={menu.id}
               href={`#${menu.id}`}
@@ -259,6 +274,18 @@ export function App() {
 
         {page === "leaderboard" && (<div className="stack"><PublishedLeaderboard /><details onToggle={(event) => setCandidateScoresOpen(event.currentTarget.open)}><summary>平台运行报告候选成绩（未人工评审）</summary>{candidateScoresOpen && <RealLeaderboard open={(id) => go(`report/${id}`)} />}</details></div>)}
         {workbenchEnabled && page === "data-workbench" && <DataWorkbench />}
+        {page.startsWith("admin/") && user && !isAdmin && (
+          <section className="card admin-forbidden" role="alert">
+            <div className="admin-forbidden-head">
+              <ShieldAlert size={22} />
+              <h2>403 · 无权访问</h2>
+            </div>
+            <p>该页面为管理员专属。普通用户可使用测评、任务与报告功能；如需权限，请联系管理员调整你的角色。</p>
+            <button className="primary" type="button" onClick={() => go("console")}>返回控制台</button>
+          </section>
+        )}
+        {page === "admin/users" && isAdmin && <AdminUsers notify={setToast} />}
+        {page === "admin/config" && isAdmin && <AdminConfig notify={setToast} />}
 
         <footer className="page-foot">
           AutoEval · 智能测评平台

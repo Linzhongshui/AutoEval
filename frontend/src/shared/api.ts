@@ -67,6 +67,24 @@ export async function apiPost<T>(path: string, payload?: unknown, key?: string, 
   return body.data as T;
 }
 
+async function apiMutate<T>(method: "PATCH" | "PUT", path: string, payload?: unknown, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(`/api/autoeval/v1${path}`, {
+    method,
+    signal,
+    headers: { "Content-Type": "application/json" },
+    body: payload === undefined ? undefined : JSON.stringify(payload),
+  });
+  if (!response.ok) throw await readError(response);
+  const body = await response.json();
+  return body.data as T;
+}
+
+export const apiPatch = <T>(path: string, payload?: unknown, signal?: AbortSignal) =>
+  apiMutate<T>("PATCH", path, payload, signal);
+
+export const apiPut = <T>(path: string, payload?: unknown, signal?: AbortSignal) =>
+  apiMutate<T>("PUT", path, payload, signal);
+
 export async function apiPostBlob(
   path: string,
   payload: unknown,

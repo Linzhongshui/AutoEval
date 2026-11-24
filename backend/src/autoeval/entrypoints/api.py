@@ -5,7 +5,7 @@ from time import perf_counter
 from uuid import uuid4
 
 import boto3
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
@@ -26,6 +26,7 @@ from autoeval.evaluation.monitored_execution import router as monitored_router
 from autoeval.evaluation.runs import router as runs_router
 from autoeval.evaluation.task_monitor import router as task_monitor_router
 from autoeval.identity import router as identity_router
+from autoeval.identity.guards import require_admin, require_user
 from autoeval.infrastructure.audit import router as audit_router
 from autoeval.infrastructure.config import Settings, get_settings
 from autoeval.infrastructure.db import create_database
@@ -56,32 +57,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         await app.state.engine.dispose()
 
     app = FastAPI(title="AutoEval Backend", version="0.1.0", lifespan=lifespan)
+    # 业务入口统一鉴权：user_auth = 需有效会话（本地模式自动放行），
+    # admin_auth = 额外要求管理员角色（审计查询、平台级 Langfuse 配置）。
+    user_guard = [Depends(require_user)]
+    admin_guard = [Depends(require_user), Depends(require_admin)]
     app.include_router(identity_router)
-    app.include_router(data_workbench_router)
-    app.include_router(standard_inputs_router)
-    app.include_router(unified_outputs_router)
-    app.include_router(fixture_pipeline_router)
-    app.include_router(task_monitor_router)
-    app.include_router(monitored_router)
-    app.include_router(planning_router)
-    app.include_router(evaluation_tasks_router)
-    app.include_router(configuration_router)
-    app.include_router(case_history_router)
-    app.include_router(langfuse_router)
-    app.include_router(datasets_router)
-    app.include_router(profiles_router)
-    app.include_router(registry_router)
-    app.include_router(targets_router)
-    app.include_router(ssh_resources_router)
-    app.include_router(resources_router)
-    app.include_router(runs_router)
-    app.include_router(evaluations_router)
-    app.include_router(leaderboard_router)
-    app.include_router(analysis_router)
-    app.include_router(audit_router)
-    app.include_router(reports_router)
-    app.include_router(badcase_router)
-    app.include_router(badcase_export_router)
+    app.include_router(data_workbench_router, dependencies=user_guard)
+    app.include_router(standard_inputs_router, dependencies=user_guard)
+    app.include_router(unified_outputs_router, dependencies=user_guard)
+    app.include_router(fixture_pipeline_router, dependencies=user_guard)
+    app.include_router(task_monitor_router, dependencies=user_guard)
+    app.include_router(monitored_router, dependencies=user_guard)
+    app.include_router(planning_router, dependencies=user_guard)
+    app.include_router(evaluation_tasks_router, dependencies=user_guard)
+    app.include_router(configuration_router, dependencies=user_guard)
+    app.include_router(case_history_router, dependencies=user_guard)
+    app.include_router(langfuse_router, dependencies=admin_guard)
+    app.include_router(datasets_router, dependencies=user_guard)
+    app.include_router(profiles_router, dependencies=user_guard)
+    app.include_router(registry_router, dependencies=user_guard)
+    app.include_router(targets_router, dependencies=user_guard)
+    app.include_router(ssh_resources_router, dependencies=user_guard)
+    app.include_router(resources_router, dependencies=user_guard)
+    app.include_router(runs_router, dependencies=user_guard)
+    app.include_router(evaluations_router, dependencies=user_guard)
+    app.include_router(leaderboard_router, dependencies=user_guard)
+    app.include_router(analysis_router, dependencies=user_guard)
+    app.include_router(audit_router, dependencies=admin_guard)
+    app.include_router(reports_router, dependencies=user_guard)
+    app.include_router(badcase_router, dependencies=user_guard)
+    app.include_router(badcase_export_router, dependencies=user_guard)
 
     @app.middleware("http")
     async def budget_entrypoints(request: Request, call_next):

@@ -1,7 +1,5 @@
-import { useEffect, useState } from "react";
-import { AlertCircle, ArrowRight, LogIn } from "lucide-react";
-import { apiGet } from "../../shared/api";
-import type { ProviderOption } from "./useCurrentUser";
+import { AlertCircle, ArrowRight, LogIn, RefreshCw } from "lucide-react";
+import type { ProvidersState } from "./useCurrentUser";
 
 const errorMessages: Record<string, string> = {
   canceled: "您已取消授权，未完成登录。",
@@ -12,16 +10,21 @@ const errorMessages: Record<string, string> = {
   session_expired: "登录已过期，请重新登录。",
 };
 
-export function LoginPage({ error, onEnter }: { error: string | null; onEnter: () => void }) {
-  const [providers, setProviders] = useState<ProviderOption[] | null>(null);
-  useEffect(() => {
-    const controller = new AbortController();
-    apiGet<ProviderOption[]>("/auth/providers", controller.signal)
-      .then((list) => setProviders(list))
-      .catch(() => setProviders([]));
-    return () => controller.abort();
-  }, []);
-
+// 纯展示组件：登录方式列表由父级 App 统一获取并守卫，
+// 请求失败与空列表分别呈现错误，不出现“悄悄放行”的情况。
+export function LoginPage({
+  error,
+  onEnter,
+  localMode,
+  providers,
+  onRetry,
+}: {
+  error: string | null;
+  onEnter: () => void;
+  localMode: boolean;
+  providers: ProvidersState;
+  onRetry: () => void;
+}) {
   const message = error ? (errorMessages[error] ?? "登录未完成，请重试。") : "";
 
   return (
@@ -36,9 +39,7 @@ export function LoginPage({ error, onEnter }: { error: string | null; onEnter: (
             {message}
           </div>
         )}
-        {providers === null ? (
-          <p className="login-loading" role="status">正在读取登录方式…</p>
-        ) : providers.length === 0 ? (
+        {localMode ? (
           <div className="login-local" role="status">
             <p>当前为本地开发模式，无需登录。</p>
             <button className="primary" type="button" onClick={onEnter}>
@@ -46,9 +47,33 @@ export function LoginPage({ error, onEnter }: { error: string | null; onEnter: (
               进入控制台
             </button>
           </div>
+        ) : providers.status === "failed" ? (
+          <>
+            <div className="login-error" role="alert">
+              <AlertCircle size={16} />
+              无法获取登录方式，请检查后端连接或 OAuth 配置。
+            </div>
+            <button className="login-retry" type="button" onClick={onRetry}>
+              <RefreshCw size={14} />
+              重试
+            </button>
+          </>
+        ) : providers.status === "loading" ? (
+          <p className="login-loading" role="status">正在读取登录方式…</p>
+        ) : providers.list.length === 0 ? (
+          <>
+            <div className="login-error" role="alert">
+              <AlertCircle size={16} />
+              OAuth 登录方式未配置：请在后端配置 GitHub/GitCode 应用凭据后重启服务。
+            </div>
+            <button className="login-retry" type="button" onClick={onRetry}>
+              <RefreshCw size={14} />
+              重试
+            </button>
+          </>
         ) : (
           <div className="login-actions">
-            {providers.map((provider) => (
+            {providers.list.map((provider) => (
               <a
                 key={provider.provider}
                 className="login-button"

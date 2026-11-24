@@ -16,6 +16,7 @@ import { RealLeaderboard } from "../features/reporting/RealLeaderboard";
 import { useEffect, useState } from "react";
 import {
   Activity,
+  AlertCircle,
   ChartNoAxesColumnIncreasing,
   ChevronRight,
   ClipboardList,
@@ -62,8 +63,12 @@ export function App() {
   const { auth, refresh } = useCurrentUser();
   const loginPage = page === "login" || page.startsWith("login?");
   const loginError = page.startsWith("login?") ? new URLSearchParams(page.slice(6)).get("error") : null;
-  const providers = useGateProviders(auth.status === "guest");
-  const requiresLogin = auth.status === "guest" && providers !== null && providers.length > 0;
+  const { providers, reload: reloadProviders } = useGateProviders(auth.status === "guest");
+  const localMode = auth.status === "signed-in" && auth.user.provider === "local";
+  const retryAuth = () => {
+    refresh();
+    reloadProviders();
+  };
   useEffect(() => { if (page !== "leaderboard") setCandidateScoresOpen(false); }, [page]);
   const evaluationPage = page === "tasks" || page.startsWith("run/") || page.startsWith("evaluate?");
   const go = (path: string) => {
@@ -116,17 +121,36 @@ export function App() {
   if (loginPage) {
     return (
       <div className="login-shell">
-        <LoginPage error={loginError} onEnter={() => go("console")} />
+        <LoginPage error={loginError} onEnter={() => go("console")} localMode={localMode} providers={providers} onRetry={retryAuth} />
       </div>
     );
   }
-  if (auth.status === "guest" && providers === null) {
-    return <div className="login-shell"><p className="login-loading" role="status">正在读取登录方式…</p></div>;
-  }
-  if (requiresLogin) {
+  if (auth.status === "error") {
+    // 后端确认身份失败（网络/5xx）：不能确认身份就不放行，提供重试而不是放游客进入。
     return (
       <div className="login-shell">
-        <LoginPage error={null} onEnter={() => go("console")} />
+        <div className="login-page">
+          <div className="login-card" role="alert">
+            <img className="login-logo" src="/brand/autoeval-logo.svg" alt="AutoEval" />
+            <h1>无法确认登录状态</h1>
+            <div className="login-error">
+              <AlertCircle size={16} />
+              后端连接异常或服务不可用，无法校验身份，请检查后端服务后重试。
+            </div>
+            <button className="login-retry" type="button" onClick={refresh}>
+              重试
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (auth.status === "guest") {
+    // 访客（oauth 模式未登录）一律进入登录页；登录方式读取失败或为空时，
+    // 登录页呈现对应错误与重试，后端确认身份之前不放行进入控制台。
+    return (
+      <div className="login-shell">
+        <LoginPage error={null} onEnter={() => go("console")} localMode={false} providers={providers} onRetry={retryAuth} />
       </div>
     );
   }

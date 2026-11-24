@@ -3,7 +3,7 @@ import uuid
 import httpx
 
 from autoeval.entrypoints.api import create_app
-from autoeval.infrastructure.config import get_settings
+from autoeval.infrastructure.config import Settings, get_settings
 
 
 async def test_unavailable_probe_consumer_does_not_enqueue(monkeypatch):
@@ -15,7 +15,8 @@ async def test_unavailable_probe_consumer_does_not_enqueue(monkeypatch):
 
     monkeypatch.setattr("autoeval.planning.probe_dispatch.consumer_ready", unavailable)
     monkeypatch.setattr("autoeval.planning.routes.enqueue", forbidden)
-    app = create_app(get_settings())
+    # 固定本地模式设置，避免运行环境 .env 的 oauth 配置让鉴权守卫干扰探测行为断言
+    app = create_app(Settings(_env_file=None))
     async with (
         app.router.lifespan_context(app),
         httpx.AsyncClient(transport=httpx.ASGITransport(app), base_url="http://test") as client,

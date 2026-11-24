@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy import delete, select
 from sqlalchemy.exc import SQLAlchemyError
 
+from autoeval.identity.guards import SESSION_COOKIE, local_principal, resolve_principal
 from autoeval.identity.models import OAuthState, PlatformUser, UserSession
 from autoeval.identity.providers import OAuthFlowError, available_providers
 from autoeval.infrastructure.config import Settings
@@ -17,7 +18,8 @@ from autoeval.infrastructure.config import Settings
 logger = logging.getLogger("autoeval.identity")
 router = APIRouter(prefix="/api/autoeval/v1/auth", tags=["auth"])
 
-SESSION_COOKIE = "ae_session"
+STATE_COOKIE = "ae_oauth_state"
+STATE_COOKIE_PATH = "/api/autoeval/v1/auth/callback"
 STATE_TTL_MINUTES = 5
 
 
@@ -30,7 +32,6 @@ def _cookie_params(settings: Settings) -> dict:
         "httponly": True,
         "samesite": "lax",
         "secure": settings.environment == "production",
-        "path": "/",
     }
 
 
@@ -40,32 +41,15 @@ def _login_error(settings: Settings, code: str) -> RedirectResponse:
     )
 
 
+def _state_cookie_error(settings: Settings, code: str) -> RedirectResponse:
+    """登录流程已终结的错误跳转，同时清除一次性 state Cookie。"""
+    response = _login_error(settings, code)
+    response.delete_cookie(STATE_COOKIE, path=STATE_COOKIE_PATH, **_cookie_params(settings))
+    return response
+
+
 def _admin_accounts(settings: Settings) -> set[str]:
     return {entry.strip() for entry in settings.admin_accounts if ":" in entry}
-
-
-def _user_view(user: PlatformUser) -> dict:
-    return {
-        "id": str(user.id),
-        "provider": user.provider,
-        "login": user.login,
-        "display_name": user.display_name,
-        "email": user.email,
-        "avatar_url": user.avatar_url,
-        "role": user.role,
-    }
-
-
-def _local_operator() -> dict:
-    return {
-        "id": "local-operator",
-        "provider": "local",
-        "login": "local-operator",
-        "display_name": "本地操作员",
-        "email": None,
-        "avatar_url": None,
-        "role": "admin",
-    }
 
 
 @router.get("/providers")
@@ -99,7 +83,17 @@ async def login(request: Request, provider: str):
     except SQLAlchemyError:
         logger.exception("store oauth state failed provider=%s", provider)
         raise HTTPException(503, "Authentication service unavailable")
-    return RedirectResponse(flow.authorize_url(state), status_code=302)
+    response = RedirectResponse(flow.authorize_url(state), status_code=302)
+    # 一次性 state 同时绑定到发起登录的浏览器（短期 HttpOnly Cookie）：
+    # 回调必须携带同一值，防止任何第三方浏览器借合法 state 完成登录回调。
+    response.set_cookie(
+        STATE_COOKIE,
+        state,
+        max_age=STATE_TTL_MINUTES * 60,
+        path=STATE_COOKIE_PATH,
+        **_cookie_params(settings),
+    )
+    return response
 
 
 @router.get("/callback/{provider}")
@@ -115,8 +109,13 @@ async def callback(
     if flow is None:
         return _login_error(settings, "oauth_failed")
     if error == "access_denied":
-        return _login_error(settings, "canceled")
+        return _state_cookie_error(settings, "canceled")
     if not code or not state:
+        return _login_error(settings, "invalid_state")
+    if request.cookies.get(STATE_COOKIE) != state:
+        # 回调必须来自发起授权的同一浏览器；不匹配时既不创建会话，
+        # 也不销毁库中 state（避免影响用户仍在进行的授权流程）。
+        logger.warning("oauth callback state cookie mismatch provider=%s", provider)
         return _login_error(settings, "invalid_state")
 
     try:
@@ -131,24 +130,21 @@ async def callback(
             await session.commit()
     except SQLAlchemyError:
         logger.exception("consume oauth state failed provider=%s", provider)
-        return _login_error(settings, "oauth_failed")
+        return _state_cookie_error(settings, "oauth_failed")
     if consumed is None:
-        return _login_error(settings, "invalid_state")
+        return _state_cookie_error(settings, "invalid_state")
     if consumed.expires_at < _now():
-        return _login_error(settings, "expired")
+        return _state_cookie_error(settings, "expired")
 
     try:
         profile = await flow.fetch_profile(code)
     except OAuthFlowError:
         logger.warning("oauth exchange failed provider=%s", provider)
-        return _login_error(settings, "oauth_failed")
+        return _state_cookie_error(settings, "oauth_failed")
     except Exception:
         logger.exception("unexpected oauth failure provider=%s", provider)
-        return _login_error(settings, "oauth_failed")
+        return _state_cookie_error(settings, "oauth_failed")
 
-    role = (
-        "admin" if f"{profile.provider}:{profile.login}" in _admin_accounts(settings) else "regular"
-    )
     try:
         async with request.app.state.sessions() as session:
             user = (
@@ -160,6 +156,14 @@ async def callback(
                 )
             ).scalar_one_or_none()
             if user is None:
+                # 管理员白名单仅在"账号创建"时引导赋权（按稳定的 provider:uid 首次登录）；
+                # 已有账号不再套用白名单，角色以平台内设置为准，避免被降级的账号
+                # 下次登录又被白名单恢复为管理员。
+                bootstrap_role = (
+                    "admin"
+                    if f"{profile.provider}:{profile.login}" in _admin_accounts(settings)
+                    else "regular"
+                )
                 user = PlatformUser(
                     provider=profile.provider,
                     provider_uid=profile.uid,
@@ -167,20 +171,19 @@ async def callback(
                     display_name=profile.display_name,
                     email=profile.email,
                     avatar_url=profile.avatar_url,
-                    role=role,
+                    role=bootstrap_role,
                 )
                 session.add(user)
             else:
+                # 已有账号仅刷新公开资料，保留已设置的角色
                 user.login = profile.login
                 user.display_name = profile.display_name
                 user.email = profile.email
                 user.avatar_url = profile.avatar_url
-                if role == "admin" and user.role != "admin":
-                    user.role = "admin"
             await session.flush()
             if user.suspended_at is not None:
                 await session.rollback()
-                return _login_error(settings, "suspended")
+                return _state_cookie_error(settings, "suspended")
             session_id = uuid_lib.uuid4()
             session.add(
                 UserSession(
@@ -192,15 +195,17 @@ async def callback(
             await session.commit()
     except SQLAlchemyError:
         logger.exception("upsert user/session failed provider=%s", provider)
-        return _login_error(settings, "oauth_failed")
+        return _state_cookie_error(settings, "oauth_failed")
 
     response = RedirectResponse(f"{settings.frontend_origin.rstrip('/')}/#console", status_code=302)
     response.set_cookie(
         SESSION_COOKIE,
         str(session_id),
         max_age=settings.session_ttl_hours * 3600,
+        path="/",
         **_cookie_params(settings),
     )
+    response.delete_cookie(STATE_COOKIE, path=STATE_COOKIE_PATH, **_cookie_params(settings))
     return response
 
 
@@ -219,43 +224,21 @@ async def logout(request: Request):
                     await session.execute(delete(UserSession).where(UserSession.id == session_id))
                     await session.commit()
             except SQLAlchemyError:
-                logger.warning("logout session delete failed", exc_info=True)
+                # 服务端会话吊销失败时不允许假装退出成功：不清理 Cookie，
+                # 返回可重试错误，前端会提示退出失败，用户保持在登录态。
+                logger.exception("logout session delete failed")
+                raise HTTPException(503, "退出失败：会话吊销未完成，请重试")
     response = JSONResponse({"data": {"ok": True}})
-    response.delete_cookie(SESSION_COOKIE, **_cookie_params(settings))
+    response.delete_cookie(SESSION_COOKIE, path="/", **_cookie_params(settings))
     return response
 
 
 @router.get("/me")
 async def me(request: Request):
     settings: Settings = request.app.state.settings
-    raw = request.cookies.get(SESSION_COOKIE)
-    user = None
-    if raw:
-        try:
-            session_id = uuid_lib.UUID(raw)
-        except ValueError:
-            session_id = None
-        if session_id is not None:
-            try:
-                async with request.app.state.sessions() as session:
-                    row = (
-                        await session.execute(
-                            select(PlatformUser, UserSession)
-                            .join(UserSession, UserSession.user_id == PlatformUser.id)
-                            .where(
-                                UserSession.id == session_id,
-                                UserSession.revoked_at.is_(None),
-                                UserSession.expires_at > _now(),
-                                PlatformUser.suspended_at.is_(None),
-                            )
-                        )
-                    ).first()
-                user = row[0] if row is not None else None
-            except SQLAlchemyError:
-                logger.exception("session lookup failed")
-                raise HTTPException(503, "Authentication service unavailable")
-    if user is not None:
-        return {"data": _user_view(user)}
+    principal = await resolve_principal(request)
+    if principal is not None:
+        return {"data": principal.as_view()}
     if settings.auth_mode == "local":
-        return {"data": _local_operator()}
+        return {"data": local_principal().as_view()}
     raise HTTPException(401, "Not authenticated")

@@ -69,9 +69,11 @@ class Settings(BaseSettings):
         return value
 
     @model_validator(mode="after")
-    def auth_mode_guard(self):
-        if self.environment == "production" and self.auth_mode == "local":
-            raise ValueError("Production requires OAuth identity; local auth is development only")
+    def local_only(self):
+        if self.environment == "production":
+            raise ValueError(
+                "Production identity is not implemented; local auth is development only"
+            )
         return self
 
 

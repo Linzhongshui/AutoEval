@@ -17,6 +17,20 @@ from autoeval_runtime import performance_adapter as adapter
 from autoeval_runtime.planning_runtime import validate_spec
 
 
+HISTORICAL_TYPES = [
+    ({"inputs": {"tasks": [{"compilation": {"config": None}, "dataset": "GPQA"}]}}, "accuracy"),
+    ({"inputs": {"tasks": [{"compilation": {"config": None}}]}}, "other"),
+    ({"inputs": {"tasks": [{"compilation": [], "dataset": {}}]}}, "other"),
+    ({"task_type": []}, "other"),
+    ({"inputs": {"tasks": [{"compilation": {"config": {"subcommand": "agentx"}}}]}}, "performance"),
+]
+
+
+@pytest.mark.parametrize("snapshot,expected", HISTORICAL_TYPES)
+def test_historical_report_type(snapshot, expected):
+    assert report_task_type(snapshot) == expected
+
+
 @pytest.mark.parametrize("duration,limit", [(899, None), (900, 1)])
 def test_benchmark_rejects_short_or_limited_trace(duration, limit):
     with pytest.raises(ValidationError):
@@ -294,6 +308,14 @@ async def test_performance_submission_and_report_catalog_postgres(tmp_path, monk
         )
         app.state.sessions = sessions
         try:
+            from sqlalchemy import cast, literal
+            from sqlalchemy.dialects.postgresql import JSONB
+
+            from autoeval.reporting.reports import task_type_expression
+
+            for snapshot, expected in HISTORICAL_TYPES:
+                expr = task_type_expression(cast(literal(snapshot, type_=JSONB), JSONB))
+                assert await connection.scalar(select(expr)) == expected
             async with sessions() as session, session.begin():
                 model = Asset(asset_key=uuid.uuid4().hex, name="test", kind="model")
                 session.add(model)

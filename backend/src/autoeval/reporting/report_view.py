@@ -8,7 +8,8 @@ ACCURACY_DATASETS = {"GPQA", "GPQA_Diamond", "gpqa-diamond", "DeepSWE", "Automat
 
 def report_task_type(frozen):
     if "task_type" in frozen:
-        return frozen["task_type"] if frozen["task_type"] in {"accuracy", "performance"} else "other"
+        kind = frozen["task_type"]
+        return kind if kind in ("accuracy", "performance") else "other"
     inputs = frozen.get("inputs")
     tasks = inputs.get("tasks") if isinstance(inputs, dict) else None
     if tasks is not None and not isinstance(tasks, list):
@@ -16,10 +17,17 @@ def report_task_type(frozen):
     if tasks:
         if not all(isinstance(task, dict) for task in tasks):
             return "other"
-        if all((t.get("compilation") or {}).get("config", {}).get("subcommand") in {"llm_perf", "agentx"} for t in tasks):
+        commands = []
+        for task in tasks:
+            compilation = task.get("compilation")
+            config = compilation.get("config") if isinstance(compilation, dict) else None
+            commands.append(config.get("subcommand") if isinstance(config, dict) else None)
+        if all(command in ("llm_perf", "agentx") for command in commands):
             return "performance"
-        return "accuracy" if all(t.get("dataset") in ACCURACY_DATASETS for t in tasks) else "other"
-    return "accuracy" if frozen.get("dataset_key") in ACCURACY_DATASETS else "other"
+        datasets = [task.get("dataset") for task in tasks]
+    else:
+        datasets = [frozen.get("dataset_key")]
+    return "accuracy" if all(isinstance(d, str) and d in ACCURACY_DATASETS for d in datasets) else "other"
 
 
 def report_data(

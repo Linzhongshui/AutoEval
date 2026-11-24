@@ -61,8 +61,7 @@ class ReviewInput(BaseModel):
     note: str | None = Field(default=None, max_length=1000)
 
 
-def task_type_condition(task_type):
-    frozen = RunSnapshot.canonical_body
+def task_type_expression(frozen):
     children = frozen["inputs"]["tasks"]
     tasks = case(
         (func.jsonb_typeof(children) == "array", children), else_=literal_column("'[]'::jsonb")
@@ -73,7 +72,7 @@ def task_type_condition(task_type):
     def all_in(field, values):
         return ~select(1).select_from(item).where(func.coalesce(field, "").notin_(values)).exists()
 
-    category = case(
+    return case(
         (frozen["task_type"].astext.in_(["performance", "accuracy"]), frozen["task_type"].astext),
         (frozen.has_key("task_type"), "other"),
         (func.jsonb_typeof(children).notin_(["array", "null"]), "other"),
@@ -93,7 +92,6 @@ def task_type_condition(task_type):
         (frozen["dataset_key"].astext.in_(ACCURACY_DATASETS), "accuracy"),
         else_="other",
     )
-    return category == task_type
 
 
 @router.get("", response_model=PageEnvelope[ReportView])
@@ -130,7 +128,7 @@ async def catalog(
                             else []
                         ),
                     )
-                    .where(task_type_condition(task_type) if task_type else True)
+                    .where(task_type_expression(RunSnapshot.canonical_body) == task_type if task_type else True)
                     .order_by(EvaluationReport.created_at.desc(), EvaluationReport.id.desc())
                     .offset(offset)
                     .limit(limit + 1)

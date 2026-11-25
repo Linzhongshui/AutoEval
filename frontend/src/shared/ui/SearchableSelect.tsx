@@ -17,7 +17,22 @@ export function SearchableSelect({ children, value, defaultValue, onChange, disa
   const selected = String(value ?? local);
   const filtered = options.filter((option) => String(option.props.value ?? text(option.props.children)) !== "" && text(option.props.children).toLowerCase().includes(query.trim().toLowerCase()));
   const label = options.find((option) => String(option.props.value ?? text(option.props.children)) === selected);
-  useEffect(() => { if (open) search.current?.focus(); }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    search.current?.focus();
+    const dismissOutside = (event: Event) => {
+      const element = root.current;
+      if (element && event.target instanceof Node && !element.contains(event.target)) {
+        element.open = false;
+      }
+    };
+    document.addEventListener("pointerdown", dismissOutside);
+    document.addEventListener("focusin", dismissOutside);
+    return () => {
+      document.removeEventListener("pointerdown", dismissOutside);
+      document.removeEventListener("focusin", dismissOutside);
+    };
+  }, [open]);
   useEffect(() => {
     const element = select.current;
     if (!element) return;

@@ -27,6 +27,12 @@ def test_configure_service_by_source(browser_page, kind):
                 assert body["remote_model"] == "test-deployment"
                 services.append({**body, "id": "binding", "service_name": "test-deployment"})
                 data = {"id": "binding"}
+        elif route.request.method == "PATCH" and path == "/target-bindings/binding":
+            writes.append(path)
+            if writes.count(path) == 1:
+                route.fulfill(status=503, json={"error": {"message": "fixture"}})
+                return
+            services[0].update(route.request.post_data_json)
         elif path == "/target-bindings":
             data = services
         elif path == "/models":
@@ -89,6 +95,15 @@ def test_configure_service_by_source(browser_page, kind):
     manager.get_by_label("服务来源").select_option("official" if kind == "local" else "local")
     expect(manager.get_by_text("暂无匹配的模型服务")).to_be_visible()
     assert writes == ["/credentials", "/target-bindings"]
+    manager.get_by_label("服务来源").select_option(kind)
+    manager.get_by_role("button", name="编辑服务").click()
+    editor = page.get_by_role("dialog", name="编辑服务")
+    editor.get_by_label("服务名称").fill("updated-service")
+    editor.get_by_role("button", name="保存").click()
+    expect(editor.get_by_role("alert")).to_be_visible()
+    editor.get_by_role("button", name="保存").click()
+    expect(editor).to_have_count(0)
+    expect(manager.get_by_text("updated-service", exact=False).first).to_be_visible()
 
 @pytest.mark.parametrize("entry", ["accuracy", "performance", "direct"])
 def test_use_saved_service(browser_page, entry):

@@ -133,3 +133,9 @@ def test_node_probe_requests_only_model_list(monkeypatch, code, raw, expected):
     )
     connection.close.assert_called_once()
     assert "placeholder" not in repr(details)
+
+
+def test_local_registration_accepts_executor_address():
+    from autoeval.resources.targets import local_registration_url
+
+    assert local_registration_url("http://localhost:8001/v1/") == "http://localhost:8001/v1"

@@ -62,6 +62,22 @@ def validate_url(url: str, allowed_hosts: list[str]) -> str:
     return url.rstrip("/")
 
 
+def local_registration_url(url: str) -> str:
+    url = url.strip()
+    parsed = urlsplit(url)
+    if (
+        parsed.scheme not in ("http", "https")
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.query
+        or parsed.fragment
+        or parsed.port == 0
+        or any(char.isspace() for char in url)
+    ):
+        raise ValueError("Invalid local model URL")
+    return url.rstrip("/")
+
+
 async def probe_model_list(
     base_url: str, remote_model: str, key: str, client: httpx.AsyncClient
 ) -> tuple[str, dict]:
@@ -101,8 +117,13 @@ async def put_credential(body: CredentialInput, request: Request):
 async def create_target(body: TargetInput, request: Request):
     settings = request.app.state.settings
     try:
-        base_url = validate_url(body.base_url, settings.allowed_model_hosts)
+        if body.service_kind == "local":
+            base_url = local_registration_url(body.base_url)
+        else:
+            base_url = validate_url(body.base_url, settings.allowed_model_hosts)
     except ValueError as exc:
+        if body.service_kind == "local":
+            raise HTTPException(422, "请填写本地模型服务的 HTTP 或 HTTPS 基础地址") from exc
         raise HTTPException(422, "模型服务地址须使用允许列表中的 HTTPS 主机和默认 HTTPS 端口") from exc
     try:
         FileSecretStore(settings.secret_store_path).get(body.credential_ref)

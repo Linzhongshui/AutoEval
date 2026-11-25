@@ -131,7 +131,7 @@ export function ServiceBindings({ onUse }: { onUse?: (id: string) => void }) {
     </SearchableSelect></label>
     {versionState === "error" && <button type="button" onClick={() => void loadVersions(modelValue)}>重新读取版本</button>}
     <label className="field-wide">{kind === "local" ? "本地服务 Base URL" : "厂商 API Base URL"}<input type="url" placeholder={kind === "local" ? "https://inference.example.com/v1" : "例如 https://api.deepseek.com"} value={baseUrl} onChange={e => setBaseUrl(e.target.value)} /></label>
-    <p>使用已加入平台允许列表的 HTTPS 地址，填写模型列表和推理接口共用的基础路径。</p>
+    <p>{kind === "local" ? "填写测评机使用的 HTTP 或 HTTPS 基础地址，可包含端口。保存时不会连接模型服务。" : "使用已加入平台允许列表的 HTTPS 地址，填写模型列表和推理接口共用的基础路径。"}</p>
     <label>{kind === "local" ? "部署的模型名" : "厂商模型 ID"}<input placeholder={kind === "local" ? "部署时指定的服务模型名" : "厂商接口使用的模型标识"} value={remoteModel} onChange={e => setRemoteModel(e.target.value)} /></label>
     <label className="field-wide">{kind === "local" ? "本地服务访问密钥" : "厂商 API Key"}<input type="password" autoComplete="off" value={key} onChange={e => setKey(e.target.value)} /></label>
     <button disabled={busy || !key || !versionId || !baseUrl.trim() || !remoteModel.trim()} onClick={() => perform(async () => {

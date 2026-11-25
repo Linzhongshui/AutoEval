@@ -2,7 +2,6 @@
 """Versioned standard inputs and non-executing adaptor configuration compilation."""
 
 import asyncio
-import copy
 import json
 import ssl
 import subprocess
@@ -54,6 +53,9 @@ from autoeval.catalog.standard_compilation import (
 )
 from autoeval.catalog.standard_compilation import (
     merge as merge,
+)
+from autoeval.catalog.standard_compilation import (
+    read_repository_config,
 )
 from autoeval.catalog.standard_compilation import (
     reject_secrets as reject_secrets,
@@ -418,7 +420,7 @@ def input_readiness(payload, compilation=None):
         missing.append("repository_benchmark_config_missing")
     else:
         try:
-            validate_config(safe_json(startup["raw"]))
+            read_repository_config(startup)
         except ValueError:
             missing.append("repository_benchmark_config_invalid")
     blockers = (compilation or {}).get("blocking_reasons", [])
@@ -609,12 +611,7 @@ def autocomplete_template(entry):
     source = entry["files"].get("benchmark_config.json")
     if not source:
         return {}
-    template = (
-        safe_json(source["raw"])
-        if source
-        else safe_json(entry["files"]["standard_config.json"]["raw"])
-    )
-    template = copy.deepcopy(template)
+    template = read_repository_config(source)
     template["params"] = {
         key: value for key, value in template["params"].items() if key not in ENVIRONMENT
     }

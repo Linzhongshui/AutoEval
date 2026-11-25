@@ -344,6 +344,41 @@ def merge(base, overlay):
     return result
 
 
+def read_repository_config(source):
+    """Decode the repository's Harbor --ak config form before applying standard locks."""
+    try:
+        value = safe_json(source["raw"])
+        params = value.get("params")
+        if (
+            value.get("tool") == "ais_bench"
+            and value.get("subcommand") == "harbor_agent"
+            and isinstance(params, dict)
+            and params.get("extra_cli_args")
+        ):
+            args = params["extra_cli_args"]
+            if not (
+                isinstance(args, list)
+                and len(args) == 2
+                and args[0] == "--ak"
+                and isinstance(args[1], str)
+                and args[1].startswith("config=")
+            ):
+                raise ValueError("Expected only --ak config=<JSON object>")
+            config = safe_json(args[1].removeprefix("config="))
+            if not isinstance(config, dict):
+                raise ValueError("--ak config requires a JSON object")
+            kwargs = params.setdefault("agent_kwargs", {})
+            if not isinstance(kwargs, dict):
+                raise ValueError("agent_kwargs requires a JSON object")
+            if "config" in kwargs and digest(kwargs["config"]) != digest(config):
+                raise ValueError("--ak config conflicts with agent_kwargs.config")
+            kwargs["config"] = config
+            del params["extra_cli_args"]
+        return validate_config(value)
+    except ValueError as exc:
+        raise ValueError(f"{source['path']}: {exc}") from exc
+
+
 def discover(bundle):
     groups = {}
     for path, raw in bundle.files.items():
@@ -357,11 +392,11 @@ def discover(bundle):
     for (model, benchmark), files in sorted(groups.items()):
         if "standard_config.json" not in files:
             raise ValueError(f"Missing standard_config.json: {model}/{benchmark}")
-        standard = validate_config(safe_json(files["standard_config.json"]["raw"]))
+        standard = read_repository_config(files["standard_config.json"])
         if standard["subcommand"] != BENCHMARKS[benchmark][2]:
             raise ValueError("Benchmark/subcommand mismatch")
         if "benchmark_config.json" in files:
-            startup = validate_config(safe_json(files["benchmark_config.json"]["raw"]))
+            startup = read_repository_config(files["benchmark_config.json"])
             if startup["subcommand"] != standard["subcommand"]:
                 raise ValueError("Startup/standard subcommand mismatch")
         result.append(
@@ -378,7 +413,7 @@ def discover(bundle):
 
 
 def compile_config(entry, body, target=None):
-    standard = safe_json(entry["files"]["standard_config.json"]["raw"])
+    standard = read_repository_config(entry["files"]["standard_config.json"])
     base = {"tool": "ais_bench", "subcommand": standard["subcommand"], "params": {}}
     origins = {}
     changes = []
@@ -394,7 +429,8 @@ def compile_config(entry, body, target=None):
 
     if "benchmark_config.json" in entry["files"]:
         apply(
-            safe_json(entry["files"]["benchmark_config.json"]["raw"]), "standard-repository-startup"
+            read_repository_config(entry["files"]["benchmark_config.json"]),
+            "standard-repository-startup",
         )
     for overlay, name in [
         (

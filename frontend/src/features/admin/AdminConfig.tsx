@@ -8,17 +8,11 @@ import { Info } from "lucide-react";
 export type AdminConfigView = {
   enforce_task_budget: boolean;
   evaluation_follow_up_enabled: boolean;
-  archived_manifest_ids: string[];
-  archived_compilation_ids: string[];
   langfuse_browser_url: string | null;
   langfuse_host: string | null;
   langfuse_project_id: string | null;
   billing_execution_config: string | null;
 };
-
-function splitIds(text: string): string[] {
-  return text.split(/[\s,]+/).filter(Boolean);
-}
 
 export function AdminConfig({ notify }: { notify: (message: string) => void }) {
   const [view, setView] = useState<AdminConfigView | null>(null);
@@ -27,8 +21,6 @@ export function AdminConfig({ notify }: { notify: (message: string) => void }) {
   const [form, setForm] = useState({
     enforce_task_budget: false,
     evaluation_follow_up_enabled: false,
-    archived_manifest_ids: "",
-    archived_compilation_ids: "",
     langfuse_browser_url: "",
     langfuse_host: "",
     langfuse_project_id: "",
@@ -43,8 +35,6 @@ export function AdminConfig({ notify }: { notify: (message: string) => void }) {
         setForm({
           enforce_task_budget: config.enforce_task_budget,
           evaluation_follow_up_enabled: config.evaluation_follow_up_enabled,
-          archived_manifest_ids: config.archived_manifest_ids.join("\n"),
-          archived_compilation_ids: config.archived_compilation_ids.join("\n"),
           langfuse_browser_url: config.langfuse_browser_url ?? "",
           langfuse_host: config.langfuse_host ?? "",
           langfuse_project_id: config.langfuse_project_id ?? "",
@@ -67,8 +57,6 @@ export function AdminConfig({ notify }: { notify: (message: string) => void }) {
         updates: {
           enforce_task_budget: form.enforce_task_budget,
           evaluation_follow_up_enabled: form.evaluation_follow_up_enabled,
-          archived_manifest_ids: splitIds(form.archived_manifest_ids),
-          archived_compilation_ids: splitIds(form.archived_compilation_ids),
           langfuse_browser_url: form.langfuse_browser_url.trim() || null,
           langfuse_host: form.langfuse_host.trim() || null,
           langfuse_project_id: form.langfuse_project_id.trim() || null,
@@ -78,8 +66,6 @@ export function AdminConfig({ notify }: { notify: (message: string) => void }) {
       setForm({
         enforce_task_budget: saved.enforce_task_budget,
         evaluation_follow_up_enabled: saved.evaluation_follow_up_enabled,
-        archived_manifest_ids: saved.archived_manifest_ids.join("\n"),
-        archived_compilation_ids: saved.archived_compilation_ids.join("\n"),
         langfuse_browser_url: saved.langfuse_browser_url ?? "",
         langfuse_host: saved.langfuse_host ?? "",
         langfuse_project_id: saved.langfuse_project_id ?? "",
@@ -124,27 +110,6 @@ export function AdminConfig({ notify }: { notify: (message: string) => void }) {
                 <b>启用测评跟进</b>
                 <small>控制测评结果跟进链路是否开放。</small>
               </span>
-            </label>
-          </Card>
-          <Card title="归档清单（隐藏指定资源）">
-            <p className="muted admin-para">填入 UUID（每行一个或用逗号分隔）后，对应清单/编译将从测评选配中隐藏并拒绝提交。</p>
-            <label className="admin-field">
-              <span>归档清单 ID（archived_manifest_ids）</span>
-              <textarea
-                rows={3}
-                value={form.archived_manifest_ids}
-                onChange={(event) => set({ archived_manifest_ids: event.target.value })}
-                placeholder={"00000000-0000-0000-0000-000000000000"}
-              />
-            </label>
-            <label className="admin-field">
-              <span>归档编译 ID（archived_compilation_ids）</span>
-              <textarea
-                rows={3}
-                value={form.archived_compilation_ids}
-                onChange={(event) => set({ archived_compilation_ids: event.target.value })}
-                placeholder={"00000000-0000-0000-0000-000000000000"}
-              />
             </label>
           </Card>
           <Card title="Langfuse 集成链接">

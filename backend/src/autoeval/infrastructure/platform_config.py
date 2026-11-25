@@ -2,13 +2,11 @@
 
 Stored values are overlaid onto the runtime ``Settings`` instance (the same
 object shared by ``app.state.settings`` and ``get_settings()``) at startup and
-after every update, so request-time consumers — the budget middleware,
-archived manifest filters and Langfuse link builders — pick up changes
-without a restart.
+after every update, so request-time consumers — the budget middleware and
+Langfuse link builders — pick up changes without a restart.
 """
 
 import logging
-import uuid
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
@@ -41,12 +39,6 @@ def _as_bool(value: Any) -> bool:
     return value
 
 
-def _as_uuid_list(value: Any) -> list[uuid.UUID]:
-    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-        raise TypeError("必须是 UUID 字符串数组")
-    return [uuid.UUID(item) for item in value]
-
-
 def _as_str_or_none(value: Any) -> str | None:
     if value is None:
         return None
@@ -59,33 +51,25 @@ def _as_str_or_none(value: Any) -> str | None:
 MANAGED_KEYS: dict[str, Callable[[Any], Any]] = {
     "enforce_task_budget": _as_bool,
     "evaluation_follow_up_enabled": _as_bool,
-    "archived_manifest_ids": _as_uuid_list,
-    "archived_compilation_ids": _as_uuid_list,
     "langfuse_browser_url": _as_str_or_none,
     "langfuse_host": _as_str_or_none,
     "langfuse_project_id": _as_str_or_none,
 }
 
 
-def _to_json(value: Any) -> Any:
-    if isinstance(value, list):
-        return [str(item) for item in value]
-    return value
-
-
 def apply_value(settings: Settings, key: str, value: Any) -> Any:
-    """Convert, assign onto the runtime settings and return the JSON-safe value."""
+    """Convert, assign onto the runtime settings and return the stored value."""
     converter = MANAGED_KEYS.get(key)
     if converter is None:
         return None  # unknown keys are ignored (forward compatibility)
     converted = converter(value)
     setattr(settings, key, converted)
-    return _to_json(converted)
+    return converted
 
 
 def effective_value(settings: Settings, key: str) -> Any:
-    """JSON-safe view of the current effective value for a managed key."""
-    return _to_json(getattr(settings, key))
+    """Current effective value for a managed key."""
+    return getattr(settings, key)
 
 
 async def load_config_overlay(sessions, settings: Settings) -> None:

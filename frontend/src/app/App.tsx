@@ -126,7 +126,7 @@ export function App() {
     leaderboard: "按来源与比较条件查看模型成绩。",
     "data-workbench": "管理员评审报告成绩、维护榜单数据及导入官方来源；普通用户只读公布榜单。",
     "admin/users": "查看平台账号、调整角色、停用与恢复账号；所有变更写入审计记录。",
-    "admin/config": "维护预算开关、归档清单与 Langfuse 链接等平台级配置，保存后立即生效。",
+    "admin/config": "维护预算开关与 Langfuse 链接等平台级配置，保存后立即生效。",
   };
 
   if (auth.status === "loading") {

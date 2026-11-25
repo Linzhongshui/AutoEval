@@ -304,7 +304,6 @@ async def test_admin_config_read_write_and_startup_overlay_live():
     app = _make_app(settings)
     engine, sessions = create_database(settings)
     admin, admin_session = await _make_user(sessions, "admin")
-    manifest_ids = [str(uuid_lib.uuid4()), str(uuid_lib.uuid4())]
     try:
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app),
@@ -314,13 +313,15 @@ async def test_admin_config_read_write_and_startup_overlay_live():
             initial = await client.get("/api/autoeval/v1/admin/config")
             assert initial.status_code == 200
             assert initial.json()["data"]["enforce_task_budget"] is False
+            # 归档清单已从平台配置中移除：响应不得包含该键
+            assert "archived_manifest_ids" not in initial.json()["data"]
 
             saved = await client.put(
                 "/api/autoeval/v1/admin/config",
                 json={
                     "updates": {
                         "enforce_task_budget": True,
-                        "archived_manifest_ids": manifest_ids,
+                        "evaluation_follow_up_enabled": True,
                         "langfuse_browser_url": "http://langfuse.example",
                     }
                 },
@@ -328,11 +329,11 @@ async def test_admin_config_read_write_and_startup_overlay_live():
             assert saved.status_code == 200
             body = saved.json()["data"]
             assert body["enforce_task_budget"] is True
-            assert body["archived_manifest_ids"] == manifest_ids
+            assert body["evaluation_follow_up_enabled"] is True
             assert body["langfuse_browser_url"] == "http://langfuse.example"
             # 运行时生效：settings 实例被直接更新（预算中间件在同一对象上读取）
             assert settings.enforce_task_budget is True
-            assert [str(u) for u in settings.archived_manifest_ids] == manifest_ids
+            assert settings.evaluation_follow_up_enabled is True
 
             bad_key = await client.put(
                 "/api/autoeval/v1/admin/config",
@@ -344,16 +345,18 @@ async def test_admin_config_read_write_and_startup_overlay_live():
                 json={"updates": {"enforce_task_budget": "yes"}},
             )
             assert bad_type.status_code == 422
-            bad_uuid = await client.put(
+            # 已删除的键一律按未知键拒绝
+            removed_key = await client.put(
                 "/api/autoeval/v1/admin/config",
-                json={"updates": {"archived_manifest_ids": ["not-a-uuid"]}},
+                json={"updates": {"archived_manifest_ids": []}},
             )
-            assert bad_uuid.status_code == 422
+            assert removed_key.status_code == 422
         # 模拟重启：新进程用全新 Settings 启动时从库里重新叠加
         fresh = _settings(auth_mode="oauth", oauth_enabled_providers=[], database_url=DATABASE_URL)
         await load_config_overlay(sessions, fresh)
         assert fresh.enforce_task_budget is True
-        assert [str(u) for u in fresh.archived_manifest_ids] == manifest_ids
+        assert fresh.evaluation_follow_up_enabled is True
+        assert fresh.langfuse_browser_url == "http://langfuse.example"
         # 审计写入（audit_event 不可变，按本次操作人过滤避开历史运行残留）
         async with sessions() as session:
             audit_rows = (

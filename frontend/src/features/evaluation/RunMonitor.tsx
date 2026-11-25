@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiGet, apiGetPage } from "../../shared/api";
 
 type Monitor = {
@@ -163,6 +163,10 @@ export function RunMonitor({ runId, terminal, performanceTask = false }: { runId
   const [selected, setSelected] = useState("");
   const [evidence, setEvidence] = useState<unknown>(null);
 
+  const directoryRequest = useRef<AbortController | null>(null);
+  const snapshotRequest = useRef<AbortController | null>(null);
+  const logRequest = useRef<AbortController | null>(null);
+  const [snapshotError, setSnapshotError] = useState("");
   const [logDataset, setLogDataset] = useState("");
   const [log, setLog] = useState<ArchivedLog | null>(null);
   const [logMessage, setLogMessage] = useState("");
@@ -172,7 +176,7 @@ export function RunMonitor({ runId, terminal, performanceTask = false }: { runId
     let timer: ReturnType<typeof setTimeout>;
     setValue(null); setError(""); setLoading(true); setTab("overview");
     setSnapshots([]); setNext(null); setSnapshotOffset(0); setSelected(""); setEvidence(null);
-    setSnapshotMessage(""); setLog(null); setLogMessage("");
+    setSnapshotMessage(""); setSnapshotError(""); setLogDataset(""); setLog(null); setLogMessage("");
     const refresh = async () => {
       if (!document.hidden) {
         try {
@@ -187,29 +191,50 @@ export function RunMonitor({ runId, terminal, performanceTask = false }: { runId
       if (!controller.signal.aborted && !terminal) timer = setTimeout(refresh, 2000);
     };
     void refresh();
-    return () => { controller.abort(); clearTimeout(timer); };
+    return () => { controller.abort(); clearTimeout(timer); directoryRequest.current?.abort(); snapshotRequest.current?.abort(); logRequest.current?.abort(); };
   }, [runId, terminal]);
 
   const loadSnapshots = async (offset: number) => {
+    directoryRequest.current?.abort();
+    const request = new AbortController();
+    directoryRequest.current = request;
+    snapshotRequest.current?.abort();
+    setSelected(""); setEvidence(null); setSnapshotError("");
     setSnapshotMessage("正在读取归档快照…");
     try {
-      const page = await apiGetPage<Snapshot[]>(`/runs/${runId}/monitor/snapshots?limit=${PAGE}&offset=${offset}&include_summary=true`);
+      const page = await apiGetPage<Snapshot[]>(`/runs/${runId}/monitor/snapshots?limit=${PAGE}&offset=${offset}&include_summary=true`, request.signal);
+      if (request.signal.aborted) return;
       setSnapshots(page.data); setNext(page.next_offset); setSnapshotOffset(offset);
       setSnapshotMessage(page.data.length ? "" : "本次运行暂无归档快照。");
     } catch {
+      if (request.signal.aborted) return;
       setSnapshots([]); setNext(null); setSnapshotMessage("监控归档目录暂不可用。");
     }
   };
   const openSnapshot = async (id: string) => {
-    setSelected(id); setEvidence(null);
-    try { setEvidence(await apiGet(`/runs/${runId}/monitor/snapshots/${id}`)); }
-    catch { setEvidence({ message: "证据尚未归档或校验未通过" }); }
+    snapshotRequest.current?.abort();
+    const request = new AbortController();
+    snapshotRequest.current = request;
+    setSelected(id); setEvidence(null); setSnapshotError("");
+    try {
+      const data = await apiGet(`/runs/${runId}/monitor/snapshots/${id}`, request.signal);
+      if (!request.signal.aborted) setEvidence(data);
+    } catch {
+      if (!request.signal.aborted) setSnapshotError("证据尚未归档或校验未通过");
+    }
   };
   const loadLog = async (dataset = logDataset) => {
-    if ((value?.datasets?.length ?? 0) > 1 && !dataset) { setLog(null); setLogMessage("请选择日志数据集"); return; }
+    logRequest.current?.abort();
+    setLog(null);
+    if ((value?.datasets?.length ?? 0) > 1 && !dataset) { setLogMessage("请选择日志数据集"); return; }
+    const request = new AbortController();
+    logRequest.current = request;
     setLogMessage("正在读取归档日志…");
-    try { setLog(await apiGet<ArchivedLog>(`/runs/${runId}/monitor/log${dataset ? `?dataset_key=${encodeURIComponent(dataset)}` : ""}`)); setLogMessage(""); }
-    catch {
+    try {
+      const data = await apiGet<ArchivedLog>(`/runs/${runId}/monitor/log${dataset ? `?dataset_key=${encodeURIComponent(dataset)}` : ""}`, request.signal);
+      if (!request.signal.aborted) { setLog(data); setLogMessage(""); }
+    } catch {
+      if (request.signal.aborted) return;
       setLog(null);
       setLogMessage("本次运行未归档执行日志，或日志校验未通过。");
     }
@@ -344,6 +369,7 @@ export function RunMonitor({ runId, terminal, performanceTask = false }: { runId
               <button disabled={next === null} onClick={() => next !== null && void loadSnapshots(next)}>下一页</button>
             </div>
           )}
+          {snapshotError && <p role="alert">{snapshotError}</p>}
           {evidence !== null && (
             <div className="monitor-evidence">
               <h4>快照内容 · 已通过完整性校验</h4>

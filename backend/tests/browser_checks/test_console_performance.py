@@ -186,3 +186,11 @@ def test_filter_and_view_performance_csv(browser_page):
         "summary_only": ["true"], "task_type": ["performance"], "model": ["Fixture"],
         "analysis_status": ["not_requested"], "limit": ["5"], "offset": ["5"],
     }
+    page.get_by_role("button", name="CSV 预览").click()
+    expect(page.get_by_role("table").get_by_text("0.25")).to_be_visible()
+    page.get_by_role("button", name="指标明细").click()
+    page.get_by_label("筛选指标或统计口径").fill("unmatched")
+    expect(page.get_by_text("没有匹配的指标")).to_be_visible()
+    page.get_by_role("button", name="返回报告列表").click()
+    expect(page.get_by_label("任务类型")).to_have_value("performance")
+    expect(page.get_by_text("共 6 条 · 第 2 / 2 页")).to_be_visible()

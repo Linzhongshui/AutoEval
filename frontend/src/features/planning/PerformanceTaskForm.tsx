@@ -82,7 +82,7 @@ export function PerformanceTaskForm({ poolRevision, onManagePool }: Props) {
   const until = check?.result?.preflight_valid_until;
   useEffect(() => {
     if (!until) return;
-    const timer = window.setTimeout(() => { setVerifiedBody(""); setMessage("预检已过期，请重新检查。"); }, Math.max(0, Date.parse(until) - Date.now()));
+    const timer = window.setTimeout(() => { setVerifiedBody(""); setCheck(null); setMessage("预检已过期，请重新检查。"); }, Math.max(0, Date.parse(until) - Date.now()));
     return () => clearTimeout(timer);
   }, [until]);
   const ready = verifiedBody === body && check?.state === "completed" && check.result?.execution_ready;

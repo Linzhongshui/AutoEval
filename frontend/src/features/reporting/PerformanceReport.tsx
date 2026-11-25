@@ -37,7 +37,8 @@ const scopeLabels: Record<string, string> = {
   smoke: "链路验证", internal_only: "内部对比", official_agentx: "官方口径", invalid: "不可比较",
 };
 
-function Measurements({ result, agentx }: { result: Measurement; agentx: boolean }) {
+function Measurements({ result: measurement, agentx }: { result: Measurement; agentx: boolean }) {
+  const result = { ...measurement, metrics: measurement.metrics ?? [], csv_preview: measurement.csv_preview ?? [] };
   const [query, setQuery] = useState("");
   const [view, setView] = useState<"metrics" | "csv">("metrics");
   const highlights = agentx ? [
@@ -94,7 +95,7 @@ export function PerformanceReport({ report, back }: { report: Report; back: () =
   const result = report.summary.performance;
   const verified = report.evidence_status === "verified";
   const agentx = result?.config?.kind === "agentx";
-  const files = result?.files.filter(f => f.path.toLowerCase().endsWith(".csv")) ?? [];
+  const files = result?.files?.filter(f => f.path.toLowerCase().endsWith(".csv")) ?? [];
   return <div className="perf-report">
     <button className="link perf-back" onClick={back}><ArrowLeft size={15} />返回报告列表</button>
     <section className="card perf-section perf-overview">

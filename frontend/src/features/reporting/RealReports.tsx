@@ -75,6 +75,7 @@ export function RealReports({ reportId, open }: { reportId?: string; open: (id: 
         id={reportId}
         go={(path) => {
           if (path === "reports") window.location.hash = "reports";
+          else if (path.startsWith("report/")) open(path.slice(7));
         }}
       />
     );

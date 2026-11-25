@@ -51,9 +51,13 @@ def test_monitor_polling_visibility_stale_terminal_and_controlled_evidence(brows
     assert page.evaluate("window.monitorCalls") == terminal_calls
 
     page.get_by_role("button", name="归档快照", exact=True).click()
-    page.get_by_role("button", name="final", exact=False).click()
+    page.get_by_role("button", name="终态快照", exact=False).click()
     expect(page.get_by_test_id("monitor-evidence")).to_contain_text('"snapshot_kind": "final"')
 
+    page.evaluate("window.snapshotFailure=true")
+    page.get_by_role("button", name="终态快照", exact=False).click()
+    expect(page.get_by_role("alert")).to_have_text("证据尚未归档或校验未通过")
+    expect(page.get_by_text("快照内容 · 已通过完整性校验")).to_have_count(0)
     page.get_by_role("button", name="日志", exact=True).click()
     expect(page.get_by_test_id("monitor-log")).to_contain_text("fixture archived log")
     page.evaluate("window.logFailure=true")
@@ -79,7 +83,7 @@ def test_case_detail_uses_server_state_filter_and_row_evidence(browser_page):
     page.add_init_script(path=FIXTURE)
     page.goto(url + "/#run/fixture-run")
     expect(page.get_by_text("判分准确率", exact=True)).to_be_visible()
-    expect(page.get_by_text("80%", exact=True)).to_be_visible()
+    expect(page.get_by_text("80.00%", exact=True)).to_be_visible()
     expect(page.get_by_test_id("run-progress")).to_be_visible()
     expect(page.get_by_role("progressbar")).to_have_attribute("aria-valuenow", "40")
 
@@ -119,10 +123,9 @@ def test_monitor_progress_unknown_zero_and_completed(browser_page):
 
 def test_case_list_refreshes_when_running_task_completes(browser_page):
     page, url, _ = browser_page
-    page.add_init_script(path=FIXTURE)
-    page.add_init_script("window.savedCases=window.cases;window.cases=[];window.detail.report=null")
+    page.add_init_script(FIXTURE.read_text(encoding="utf-8") + "\nwindow.savedCases=window.cases;window.cases=[];window.detail.report=null")
     page.goto(url + "/#run/fixture-run")
-    expect(page.get_by_text("该运行暂无 case 执行记录。", exact=True)).to_be_visible()
+    expect(page.get_by_role("status").filter(has_text="该运行暂无 case 执行记录。")).to_be_visible()
     page.evaluate("window.cases=window.savedCases;window.detail.state='completed'")
     expect(page.get_by_test_id("case-attempts")).to_be_visible(timeout=10000)
     expect(page.get_by_test_id("case-attempts")).to_contain_text("UPSTREAM_TIMEOUT")

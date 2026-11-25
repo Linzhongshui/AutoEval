@@ -100,8 +100,8 @@ class SSHExecutor:
             raise
 
     @staticmethod
-    def command(client, argv, payload=None):
-        stdin, stdout, stderr = client.exec_command(shlex.join(argv), timeout=15)
+    def command(client, argv, payload=None, *, timeout=15):
+        stdin, stdout, stderr = client.exec_command(shlex.join(argv), timeout=timeout)
         if payload is not None:
             stdin.write(payload)
             stdin.flush()

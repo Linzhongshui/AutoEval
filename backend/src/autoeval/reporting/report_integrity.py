@@ -44,13 +44,13 @@ async def verify_follow_up_cases(settings, dataset, task, combined):
     return cases == combined["cases"]
 
 
-async def verified_report_body(settings, report, run, snapshot):
+async def verified_report_body(settings, report, run, snapshot, *, verify_performance_bytes=False):
     try:
         body = await asyncio.to_thread(read_manifest, settings, report)
         if (
             not isinstance(body, dict)
             or body.get("schema_version")
-            not in {"gpqa-report.v1", "planned-report.v1", "task-report.v2"}
+            not in {"gpqa-report.v1", "planned-report.v1", "task-report.v2", "performance-report.v1"}
             or body.get("run_id") != str(run.id)
             or body.get("snapshot_sha256") != snapshot.sha256
             or report.snapshot_sha256 != snapshot.sha256
@@ -59,6 +59,23 @@ async def verified_report_body(settings, report, run, snapshot):
             or body.get("validity") != report.validity
         ):
             return "invalid", None
+        if body.get("schema_version") == "performance-report.v1":
+            from autoeval.reporting.performance import check_files
+            from autoeval.reporting.task_reports import checksum
+
+            if (
+                snapshot.canonical_body.get("task_type") != "performance"
+                or checksum(snapshot.canonical_body) != snapshot.sha256
+                or body["summary"]["performance"]["config"]
+                != snapshot.canonical_body["inputs"]["performance"]
+            ):
+                return "invalid", None
+
+            files = body["summary"]["performance"]["files"]
+            if not files:
+                return "missing", body
+            if not await asyncio.to_thread(check_files, settings, files, verify_performance_bytes):
+                return "invalid", None
         if body.get("schema_version") == "task-report.v2":
             from autoeval.catalog.datasets import canonical_manifest
             from autoeval.reporting.task_reports import checksum, dataset_context, scored_summary

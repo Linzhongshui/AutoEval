@@ -1572,6 +1572,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/autoeval/v1/reports/{report_id}/performance-csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Performance Csv */
+        get: operations["performance_csv_api_autoeval_v1_reports__report_id__performance_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/autoeval/v1/reports/{report_id}/review": {
         parameters: {
             query?: never;
@@ -1719,6 +1736,31 @@ export interface components {
         Accepted: {
             /** Accepted */
             accepted: boolean;
+        };
+        /** AgentXPerformance */
+        AgentXPerformance: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "agentx";
+            /**
+             * Variant
+             * @enum {string}
+             */
+            variant: "256k" | "full";
+            /**
+             * Run Mode
+             * @default smoke
+             * @enum {string}
+             */
+            run_mode: "smoke" | "benchmark";
+            /** Duration */
+            duration: number;
+            /** Concurrency */
+            concurrency: number | number[];
+            /** Trace Limit */
+            trace_limit?: number | null;
         };
         /** AppliedPlan */
         AppliedPlan: {
@@ -2337,6 +2379,22 @@ export interface components {
             /** Id */
             id: string;
         };
+        /** InferencePerformance */
+        InferencePerformance: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "inference";
+            /** Input Tokens */
+            input_tokens: number;
+            /** Max Output Tokens */
+            max_output_tokens: number;
+            /** Concurrency */
+            concurrency: number;
+            /** Requests */
+            requests: number;
+        };
         /** JobAccepted */
         JobAccepted: {
             /** Id */
@@ -2498,15 +2556,6 @@ export interface components {
             /** Request Id */
             request_id: string;
         };
-        /** PageEnvelope[ReportView] */
-        PageEnvelope_ReportView_: {
-            /** Data */
-            data: components["schemas"]["ReportView"][];
-            /** Next Offset */
-            next_offset: number | null;
-            /** Request Id */
-            request_id: string;
-        };
         /** PageEnvelope[RunListItem] */
         PageEnvelope_RunListItem_: {
             /** Data */
@@ -2532,6 +2581,31 @@ export interface components {
             adapter_input?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /** PerformanceTask */
+        PerformanceTask: {
+            /**
+             * Resource Id
+             * Format: uuid
+             */
+            resource_id: string;
+            /**
+             * Resource Kind
+             * @constant
+             */
+            resource_kind: "customer_ssh";
+            /**
+             * Target Id
+             * Format: uuid
+             */
+            target_id: string;
+            /** Performance */
+            performance: components["schemas"]["InferencePerformance"] | components["schemas"]["AgentXPerformance"];
+            /**
+             * Ignore Budget
+             * @default false
+             */
+            ignore_budget: boolean;
         };
         /** PlanInput */
         PlanInput: {
@@ -2698,8 +2772,32 @@ export interface components {
             /** Container Name */
             container_name: string;
         };
+        /** ReportFilters */
+        ReportFilters: {
+            /** Models */
+            models: string[];
+            /** Analysis Statuses */
+            analysis_statuses: string[];
+        };
+        /** ReportPage */
+        ReportPage: {
+            /** Data */
+            data: components["schemas"]["ReportView"][];
+            /** Next Offset */
+            next_offset: number | null;
+            /** Total */
+            total: number;
+            /** Request Id */
+            request_id: string;
+            filters: components["schemas"]["ReportFilters"];
+        };
         /** ReportView */
         ReportView: {
+            /**
+             * Task Type
+             * @enum {string}
+             */
+            task_type: "accuracy" | "performance" | "other";
             /** Dataset Concurrency */
             dataset_concurrency?: number | null;
             /** Dataset Results */
@@ -2835,6 +2933,8 @@ export interface components {
         };
         /** ServiceUpdate */
         ServiceUpdate: {
+            /** Service Kind */
+            service_kind?: ("local" | "official") | null;
             /** Service Name */
             service_name: string;
             /**
@@ -2936,6 +3036,8 @@ export interface components {
              * Format: uuid
              */
             model_version_id: string;
+            /** Service Kind */
+            service_kind?: ("local" | "official") | null;
             /** Base Url */
             base_url: string;
             /** Remote Model */
@@ -3921,7 +4023,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PlanInput"];
+                "application/json": components["schemas"]["PlanInput"] | components["schemas"]["PerformanceTask"];
             };
         };
         responses: {
@@ -4586,7 +4688,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SubmitTask"];
+                "application/json": components["schemas"]["SubmitTask"] | components["schemas"]["PerformanceTask"];
             };
         };
         responses: {
@@ -6343,7 +6445,11 @@ export interface operations {
                 offset?: number;
                 limit?: number;
                 summary_only?: boolean;
+                model?: string | null;
+                analysis_status?: string | null;
+                query?: string | null;
                 review_status?: string | null;
+                task_type?: ("accuracy" | "performance" | "other") | null;
             };
             header?: never;
             path?: never;
@@ -6357,7 +6463,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PageEnvelope_ReportView_"];
+                    "application/json": components["schemas"]["ReportPage"];
                 };
             };
             /** @description Validation Error */
@@ -6389,6 +6495,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_ReportView_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    performance_csv_api_autoeval_v1_reports__report_id__performance_csv_get: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path: {
+                report_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

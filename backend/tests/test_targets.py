@@ -1,7 +1,9 @@
+from types import SimpleNamespace
+
 import httpx
 import pytest
 
-from autoeval.resources.targets import probe_model_list, validate_url
+from autoeval.resources.targets import probe_model_list, service_kind, validate_url
 
 
 @pytest.mark.parametrize(
@@ -43,3 +45,12 @@ async def test_failed_auth_does_not_expose_upstream_body():
         )
     assert outcome == "upstream_error"
     assert details == {"http_status": 401}
+
+@pytest.mark.parametrize(("kind", "url", "expected"), [
+    ("official", "https://vendor.example/v1", "official"),
+    ("local", "https://inference.example/v1", "local"),
+    (None, "https://api.deepseek.com/v1", "official"),
+    (None, "https://api.deepseek.com.example/v1", None),
+])
+def test_service_source_for_existing_bindings(kind, url, expected):
+    assert service_kind(SimpleNamespace(service_kind=kind, base_url=url)) == expected

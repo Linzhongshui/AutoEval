@@ -6,6 +6,7 @@ export type { Param };
 export type Config = components["schemas"]["ConfigListItem"];
 
 export type Target = {
+  service_kind?: "local" | "official" | null;
   service_name?: string;
   id: string;
   remote_model: string;
@@ -51,6 +52,10 @@ export type RunSnapshot = {
   resource_kind: string;
   sample_count: number;
   dataset_concurrency?: number;
+  dataset_configurations?: {
+    config?: { subcommand?: string; params?: Record<string, unknown> };
+    tool?: { revision?: string };
+  }[];
   parameters: Record<string, unknown>;
   manifest_id: string;
   manifest_sha256: string;

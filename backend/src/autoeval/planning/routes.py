@@ -34,7 +34,14 @@ from autoeval.infrastructure.responses import (
 from autoeval.planning.artifacts import artifact, current_preflight
 from autoeval.planning.models import PlanningArtifact, PlanningJob
 from autoeval.planning.planning_engine import DATASETS, apply_concurrency
-from autoeval.planning.schemas import ApplyInput, CurveInput, PlanInput, ProbeInput, Strict
+from autoeval.planning.schemas import (
+    ApplyInput,
+    CurveInput,
+    PerformanceTask,
+    PlanInput,
+    ProbeInput,
+    Strict,
+)
 from autoeval.planning.schemas import ResourceRef as ResourceRef
 from autoeval.planning.schemas import TaskInput as TaskInput
 
@@ -295,7 +302,7 @@ async def import_curve(body: CurveInput, request: Request):
 
 
 @router.post("/resources/preflight", status_code=202, response_model=Envelope[JobAccepted])
-async def preflight(body: PlanInput, request: Request):
+async def preflight(body: PlanInput | PerformanceTask, request: Request):
     async with request.app.state.sessions() as session:
         inputs = await resolve_inputs(session, request.app.state.settings, body)
     return await enqueue("preflight", inputs, request)

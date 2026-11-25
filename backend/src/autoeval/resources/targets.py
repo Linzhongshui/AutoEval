@@ -3,6 +3,7 @@
 import json
 import uuid
 from datetime import UTC, datetime
+from typing import Literal
 from urllib.parse import urlsplit
 
 import httpx
@@ -21,9 +22,21 @@ class CredentialInput(BaseModel):
     value: SecretStr = Field(min_length=1, max_length=65536)
 
 
+ServiceKind = Literal["local", "official"]
+
+
+def service_kind(target):
+    if target.service_kind:
+        return target.service_kind
+    if urlsplit(target.base_url).hostname == "api.deepseek.com":
+        return "official"
+    return None
+
+
 class TargetInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     model_version_id: uuid.UUID
+    service_kind: ServiceKind | None = None
     base_url: str = Field(max_length=2048)
     remote_model: str = Field(min_length=1, max_length=128)
     credential_ref: str = Field(pattern=r"^[0-9a-f]{32}$")
@@ -94,6 +107,7 @@ async def create_target(body: TargetInput, request: Request):
             target = TargetBinding(
                 model_version_id=body.model_version_id,
                 base_url=base_url,
+                service_kind=body.service_kind,
                 remote_model=body.remote_model,
                 credential_ref=body.credential_ref,
             )
@@ -188,6 +202,7 @@ async def list_targets(
                     else None,
                     "base_url": t.base_url,
                     "remote_model": t.remote_model,
+                    "service_kind": service_kind(t),
                     "service_name": t.service_name or t.remote_model,
                     "archived": t.archived,
                 }
@@ -203,6 +218,7 @@ async def list_targets(
 
 
 class ServiceUpdate(BaseModel):
+    service_kind: ServiceKind | None = None
     service_name: str = Field(min_length=1, max_length=128)
     archived: bool = False
 
@@ -214,6 +230,8 @@ async def update_service(target_id: uuid.UUID, body: ServiceUpdate, request: Req
         if target is None:
             raise HTTPException(404, "Target not found")
         target.service_name = body.service_name.strip()
+        if body.service_kind is not None:
+            target.service_kind = body.service_kind
         target.archived = body.archived
     return {"data": {"id": str(target_id)}, "request_id": request.state.request_id}
 
@@ -248,6 +266,7 @@ async def deduplicate_services(request: Request):
             key = (
                 target.model_version_id,
                 target.base_url.rstrip("/"),
+                service_kind(target),
                 target.remote_model,
                 digest,
             )

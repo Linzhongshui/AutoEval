@@ -128,6 +128,7 @@ async def create_run(session, settings, body, execution_plan_id, key):
         "remote_model": target.remote_model,
         "execution_origin": settings.evaluation_origin,
     }
+    frozen["task_type"] = "performance" if inputs.get("performance") else "accuracy"
     # A single GPQA result can use the existing report/leaderboard contract without
     # changing its frozen planning inputs or inventing aggregate multi-dataset scores.
     if len(inputs["tasks"]) == 1 and inputs["tasks"][0]["dataset"] == "GPQA":
@@ -158,6 +159,8 @@ async def create_run(session, settings, body, execution_plan_id, key):
             'acknowledged_at': acknowledged_at.isoformat(),
             'execution_deadline': (acknowledged_at + timedelta(hours=24)).isoformat(),
         }
+    elif inputs.get("performance") and not budget_config_path:
+        raise HTTPException(409, "已启用预算校验，请配置性能任务预算")
     elif budget_config_path:
         import json
         from pathlib import Path
@@ -204,7 +207,7 @@ async def create_run(session, settings, body, execution_plan_id, key):
             MonitorBinding(
                 run_id=run.id,
                 attempt=index,
-                latest={"source": "executor_lifecycle", "tool_status": "pending", "task_name": str(child_id), "observed_at": datetime.now(UTC).isoformat(), "snapshot_kind": "live", "collection_status": "waiting_tool", "stale": False, "finish_count": None, "total_count": len(item["samples"]), "progress_description": "监控已启用，等待远程作业启动"},
+                latest={"source": "executor_lifecycle", "tool_status": "pending", "task_name": str(child_id), "observed_at": datetime.now(UTC).isoformat(), "snapshot_kind": "live", "collection_status": "waiting_tool", "stale": False, "finish_count": None, "total_count": None if inputs.get("performance") else len(item["samples"]), "progress_description": "监控已启用，等待远程作业启动"},
                 identity={
                     "task_name": str(child_id),
                     "dataset": item["dataset"],

@@ -1,6 +1,6 @@
 export const serviceLabels = {
-  local: "标准本地模型服务",
-  official: "官方模型服务",
+  local: "本地模型服务",
+  official: "官方 API",
 } as const;
 
 export type ServiceKind = keyof typeof serviceLabels;

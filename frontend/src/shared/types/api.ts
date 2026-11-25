@@ -2497,6 +2497,11 @@ export interface components {
             /** Dataset */
             dataset: string;
         };
+        /** ModelConnectionTestInput */
+        ModelConnectionTestInput: {
+            /** Ssh Resource Id */
+            ssh_resource_id?: string | null;
+        };
         /** ModelCreate */
         ModelCreate: {
             /** Model Id */
@@ -5669,7 +5674,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ModelConnectionTestInput"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

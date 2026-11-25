@@ -3947,6 +3947,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ModelConnectionTestInput"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -7712,6 +7729,25 @@
           "dataset"
         ],
         "title": "ManifestOption"
+      },
+      "ModelConnectionTestInput": {
+        "properties": {
+          "ssh_resource_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ssh Resource Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ModelConnectionTestInput"
       },
       "ModelCreate": {
         "properties": {

@@ -159,9 +159,14 @@ async def update_user(
                 raise HTTPException(404, "用户不存在")
             changes: dict[str, Any] = {}
             if patch.role is not None and patch.role != target.role:
-                # 角色调整（任何方向，含设超管）仅超级管理员可执行；
-                # 管理员不能提拔普通用户，也不能降级其他管理员。
-                if principal.role != "superadmin":
+                # 角色调整收归超管；唯一例外：管理员可以把自己降级为普通用户
+                #（不能提拔任何人、不能动其他管理员、不能动超管）。
+                self_demotion = (
+                    principal.role == "admin"
+                    and str(target.id) == principal.id
+                    and patch.role == "regular"
+                )
+                if principal.role != "superadmin" and not self_demotion:
                     raise HTTPException(403, "仅超级管理员可以调整角色")
                 if target.role == "superadmin" and patch.role != "superadmin":
                     await _ensure_not_last_superadmin(session, target.id, action="降级")

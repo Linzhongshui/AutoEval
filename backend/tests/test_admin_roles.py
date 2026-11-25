@@ -163,6 +163,15 @@ async def test_role_changes_require_superadmin_live():
             assert missing.status_code == 404
             empty = await client.patch(f"/api/autoeval/v1/admin/users/{regular.id}", json={})
             assert empty.status_code == 422
+            # 管理员唯一允许的角色变更：把自己降级为普通用户
+            self_demote = await client.patch(
+                f"/api/autoeval/v1/admin/users/{admin_a.id}", json={"role": "regular"}
+            )
+            assert self_demote.status_code == 200
+            assert self_demote.json()["data"]["role"] == "regular"
+            # 自我降级立即生效：原会话再访问管理接口 403
+            stale_self = await client.get("/api/autoeval/v1/admin/users")
+            assert stale_self.status_code == 403
         # 角色全部未被改动
         async with sessions() as session:
             roles = dict(
@@ -234,8 +243,9 @@ async def test_role_changes_require_superadmin_live():
             row
             for row in audit_rows
             if "role" in row.details.get("changes", {})
+            and row.actor == f"github:{superadmin.login}"
         ]
-        assert role_rows, "角色变更必须写入 audit_event"
+        assert role_rows, "超管的角色变更必须写入 audit_event"
         assert role_rows[0].actor == f"github:{superadmin.login}"
         assert role_rows[0].details["changes"]["role"]["to"] == "admin"
     finally:

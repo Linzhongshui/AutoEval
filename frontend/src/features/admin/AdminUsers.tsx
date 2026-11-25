@@ -110,6 +110,10 @@ export function AdminUsers({
               {rows.map((user) => {
                 const suspended = user.suspended_at !== null;
                 const demoting = user.role !== "regular";
+                const isSelf = user.id === viewer.id;
+                // 角色变更：超管任意；管理员唯一例外是把自己降级为普通用户
+                const canChangeRole =
+                  canManageRoles || (isSelf && viewer.role === "admin");
                 // 停用/恢复：超管可处置任何账号；管理员只能处置普通用户
                 const canSuspend = canManageRoles || user.role === "regular";
                 const suspendHint = canSuspend
@@ -131,8 +135,14 @@ export function AdminUsers({
                     <td>
                       <select
                         value={user.role}
-                        disabled={suspended || busyId === user.id || !canManageRoles}
-                        title={canManageRoles ? undefined : "仅超级管理员可以调整角色"}
+                        disabled={suspended || busyId === user.id || !canChangeRole}
+                        title={
+                          canManageRoles
+                            ? undefined
+                            : isSelf && viewer.role === "admin"
+                              ? "管理员可以将自己降级为普通用户"
+                              : "仅超级管理员可以调整角色"
+                        }
                         onChange={(event) => {
                           const next = event.target.value as AdminUser["role"];
                           mutate(
@@ -146,8 +156,8 @@ export function AdminUsers({
                         }}
                         aria-label={`${user.display_name} 的角色`}
                       >
-                        <option value="superadmin">超级管理员</option>
-                        <option value="admin">管理员</option>
+                        <option value="superadmin" disabled={!canManageRoles}>超级管理员</option>
+                        <option value="admin" disabled={!canManageRoles}>管理员</option>
                         <option value="regular">普通用户</option>
                       </select>
                     </td>

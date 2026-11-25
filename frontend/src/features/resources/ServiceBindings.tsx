@@ -144,12 +144,12 @@ export function ServiceBindings({ onUse }: { onUse?: (id: string) => void }) {
     })}>保存服务绑定</button>
     <p role="status">{message}</p>
     <div className="saved-service-list"><div className="spread"><h3>已保存服务</h3><button disabled={busy} onClick={() => perform(refresh)}>刷新列表</button></div>
-      <p className="muted">检测连接会读取模型列表。</p>
+      <p className="muted">本地服务由测评执行环境访问；官方 API 可在此检测模型列表。</p>
       {!targets.length && <p className="muted">暂无已保存服务</p>}
-      {targets.map((target) => <article className="saved-service-row" key={target.id}><div><b>{target.remote_model}</b> <small className="service-kind">{serviceLabel(target.service_kind)}</small><p>{target.base_url}</p></div><div className="inline"><button disabled={busy} onClick={() => perform(async () => {
+      {targets.map((target) => <article className="saved-service-row" key={target.id}><div><b>{target.remote_model}</b> <small className="service-kind">{serviceLabel(target.service_kind)}</small><p>{target.base_url}</p></div><div className="inline">{target.service_kind === "local" ? <span>由测评执行环境访问</span> : <button disabled={busy} onClick={() => perform(async () => {
         const result = await api<{ outcome: string; details: { http_status?: number } }>(`/targets/${target.id}/connection-tests`, {});
         setMessage(`${target.remote_model}：${result.outcome === "matched" ? "鉴权与目标模型匹配成功（未调用生成）" : result.outcome}`);
-      })}>检测连接</button><button type="button" className="primary" onClick={() => onUse ? onUse(target.id) : location.assign(`#evaluate?target=${encodeURIComponent(target.id)}`)}>使用此服务</button></div></article>)}
+      })}>检测连接</button>}<button type="button" className="primary" onClick={() => onUse ? onUse(target.id) : location.assign(`#evaluate?target=${encodeURIComponent(target.id)}`)}>使用此服务</button></div></article>)}
     </div>
   </section>;
 }

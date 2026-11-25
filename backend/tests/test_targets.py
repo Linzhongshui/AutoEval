@@ -54,3 +54,24 @@ async def test_failed_auth_does_not_expose_upstream_body():
 ])
 def test_service_source_for_existing_bindings(kind, url, expected):
     assert service_kind(SimpleNamespace(service_kind=kind, base_url=url)) == expected
+
+async def test_local_service_probe_stops_before_any_network_request(monkeypatch):
+    from unittest.mock import AsyncMock, Mock
+    from uuid import uuid4
+
+    from fastapi import HTTPException
+
+    from autoeval.resources.targets import check_connection
+
+    session = AsyncMock()
+    session.get.return_value = SimpleNamespace(service_kind="local")
+    manager = AsyncMock()
+    manager.__aenter__.return_value = session
+    state = SimpleNamespace(settings=object(), sessions=lambda: manager)
+    request = SimpleNamespace(app=SimpleNamespace(state=state))
+    client = Mock(side_effect=AssertionError("unexpected platform HTTP client"))
+    monkeypatch.setattr(httpx, "AsyncClient", client)
+    with pytest.raises(HTTPException) as raised:
+        await check_connection(uuid4(), request)
+    assert raised.value.status_code == 409
+    client.assert_not_called()

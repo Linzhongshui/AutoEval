@@ -97,9 +97,12 @@ async def create_target(body: TargetInput, request: Request):
     settings = request.app.state.settings
     try:
         base_url = validate_url(body.base_url, settings.allowed_model_hosts)
+    except ValueError as exc:
+        raise HTTPException(422, "模型服务地址须使用允许列表中的 HTTPS 主机和默认 HTTPS 端口") from exc
+    try:
         FileSecretStore(settings.secret_store_path).get(body.credential_ref)
     except (ValueError, OSError) as exc:
-        raise HTTPException(422, "Invalid endpoint or credential reference") from exc
+        raise HTTPException(422, "平台无法读取该服务的凭据引用，请重新登记密钥") from exc
     try:
         async with request.app.state.sessions() as session, session.begin():
             if await session.get(AssetVersion, body.model_version_id) is None:
@@ -127,6 +130,8 @@ async def check_connection(target_id: uuid.UUID, request: Request):
             target = await session.get(TargetBinding, target_id)
             if target is None:
                 raise HTTPException(404, "Target not found")
+            if service_kind(target) == "local":
+                raise HTTPException(409, "本地模型服务由测评执行环境访问，平台不发起连接检测")
             validate_url(target.base_url, settings.allowed_model_hosts)
             try:
                 key = FileSecretStore(settings.secret_store_path).get(target.credential_ref)

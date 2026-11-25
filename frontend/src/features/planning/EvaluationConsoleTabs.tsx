@@ -27,7 +27,7 @@ export function EvaluationConsoleTabs({ page, go, ...props }: Props) {
           go(next.path);
         }}>{tab.label}</button>)}
     </div>
-    {tabs.map(tab => <div key={tab.id} id={`panel-${tab.id}`} role="tabpanel"
+    {tabs.map(tab => <div key={tab.id} className="console-tab-panel" id={`panel-${tab.id}`} role="tabpanel"
       aria-labelledby={`tab-${tab.id}`} hidden={page !== tab.path}>
       {(visited.has(tab.path) || page === tab.path) && (tab.id === "accuracy"
         ? <TaskPlanning {...props} /> : <PerformanceTaskForm {...props} />)}

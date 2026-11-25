@@ -142,8 +142,6 @@ def inspect_dataset(task, *, networks, validated):
         reasons.append("dataset_path_missing")
     elif not Path(data_path).is_dir():
         reasons.append("dataset_path_unavailable")
-    if task["dataset"] in {"DeepSWE", "AutomationBench"} and not networks:
-        reasons.append("harbor_network_unavailable")
     try:
         tool_revision = verify_tool(task)
     except (KeyError, OSError, ValueError, subprocess.SubprocessError):
@@ -157,6 +155,8 @@ def inspect_dataset(task, *, networks, validated):
                 reasons.append("task_selection_preflight_failed")
         except (OSError, ValueError, subprocess.SubprocessError):
             reasons.append("tool_environment_preflight_unavailable")
+    if task["dataset"] in {"DeepSWE", "AutomationBench"} and not networks:
+        reasons.append("harbor_network_unavailable")
     return {
         "task_id": task["task_id"],
         "dataset": task["dataset"],
@@ -210,13 +210,14 @@ def preflight(tasks=None):
                 // 1024**2,
             ),
         )
-    validated = set(os.environ.get("AE_VALIDATED_DATASETS", "").split(","))
+    validated = {name.strip() for name in os.environ.get("AE_VALIDATED_DATASETS", "").split(",")}
     checks = (
         [inspect_dataset(task, networks=networks, validated=validated) for task in tasks]
         if tasks is not None
         else []
     )
     if tasks is None:
+        # A probe without a task selection reports only previously declared capabilities.
         supported = [
             d
             for d in ["GPQA", "MMMU-Pro", "DeepSWE"]
@@ -230,11 +231,7 @@ def preflight(tasks=None):
         versions["adaptor"] = {"actual": performance_adapter.adapter_digest(), "expected": tasks[0]["compilation"]["adaptor_revision"]}
     if not adaptor_ready:
         blockers.append("adaptor_revision_mismatch")
-    selection_ready = (
-        bool(supported)
-        if tasks is None
-        else len(supported) == len({task["dataset"] for task in tasks})
-    )
+    selection_ready = bool(supported) and all(not check["blocking_reasons"] for check in checks)
     if not selection_ready:
         blockers.append("no_supported_datasets")
     return {

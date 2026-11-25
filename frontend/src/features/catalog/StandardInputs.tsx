@@ -1,3 +1,4 @@
+import "./StandardInputDrawers.css";
 import { AdapterFields } from "./AdapterFields";
 import { useEffect, useState } from "react";
 import { apiGet, apiGetOptions, apiGetPage, apiPost } from "../../shared/api";
@@ -95,22 +96,40 @@ function CompileForm({ entry }: { entry: InputVersion }) {
     } catch (error) { setMessage(error instanceof Error ? error.message : "输入编译失败"); }
     finally { setBusy(false); }
   };
-  return <div className="stack">
-    <p className="notice">仅保存输入映射与编译快照，不启动测评。请勿粘贴密钥；后台通过已登记服务引用凭据。</p>
-    <button disabled={busy} onClick={() => void autocomplete()}>从标准仓读取配置</button>
+  return <div className="input-editor">
+    <header className="input-context"><div><strong>{entry.source_model}</strong><small>{entry.benchmark}</small></div>
+      <button disabled={busy} onClick={() => void autocomplete()}>从标准仓读取配置</button></header>
     {suggestion && <section className="notice stack" aria-label="自动补全预览"><h3>标准仓配置预览，待确认保存</h3><p>来源：{suggestion.template_source}</p>{suggestion.notes.filter(note => !/审批|批准/.test(note)).map(note => <small key={note}>{note}</small>)}<p>{suggestion.preview.input_ready ? "输入字段齐备" : "仍需补全：" + suggestion.preview.blocking_reasons.join("、")}</p><details><summary>补全差异与字段来源</summary><pre className="snapshot">{JSON.stringify({ changes: suggestion.changes, field_sources: suggestion.preview.field_sources, overrides: suggestion.preview.overrides }, null, 2)}</pre></details></section>}
-    <label>平台模型<select aria-label="平台模型" value={modelId} onChange={(e) => { setModelId(e.target.value); setTargetId(""); changed(); }}><option value="">请选择模型映射</option>{models.map((m) => <option key={m.id} value={m.id}>{m.model_id} · {m.name}</option>)}</select></label>
-    <label>模型服务<select aria-label="模型服务" value={targetId} onChange={(e) => { setTargetId(e.target.value); changed(); }}><option value="">请选择已登记服务</option>{targets.filter((t) => t.model_id === modelId).map((t) => <option key={t.id} value={t.id}>{t.remote_model} · {t.base_url}</option>)}</select></label>
+    <section className="input-fields"><h3>模型映射</h3><label>平台模型<select aria-label="平台模型" value={modelId} onChange={(e) => { setModelId(e.target.value); setTargetId(""); changed(); }}><option value="">请选择模型映射</option>{models.map((m) => <option key={m.id} value={m.id}>{m.model_id} · {m.name}</option>)}</select></label>
+    <label>模型服务<select aria-label="模型服务" value={targetId} disabled={busy} onChange={e => {
+      const service = targets.find(t => t.id === e.target.value);
+      setTargetId(service?.id || "");
+      if (service) setModelId(service.model_id);
+      changed();
+    }}>
+      <option value="">{targets.length ? "请选择已登记服务" : "暂无可选服务"}</option>
+      {[true, false].map(matching => {
+        const group = targets.filter(t => (t.model_id === modelId) === matching);
+        return group.length > 0 && <optgroup key={String(matching)}
+          label={matching ? "当前平台模型" : modelId ? "其他平台模型（选择后切换模型）" : "已登记服务"}>
+          {group.map(t => <option key={t.id} value={t.id}>
+            {t.remote_model} · {models.find(m => m.id === t.model_id)?.model_id || t.model_id} · {t.base_url}
+          </option>)}
+        </optgroup>;
+      })}
+    </select></label>
+</section><section className="input-fields"><h3>执行环境</h3><label>运行方式<select value={execution} onChange={(e) => { setExecution(e.target.value); changed(); }}><option value="docker">Docker</option><option value="local">执行服务器本机</option></select></label>
+    <label>AISBench 源码目录<input aria-label="AISBench 源码目录" value={toolRoot} onChange={(e) => { setToolRoot(e.target.value); changed(); }} placeholder="执行环境中的绝对路径" /></label>
+    {entry.benchmark !== "DeepSWE" ? <label>数据集目录<input aria-label="数据集目录" value={datasetsDir} onChange={(e) => { setDatasetsDir(e.target.value); changed(); }} /></label> : <label>任务目录<input value={taskPath} onChange={(e) => { setTaskPath(e.target.value); changed(); }} placeholder="需与标准锁定路径一致" /></label>}
+    </section>
     <details><summary>高级兼容参数（历史接口）</summary><label>启动模板版本<input aria-label="启动模板版本" value={version} onChange={(e) => { setVersion(e.target.value); changed(); }} /></label>
     <label>启动模板 JSON<textarea aria-label="启动模板 JSON" rows={6} value={template} onChange={(e) => { setTemplate(e.target.value); changed(); }} /></label>
     <label>允许调整的参数 JSON<textarea rows={4} value={adjustments} onChange={(e) => { setAdjustments(e.target.value); changed(); }} /></label>
     <small>使用 tool/subcommand/params 结构；标准锁定参数最终覆盖，环境、端点及命令行绕过参数不可在此填写。模板内容修改需使用新版本。{entry.startup_missing ? "仓库缺少 benchmark_config.json，需在标准仓补齐后同步新版本；平台不自动补造测评参数。" : ""}</small>
-    </details><label>执行环境<select value={execution} onChange={(e) => { setExecution(e.target.value); changed(); }}><option value="docker">Docker</option><option value="local">执行服务器本机</option></select></label>
-    <label>AISBench 源码目录<input aria-label="AISBench 源码目录" value={toolRoot} onChange={(e) => { setToolRoot(e.target.value); changed(); }} placeholder="执行环境中的绝对路径" /></label>
-    {entry.benchmark !== "DeepSWE" ? <label>数据集目录<input aria-label="数据集目录" value={datasetsDir} onChange={(e) => { setDatasetsDir(e.target.value); changed(); }} /></label> : <label>任务目录<input value={taskPath} onChange={(e) => { setTaskPath(e.target.value); changed(); }} placeholder="需与标准锁定路径一致" /></label>}
-    <button className="primary" disabled={busy} onClick={() => void compile()}>{busy ? "校验中…" : "校验并保存输入快照"}</button>
+    </details>
+    <footer><small>保存配置快照后，可返回控制台选择该配置。</small><button className="primary" disabled={busy} onClick={() => void compile()}>{busy ? "校验中…" : "校验并保存输入快照"}</button></footer>
     {message && <p role="alert">{message}</p>}
-    {result && <section className="stack" aria-label="输入校验结果"><h3>{result.input_ready ? "输入字段校验通过" : "输入待补全"}</h3><p>执行入口未接入</p>{result.blocking_reasons.length > 0 && <ul>{result.blocking_reasons.map((reason) => <li key={reason}>{missingLabel(reason)}</li>)}</ul>}<small>配置 SHA-256：{result.sha256}</small><details open><summary>脱敏启动配置</summary><pre className="snapshot">{JSON.stringify(result.config, null, 2)}</pre></details><details><summary>锁定字段、来源及覆盖差异</summary><pre className="snapshot">{JSON.stringify({ locked_fields: result.locked_fields, field_sources: result.field_sources, overrides: result.overrides }, null, 2)}</pre></details></section>}
+    {result && <section className="stack" aria-label="输入校验结果"><h3>{result.input_ready ? "输入字段校验通过" : "输入待补全"}</h3>{result.blocking_reasons.length > 0 && <ul>{result.blocking_reasons.map((reason) => <li key={reason}>{missingLabel(reason)}</li>)}</ul>}<small>配置 SHA-256：{result.sha256}</small><details open><summary>脱敏启动配置</summary><pre className="snapshot">{JSON.stringify(result.config, null, 2)}</pre></details><details><summary>锁定字段、来源及覆盖差异</summary><pre className="snapshot">{JSON.stringify({ locked_fields: result.locked_fields, field_sources: result.field_sources, overrides: result.overrides }, null, 2)}</pre></details></section>}
   </div>;
 }
 
@@ -124,11 +143,13 @@ function InputDetail({ entry }: { entry: InputVersion }) {
     return () => controller.abort();
   }, [entry.id]);
   const config = detail.files?.["standard_config.json"] ? JSON.parse(detail.files?.["standard_config.json"].raw) : {};
-  return <div className="stack standard-detail"><div className="standard-detail-meta"><strong>{detail.source_model}</strong><span>版本：{tagLabel(tags, detail.revision)}</span><span>执行入口未接入</span></div>
-    <div className="workflow-grid"><aside className="workflow-datasets"><h3>测评基准</h3><div className="notice">{detail.benchmark}</div><p className="muted">标准参数只读</p></aside><section className="card stack"><h3>{detail.benchmark}</h3><AdapterFields value={config} readonly /></section></div>
+  return <div className="stack standard-detail input-detail">
+    <header className="input-context"><div><strong>{detail.source_model}</strong><small>版本 · {tagLabel(tags, detail.revision)}</small></div>
+    <ManagementDrawer title="补全启动参数与模型映射"><CompileForm entry={detail} /></ManagementDrawer></header>
+    <section className="input-parameters"><div className="spread"><h3>{detail.benchmark}</h3><small>标准参数 · 只读</small></div><AdapterFields value={config} readonly /></section>
     <details><summary>来源与校验信息</summary><p>提交：{detail.revision}</p><p>内容 SHA-256：{detail.sha256}</p><p>平台映射：{detail.mapping?.dataset || "未提供映射"} / {detail.mapping?.variant || "—"}</p></details>
     {Object.entries(detail.files || {}).map(([name, file]) => <details key={name}><summary>{name}{name === "baseline.json" ? "（来源附件，未设为正式基线）" : ""}</summary><a href={`https://github.com/SJTUyh/AutoEval-Standard/blob/${detail.revision}/${file.path}`} target="_blank" rel="noreferrer">查看来源文件</a><small>SHA-256：{file.sha256}</small><pre className="snapshot">{file.raw}</pre></details>)}
-    <ManagementDrawer title="补全启动参数与模型映射"><CompileForm entry={detail} /></ManagementDrawer>
+
     {message && <p role="alert">{message}</p>}
     <details><summary>历史编译快照（最近 20 条）</summary>{detail.compilations?.length ? detail.compilations.map((item) => <div key={item.sha256}><p>{item.template_version} · {item.input_ready ? "输入齐备" : "待补全"} · {item.model_id || "未映射模型"}</p><pre className="snapshot">{JSON.stringify(item, (key, value) => key === "approval_status" || key === "approved_by" ? undefined : value, 2)}</pre></div>) : <p>暂无编译记录；保存后重新打开详情可查看。</p>}</details>
   </div>;

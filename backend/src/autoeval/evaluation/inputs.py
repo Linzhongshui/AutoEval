@@ -2,7 +2,6 @@ import asyncio
 import copy
 
 from fastapi import HTTPException
-from sqlalchemy import select
 
 from autoeval.catalog.datasets import DatasetManifest, read_manifest
 from autoeval.catalog.standard_inputs import StandardInputCompilation, StandardInputVersion
@@ -23,7 +22,7 @@ def manifest_dataset_matches(dataset, asset_key):
 
 
 async def resolve_inputs(session, settings, body):
-    from autoeval.catalog.models import EvaluationProfile
+    from autoeval.catalog.profiles import resolve_profile
     from autoeval.catalog.registry import Asset, AssetVersion
 
     target = await target_data(session, body.target_id)
@@ -47,16 +46,7 @@ async def resolve_inputs(session, settings, body):
         asset_row = await session.get(Asset, version.asset_id)
         if not manifest_dataset_matches(spec.dataset, asset_row.asset_key):
             raise HTTPException(422, "Manifest dataset identity mismatch")
-        profile = await session.scalar(
-            select(EvaluationProfile)
-            .where(
-                EvaluationProfile.dataset_name == spec.dataset,
-                (EvaluationProfile.full_manifest_id == manifest.id)
-                | (EvaluationProfile.lite_manifest_id == manifest.id),
-            )
-            .order_by(EvaluationProfile.created_at.desc())
-            .limit(1)
-        )
+        profile = await resolve_profile(session, spec.dataset, manifest.id, spec.compilation_id)
         if not profile:
             raise HTTPException(422, "Versioned tool/scorer profile required for selected manifest")
         compiled = copy.deepcopy(compilation.payload)

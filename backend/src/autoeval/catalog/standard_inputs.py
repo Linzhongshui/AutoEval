@@ -68,7 +68,7 @@ from autoeval.catalog.standard_compilation import (
 )
 from autoeval.infrastructure.models import Base, Record
 from autoeval.reporting.data_workbench import development
-from autoeval.resources.models import TargetBinding
+from autoeval.resources.models import SSHResourceBinding, TargetBinding
 
 STANDARD_REPO = "SJTUyh/AutoEval-Standard"
 
@@ -94,6 +94,12 @@ class StandardInputCompilation(Record, Base):
     model_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("asset.id", ondelete="RESTRICT"))
     sha256: Mapped[str] = mapped_column(String(64), unique=True)
     payload: Mapped[dict] = mapped_column(JSONB)
+
+
+class CompilationDisplayName(Base):
+    __tablename__ = "compilation_display_name"
+    compilation_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("standard_input_compilation.id"), primary_key=True)
+    name: Mapped[str] = mapped_column(String(128))
 
 
 class Strict(BaseModel):
@@ -154,9 +160,12 @@ class CompileInput(Strict):
     datasets_dir: str | None = Field(default=None, max_length=1024)
     task_path: str | None = Field(default=None, max_length=1024)
     tool_root: str | None = Field(default=None, max_length=1024)
+    resource_ids: list[uuid.UUID] = Field(default_factory=list, max_length=16)
 
     @model_validator(mode="after")
     def no_credentials(self):
+        if len(set(self.resource_ids)) != len(self.resource_ids):
+            raise ValueError("Execution resources must be unique")
         reject_secrets(self.template)
         reject_secrets(self.adjustments)
         for overlay in (self.template, self.adjustments):
@@ -708,6 +717,12 @@ async def compile_input(input_id: uuid.UUID, body: CompileInput, request: Reques
         )
         if body.target_id and (not target_version or target_version.asset_id != body.model_id):
             raise HTTPException(422, "Target must belong to selected model")
+        if body.resource_ids:
+            bound = await session.scalars(
+                select(SSHResourceBinding.id).where(SSHResourceBinding.id.in_(body.resource_ids))
+            )
+            if set(bound) != set(body.resource_ids):
+                raise HTTPException(422, "Execution resources must be registered SSH bindings")
         try:
             result = compile_config(row.payload, body, target)
         except ValueError as exc:

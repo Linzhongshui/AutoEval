@@ -1177,6 +1177,108 @@
         }
       }
     },
+    "/api/autoeval/v1/planning/compilations/{compilation_id}/copy": {
+      "post": {
+        "tags": [
+          "task planning"
+        ],
+        "summary": "Copy Compilation",
+        "operationId": "copy_compilation_api_autoeval_v1_planning_compilations__compilation_id__copy_post",
+        "parameters": [
+          {
+            "name": "compilation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Compilation Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompilationCopy"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/autoeval/v1/planning/compilations/{compilation_id}/rename": {
+      "post": {
+        "tags": [
+          "task planning"
+        ],
+        "summary": "Rename Compilation",
+        "operationId": "rename_compilation_api_autoeval_v1_planning_compilations__compilation_id__rename_post",
+        "parameters": [
+          {
+            "name": "compilation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Compilation Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompilationName"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/autoeval/v1/planning/options": {
       "get": {
         "tags": [
@@ -2891,6 +2993,16 @@
             }
           },
           {
+            "name": "prioritize_retries",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Prioritize Retries"
+            }
+          },
+          {
             "name": "offset",
             "in": "query",
             "required": false,
@@ -3125,6 +3237,16 @@
                 }
               ],
               "title": "State"
+            }
+          },
+          {
+            "name": "prioritize_retries",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Prioritize Retries"
             }
           },
           {
@@ -5992,8 +6114,87 @@
         ],
         "title": "CloseProbe"
       },
+      "CompilationCopy": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "execution": {
+            "type": "string",
+            "enum": [
+              "local",
+              "docker"
+            ],
+            "title": "Execution"
+          },
+          "tool_root": {
+            "type": "string",
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Tool Root"
+          },
+          "directory": {
+            "type": "string",
+            "maxLength": 1024,
+            "title": "Directory"
+          },
+          "concurrency": {
+            "type": "integer",
+            "maximum": 256.0,
+            "minimum": 1.0,
+            "title": "Concurrency"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "execution",
+          "tool_root",
+          "directory",
+          "concurrency"
+        ],
+        "title": "CompilationCopy"
+      },
+      "CompilationName": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "CompilationName"
+      },
       "CompilationOption": {
         "properties": {
+          "tool_revisions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tool Revisions"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
           "id": {
             "type": "string",
             "title": "Id"
@@ -6170,6 +6371,15 @@
               }
             ],
             "title": "Tool Root"
+          },
+          "resource_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 16,
+            "title": "Resource Ids"
           }
         },
         "additionalProperties": false,
@@ -8114,6 +8324,7 @@
           },
           "dataset_concurrency": {
             "type": "integer",
+            "maximum": 4.0,
             "minimum": 1.0,
             "title": "Dataset Concurrency",
             "default": 1
@@ -8404,6 +8615,18 @@
           },
           "tool": {
             "$ref": "#/components/schemas/ToolContract"
+          },
+          "compilation_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compilation Id"
           }
         },
         "additionalProperties": false,
@@ -9051,6 +9274,7 @@
           },
           "dataset_concurrency": {
             "type": "integer",
+            "maximum": 4.0,
             "minimum": 1.0,
             "title": "Dataset Concurrency",
             "default": 1

@@ -10,7 +10,7 @@ def test_configure_service_by_source(browser_page, kind):
     services = []
     writes = []
     version_reads = 0
-    labels = {"local": "标准本地模型服务", "official": "官方模型服务"}
+    labels = {"local": "本地模型服务", "official": "官方 API"}
 
     def mock(route):
         nonlocal version_reads

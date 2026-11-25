@@ -1,0 +1,34 @@
+{
+  "aisbench": {
+    "repository": "https://github.com/SJTUyh/benchmark",
+    "revision": "d97a8e76869bc07948bd158d621f1e22f307b9bd",
+    "root": "/opt/autoeval-aisbench-d97a8e7"
+  },
+  "harbor": {
+    "repository": "https://github.com/AISBench/harbor",
+    "revision": "f59cb890eec1323d3f610dfd92a1e568a0da0615",
+    "module_root": "/opt/autoeval-harbor-f59cb89/src"
+  },
+  "images": {
+    "accuracy": "sha256:b73a19404094483ac64f6fd72b8ca22bee06134d59b90c831dafdd7abc98efeb",
+    "agent_base": "sha256:b62ad8eb329c52da053935fe1ce658ea1c09b15d7ac6bfb8158532177a0476ea",
+    "agent": "sha256:914692f3b1d1b6bf6e8785e7d10c86f806cd8409d1db76614dba19d120972182"
+  },
+  "datasets": {
+    "MMMU-Pro": {
+      "image": "accuracy",
+      "scorer_reference": "ais_bench/benchmark/datasets/mmmu_pro.py",
+      "scorer_sha256": "f9a4443702d692e45ec658a7c8c2fa002210df019db6308ae298823f5bf04fdf"
+    },
+    "DeepSWE": {
+      "image": "agent",
+      "scorer_reference": "ais_bench/benchmark/summarizers/harbor.py",
+      "scorer_sha256": "57f53960a3407b0458205efd19c499f5e8ba16f4fc8efd57d942b73c169f8022"
+    },
+    "AutomationBench": {
+      "image": "agent",
+      "scorer_reference": "ais_bench/benchmark/summarizers/harbor.py",
+      "scorer_sha256": "57f53960a3407b0458205efd19c499f5e8ba16f4fc8efd57d942b73c169f8022"
+    }
+  }
+}

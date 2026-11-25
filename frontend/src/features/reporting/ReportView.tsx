@@ -296,7 +296,10 @@ export function ReportView({ id, go }: { id: string; go: (path: string) => void 
           </div>
         )}
         <div className="notice">
-          当前清单 {summary.expected_samples} 个样本 / 数据集 {summary.dataset_samples} 个样本。{scopeLabel === "Lite" && "本报告不代表全量成绩。"}{scopeLabel === "全量与 Lite" && "Lite 数据集的结果仅覆盖所选清单。"}执行完成不代表报告有效，成绩须结合证据完整性判断。
+          当前清单 {summary.expected_samples} 个样本{summary.dataset_samples != null ? ` / 数据集 ${summary.dataset_samples} 个样本` : ""}。
+          {scopeLabel === "Lite" && "本报告不代表全量成绩。"}
+          {scopeLabel === "全量与 Lite" && "Lite 数据集的结果仅覆盖所选清单。"}
+          执行完成不代表报告有效，成绩须结合证据完整性判断。
         </div>
         <div className="report-quick-links">
           <a className="report-quick-link" href={`#run/${report.run_id}`}>

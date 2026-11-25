@@ -51,6 +51,10 @@ export type RunSnapshot = {
   resource_kind: string;
   sample_count: number;
   dataset_concurrency?: number;
+  dataset_configurations?: {
+    config?: { subcommand?: string; params?: Record<string, unknown> };
+    tool?: { revision?: string };
+  }[];
   parameters: Record<string, unknown>;
   manifest_id: string;
   manifest_sha256: string;

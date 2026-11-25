@@ -90,8 +90,8 @@ const duration = (milliseconds: number) => {
   return `${hours ? `${hours}小时 ` : ""}${Math.floor(seconds % 3600 / 60)}分 ${String(seconds % 60).padStart(2, "0")}秒`;
 };
 
-export function RunProgress({ runId, terminal, stage, state, createdAt, events = [], showSampleProgress = true }: {
-  runId: string; terminal: boolean; stage: string; state: string; createdAt?: string; events?: ProgressEvent[]; showSampleProgress?: boolean;
+export function RunProgress({ runId, terminal, stage, state, createdAt, events = [], showSampleProgress = true, performanceTask = false }: {
+  runId: string; terminal: boolean; stage: string; state: string; createdAt?: string; events?: ProgressEvent[]; showSampleProgress?: boolean; performanceTask?: boolean;
 }) {
   const [value, setValue] = useState<Monitor | null>(null);
   const [unavailable, setUnavailable] = useState(false);
@@ -142,15 +142,15 @@ export function RunProgress({ runId, terminal, stage, state, createdAt, events =
         <span className="task-phase-dot" aria-hidden="true">{index < current || state === "completed" ? "✓" : index === current && !terminal && !stopped ? <span className="phase-spinner" /> : stopped && index === current ? "!" : index + 1}</span><span>{label}</span>
       </li>)}
     </ol>
-    {!terminal && <p className="task-wait-hint">{state === "accepted" || state === "queued" ? "提交已接收，正在等待执行资源" : state === "preparing" ? "正在校验环境并启动工具，阶段变化会自动更新" : state === "aggregating" ? "正在收集结果、校验证据并生成报告" : state === "cancelling" ? "正在确认远程作业停止，资源仍保留占用" : "工具正在执行；样本计数返回后自动显示完成比例"}</p>}
-    {showSampleProgress ? <MonitorProgress value={value} error={unavailable} terminal={terminal} /> : <p className="muted">样本进度按下方各数据集分别展示，不合并不同工具的计数。</p>}
+    {!terminal && <p className="task-wait-hint">{state === "accepted" || state === "queued" ? "提交已接收，正在等待执行资源" : state === "preparing" ? "正在校验环境并启动工具，阶段变化会自动更新" : state === "aggregating" ? "正在收集结果、校验证据并生成报告" : state === "cancelling" ? "正在确认远程作业停止，资源仍保留占用" : performanceTask ? "工具正在执行，可在监控中查看最近观测。" : "工具正在执行；样本计数返回后自动显示完成比例"}</p>}
+    {performanceTask ? <p className="muted">{value?.progress_description?.includes("样本") ? "性能作业按执行阶段记录进展。" : value?.progress_description}</p> : showSampleProgress ? <MonitorProgress value={value} error={unavailable} terminal={terminal} /> : <p className="muted">样本进度按下方各数据集分别展示，不合并不同工具的计数。</p>}
     <small className="muted">{endEvent === originalEnd && originalEnd
       ? "总耗时截至原始运行结束，后续证据处理时间单独记录。"
-      : "任务耗时包含排队、环境准备、测评与归档；样本进度和评分结论分别记录。"}</small>
+      : performanceTask ? "任务耗时包含排队、环境准备、测评与归档。" : "任务耗时包含排队、环境准备、测评与归档；样本进度和评分结论分别记录。"}</small>
   </section>;
 }
 
-export function RunMonitor({ runId, terminal }: { runId: string; terminal: boolean }) {
+export function RunMonitor({ runId, terminal, performanceTask = false }: { runId: string; terminal: boolean; performanceTask?: boolean }) {
   const [tab, setTab] = useState<"overview" | "snapshots" | "log">("overview");
   const [value, setValue] = useState<Monitor | null>(null);
   const [loading, setLoading] = useState(true);
@@ -252,7 +252,7 @@ export function RunMonitor({ runId, terminal }: { runId: string; terminal: boole
           <span className="muted">{headerStatus}</span>
         </div>
       </div>
-      {multi ? <div className="dataset-monitor-list" aria-label="数据集最新执行进度">
+      {performanceTask ? <p className="muted">最近观测 · {stamp(value.observed_at)} · {STATUS_LABEL[value.tool_status || ""] || value.tool_status || "等待采集"}</p> : multi ? <div className="dataset-monitor-list" aria-label="数据集最新执行进度">
         {datasets.map(({ name, records, latest }) => <details key={name}>
           <summary>
             <span className="dataset-monitor-name">{name}</span>
@@ -382,7 +382,8 @@ export function RunMonitor({ runId, terminal }: { runId: string; terminal: boole
           {log && (
             <>
               <p className="muted">来源：归档作业日志 · SHA-256 {log.sha256.slice(0, 12)} · 读取时已核验完整性。</p>
-              <pre className="snapshot monitor-log" data-testid="monitor-log">{log.content}</pre>
+              {log.content.trim() ? <pre className="snapshot monitor-log" data-testid="monitor-log">{log.content}</pre> :
+                <div className="notice">归档日志正文为空。{performanceTask && "本次性能作业的工具输出未写入该日志。"} <button className="link" onClick={() => { setTab("snapshots"); void loadSnapshots(0); }}>查看归档快照</button></div>}
             </>
           )}
         </>

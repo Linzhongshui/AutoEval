@@ -71,6 +71,21 @@ async def main():
         assert all(r == "budget_exhausted" or isinstance(r, uuid.UUID) for r in results)
         assert await reserve("0") == "request_already_reserved"
         async with ss() as db, db.begin():
+            account = await db.get(BudgetAccount, budget_id)
+            account.policy = {**account.policy, "max_requests": 5}
+        assert await reserve("over-count", bound=1) == "request_limit_reached"
+        async with ss() as db, db.begin():
+            account = await db.get(BudgetAccount, budget_id)
+            account.policy = {"enforcement_ready": True, "max_requests_by_dataset": {"GPQA": 5}}
+        assert await reserve("over-dataset-count", bound=1) == "dataset_request_limit_reached"
+        assert (
+            await reserve("ungranted-dataset", dataset="DeepSWE")
+            == "dataset_request_limit_unconfigured"
+        )
+        async with ss() as db, db.begin():
+            account = await db.get(BudgetAccount, budget_id)
+            account.policy = {"enforcement_ready": True}
+        async with ss() as db, db.begin():
             assert (
                 await finish_request(
                     db, accepted[0], {"prompt_tokens": 1000, "completion_tokens": 1000}, R

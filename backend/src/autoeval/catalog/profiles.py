@@ -8,9 +8,11 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
+from sqlalchemy.orm import aliased
 
 from autoeval.catalog.datasets import canonical_manifest
 from autoeval.catalog.models import DatasetManifest, EvaluationProfile
+from autoeval.catalog.standard_inputs import StandardInputCompilation, StandardInputVersion
 
 
 class ToolContract(BaseModel):
@@ -31,6 +33,24 @@ class ProfileInput(BaseModel):
     full_manifest_id: uuid.UUID
     lite_manifest_id: uuid.UUID | None = None
     tool: ToolContract
+    compilation_id: uuid.UUID | None = None
+
+
+async def resolve_profile(session, dataset, manifest_id, compilation_id):
+    scoped = aliased(EvaluationProfile)
+    has_scoped_profile = select(scoped.id).where(scoped.compilation_id == compilation_id).exists()
+    return await session.scalar(
+        select(EvaluationProfile)
+        .where(
+            EvaluationProfile.dataset_name == dataset,
+            (EvaluationProfile.full_manifest_id == manifest_id)
+            | (EvaluationProfile.lite_manifest_id == manifest_id),
+            (EvaluationProfile.compilation_id == compilation_id)
+            | (EvaluationProfile.compilation_id.is_(None) & ~has_scoped_profile),
+        )
+        .order_by(EvaluationProfile.created_at.desc(), EvaluationProfile.id)
+        .limit(1)
+    )
 
 
 def profile_data(row):
@@ -42,6 +62,7 @@ def profile_data(row):
         "full_manifest_id": str(row.full_manifest_id),
         "lite_manifest_id": str(row.lite_manifest_id) if row.lite_manifest_id else None,
         "tool": row.contract,
+        **({"compilation_id": str(row.compilation_id)} if row.compilation_id else {}),
         "sha256": row.sha256,
         "tool_verified": False,
     }
@@ -52,7 +73,10 @@ router = APIRouter(prefix="/api/autoeval/v1/profiles", tags=["evaluation profile
 
 @router.post("", status_code=201)
 async def register_profile(body: ProfileInput, request: Request):
-    digest = hashlib.sha256(canonical_manifest(body.model_dump(mode="json"))).hexdigest()
+    payload = body.model_dump(mode="json")
+    if body.compilation_id is None:
+        payload.pop("compilation_id")
+    digest = hashlib.sha256(canonical_manifest(payload)).hexdigest()
     try:
         async with request.app.state.sessions() as session, session.begin():
             old = await session.scalar(
@@ -76,7 +100,16 @@ async def register_profile(body: ProfileInput, request: Request):
                 body.tool.family == "harbor"
             ):
                 raise HTTPException(422, "Dataset and tool family do not match")
+            if body.compilation_id is not None:
+                compilation = await session.get(StandardInputCompilation, body.compilation_id)
+                if compilation is None:
+                    raise HTTPException(404, "Execution compilation not found")
+                source = await session.get(StandardInputVersion, compilation.input_id)
+                benchmark = "GPQA_Diamond" if body.dataset_name == "GPQA" else body.dataset_name
+                if source is None or source.benchmark != benchmark:
+                    raise HTTPException(422, "Compilation dataset identity mismatch")
             row = EvaluationProfile(
+                compilation_id=body.compilation_id,
                 profile_key=body.profile_key,
                 version=body.version,
                 dataset_name=body.dataset_name,

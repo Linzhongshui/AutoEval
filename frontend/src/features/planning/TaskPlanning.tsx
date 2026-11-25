@@ -71,7 +71,7 @@ export function TaskPlanning({ poolRevision, onManagePool, initialTarget = "" }:
   const [selection, setSelection] = useState<Record<string, { compilation: string; manifest: string }>>({});
   const [enabled, setEnabled] = useState<string[]>([]);
   const [curve, setCurve] = useState("");
-  const [requestedParallel, setParallel] = useState(1);
+  const [requestedParallel, setParallel] = useState(2);
   const [job, setJob] = useState<Job | null>(null);
   const [adviceJob, setAdviceJob] = useState<Job | null>(null);
   const [probeLookup, setProbeLookup] = useState(false);
@@ -143,7 +143,6 @@ export function TaskPlanning({ poolRevision, onManagePool, initialTarget = "" }:
       task_id: d.replaceAll("-", "_"), dataset: d, concurrency: concurrency[d] ?? null, compilation_id: selection[d].compilation, manifest_id: selection[d].manifest,
     })) };
   const fingerprint = JSON.stringify(payload);
-  useEffect(() => { setParallel(v => Math.min(v, maxParallel)); }, [maxParallel]);
   const requestedCheck = useRef("");
   const preflightFingerprint = JSON.stringify({
     target_id: target, resource_id: resource, resource_kind: resourceKind, resource_ids: resourceIds,
@@ -233,7 +232,8 @@ export function TaskPlanning({ poolRevision, onManagePool, initialTarget = "" }:
     if (!active) { setSelection(rows => ({ ...rows, [dataset]: { compilation: "", manifest: "" } })); return; }
     const candidates = options.compilations.filter(c => c.target_id === target && c.input_ready && c.dataset === dataset && (!Array.isArray(c.runtime_config?.resource_ids) || (c.runtime_config.resource_ids as string[]).some(id => resources.rows.some(r => r.id === id))));
     const chosen = candidates[0];
-    const full = options.manifests.filter(m => m.dataset === dataset && m.scope === "full");
+    const allowed = chosen?.runtime_config?.manifest_ids;
+    const full = options.manifests.filter(m => m.dataset === dataset && m.scope === "full" && (!Array.isArray(allowed) || allowed.includes(m.id)));
     setSelection(rows => ({ ...rows, [dataset]: { compilation: chosen?.id || "", manifest: full.length === 1 ? full[0].id : "" } }));
     const bound = chosen?.runtime_config?.resource_ids;
     if (!manualNodeSelection.current && Array.isArray(bound)) {
@@ -260,7 +260,7 @@ export function TaskPlanning({ poolRevision, onManagePool, initialTarget = "" }:
     for (const dataset of enabled) {
       const candidates = options.compilations.filter(c => c.target_id === target && c.input_ready && c.dataset === dataset && (!Array.isArray(c.runtime_config?.resource_ids) || (c.runtime_config.resource_ids as string[]).some(id => resources.rows.some(r => r.id === id))));
       const current = candidates.find(c => c.id === selection[dataset]?.compilation);
-      const chosen = current || candidates[0];
+      const chosen = current ?? candidates[0];
       if (!chosen) continue;
       const allowed = chosen.runtime_config?.manifest_ids;
       const manifests = options.manifests.filter(m => m.dataset === dataset && (!Array.isArray(allowed) || allowed.includes(m.id)));
@@ -342,7 +342,7 @@ export function TaskPlanning({ poolRevision, onManagePool, initialTarget = "" }:
     </div>
     {targets.error && <p role="alert">{targets.error}</p>}
     <h2>2. 数据集与样本范围</h2>
-    <p className="muted">勾选后默认选择第一个可用配置。只有一个 SSH 节点时会自动选中。配置齐备后自动检查环境。</p>
+    <p className="muted">勾选后默认选择第一项可用执行配置，并填入绑定资源和唯一的全量清单。可手动更改配置和样本范围。</p>
     <div className="dataset-select-all-mobile">{selectAllButton}</div>
     <TableWrap><table className="planning-table"><thead><tr><th scope="col">{selectAllButton}</th><th>数据集</th><th>执行配置</th><th>样本范围</th><th>状态</th></tr></thead><tbody>{datasets.map(d => {
       const active = enabled.includes(d);
@@ -397,7 +397,7 @@ export function TaskPlanning({ poolRevision, onManagePool, initialTarget = "" }:
       <section className="strategy-card strategy-datasets" aria-label="数据集执行设置">
         <div className="strategy-card-heading"><h3>数据集之间</h3><span>已选 {enabled.length} 个数据集</span></div>
         <div className="strategy-controls">
-          <div><span className="strategy-field-label">执行方式</span><StrategyChoice label="数据集执行策略" parallel={parallel > 1} disabled={enabled.length < 2} onChange={value => setParallel(value ? maxParallel : 1)} /></div>
+          <div><span className="strategy-field-label">执行方式</span><StrategyChoice label="数据集执行策略" parallel={parallel > 1} disabled={enabled.length < 2} onChange={value => setParallel(value ? Math.min(2, maxParallel) : 1)} /></div>
           <label>同时运行的数据集上限
             <select aria-label="数据集同时运行数" value={parallel} disabled={parallel === 1} onChange={e => setParallel(Number(e.target.value))}>
               {parallel === 1 ? <option value={1}>1 个</option> : Array.from({ length: maxParallel - 1 }, (_, index) => index + 2).map(count =>

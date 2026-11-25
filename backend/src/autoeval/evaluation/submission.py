@@ -167,13 +167,10 @@ async def create_run(session, settings, body, execution_plan_id, key):
 
         budget_config = json.loads(Path(budget_config_path).read_text())
         from autoeval.billing.models import BudgetAccount
-        from autoeval.billing.transport import execution_route, route_compilation
+        from autoeval.billing.transport import authorized_scope, execution_route, route_compilation
 
-        expected = budget_config.get('expected_scope')
-        if expected and ({t['dataset']: len(t.get('samples', [])) for t in inputs['tasks']} != expected
-                         or any(t.get('concurrency') != 24 or t.get('subset_scope') != 'full'
-                                for t in inputs['tasks'])):
-            raise HTTPException(422, '当前预算仅适用于已授权的全量测评；其他范围可勾选“忽略本次任务预算限制”')
+        if not authorized_scope(budget_config, frozen):
+            raise HTTPException(422, "所选测评范围不符合当前预算账户授权")
         if datetime.now(UTC) >= datetime.fromisoformat(budget_config['deadline']):
             raise HTTPException(409, '当前预算已过期，请配置新预算或勾选“忽略本次任务预算限制”')
         account = await session.scalar(select(BudgetAccount).where(

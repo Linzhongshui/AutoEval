@@ -2159,3 +2159,10 @@ textarea { font: inherit; }
 }
 .performance-fields .select-field { min-width: 0; }
 .performance-fields input, .performance-fields select { width: 100%; max-width: none; }
+
+.accuracy-comparison .dataset-chart-group { padding-block: 8px; margin-block: 0; gap: 4px; }
+.accuracy-comparison .chart-track { height: 10px; align-self: center; }
+.accuracy-comparison .chart-baseline-version { margin: 0; }
+.chart-version-details { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.chart-version-details summary { cursor: pointer; width: fit-content; }
+.report-charts { align-items: start; }

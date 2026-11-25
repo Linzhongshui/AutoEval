@@ -284,6 +284,7 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
             ) as c:
                 body = submission()
                 body.update(target_id=target_id, resource_id=resource_id)
+                body["dataset_concurrency"] = 2
 
                 async def send(key, value):
                     return await c.post(
@@ -338,6 +339,7 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                         headers={"Idempotency-Key": "new-legacy"},
                     )
                     assert blocked.status_code == 422 and "evaluation-tasks" in blocked.text
+                assert detail["snapshot"]["dataset_concurrency"] == 2
                 first = (await c.get("/api/autoeval/v1/evaluation-tasks?limit=1")).json()
                 assert first["statistics"]["total"] == 2 and first["next_offset"] == 1
                 second = (await c.get("/api/autoeval/v1/evaluation-tasks?limit=1&offset=1")).json()

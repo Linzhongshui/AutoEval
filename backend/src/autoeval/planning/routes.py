@@ -184,6 +184,15 @@ async def options(request: Request, offset: int = 0, limit: int = 100, include_t
         )
         sources = {r.id: r.benchmark for r in source_rows}
         labels = {r.id: r.source_model + " / " + r.benchmark for r in source_rows}
+        scoped_manifests = {}
+        for profile in await session.scalars(
+            select(EvaluationProfile).where(
+                EvaluationProfile.compilation_id.in_([c.id for c in compilations])
+            )
+        ):
+            scoped_manifests.setdefault(profile.compilation_id, set()).update(
+                str(mid) for mid in (profile.full_manifest_id, profile.lite_manifest_id) if mid
+            )
         manifest_ids = {m for p in profiles for m in (p.full_manifest_id, p.lite_manifest_id) if m}
         manifests = list(
             await session.scalars(
@@ -208,9 +217,16 @@ async def options(request: Request, offset: int = 0, limit: int = 100, include_t
                             "sha256": c.sha256,
                             "adaptor_revision": c.payload.get("adaptor_revision"),
                             "runtime_config": {
-                                k: v
-                                for k, v in c.payload.get("runtime_config", {}).items()
-                                if k not in {"work_dir", "container_name"}
+                                **{
+                                    k: v
+                                    for k, v in c.payload.get("runtime_config", {}).items()
+                                    if k not in {"work_dir", "container_name"}
+                                },
+                                **(
+                                    {"manifest_ids": sorted(scoped_manifests[c.id])}
+                                    if c.id in scoped_manifests
+                                    else {}
+                                ),
                             },
                             "target_id": (c.payload.get("credential_binding") or {}).get(
                                 "target_id"

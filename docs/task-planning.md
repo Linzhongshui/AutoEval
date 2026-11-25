@@ -39,7 +39,7 @@ python -m pip install 'git+https://github.com/SJTUyh/AutoEval-Benchmark-Adaptor@
 
 执行端通过发行包的 direct_url.json 核对提交号，不能用同名任意版本替代。还需 Git、对应 AISBench/Harbor 依赖及真实数据；Profile 固定工具提交、评分文件路径和校验和。
 
-执行模板可通过 `AE_VALIDATED_DATASETS` 声明有历史小样本验收记录的数据集。缺少记录时，控制台显示提示，用户可决定是否先试跑。实际工具、数据或运行环境检查失败仍会阻塞提交。Harbor 还需通过 `AE_HARBOR_NETWORK_CAPACITY` 声明 Docker 地址池容量。`AE_MAX_PROBE_CONCURRENCY` 默认 8，上限由资源预检返回。
+资源通过工具身份、数据目录及适用的 Harbor 环境与任务选择检查后，用户可以按所选清单提交，也可以先选 Lite 试跑。运维可用 `AE_VALIDATED_DATASETS` 声明已有小样本验收记录的数据集。缺少声明时，资源预检在对应数据集的 `warnings` 中返回 `dataset_not_validated`，控制台展示提示。预检本身不会调用模型。Harbor 仍需通过 `AE_HARBOR_NETWORK_CAPACITY` 所配置的网络容量检查。`AE_MAX_PROBE_CONCURRENCY` 默认 8，上限由资源预检返回。
 
 预检尊重 Linux cgroup CPU、内存上限，记录可用磁盘、节点启动身份和可用网段，并按所选目标服务、编译配置、Profile 和样本清单绑定快照。返回 Planner/Adaptor 实际与预期提交、各数据集工具提交、数据路径及分项阻塞原因；工具提交、评分文件、数据目录或 Harbor 网段不满足时，相应数据集不可执行。新资源预检会产生新快照，输入或资源变化后旧预检不能用于采纳；采纳和提交要求 5 分钟内的成功预检。
 

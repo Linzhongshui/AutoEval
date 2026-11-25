@@ -76,6 +76,23 @@ def test_compile_full_inputs_without_activating_execution(index):
     assert result["adaptor_revision"] == "955089ab32ef696c231d628f5ad0d9da28f430c4"
 
 
+def test_compile_freezes_allowed_ssh_resources():
+    entry = discover(bundle())[0]
+    first, second = uuid.uuid4(), uuid.uuid4()
+    body = CompileInput(resource_ids=[first, second])
+    compiled = compile_config(entry, body)
+    assert compiled["runtime_config"]["resource_ids"] == [str(first), str(second)]
+    assert "resource_ids" not in compiled["config"]["params"]
+    assert compiled["sha256"] != compile_config(entry, CompileInput())["sha256"]
+
+    legacy_body = CompileInput(tool_root="/benchmark")
+    legacy_hash = digest(
+        {"entry": entry, "body": legacy_body.model_dump(mode="json", exclude={"resource_ids"})}
+    )[:32]
+    legacy = compile_config(entry, legacy_body)
+    assert legacy["config"]["params"]["work_dir"] == f"/work/autoeval/inputs/{legacy_hash}"
+
+
 @pytest.mark.parametrize("index", range(6))
 def test_missing_startup_requires_platform_template(index):
     entry = discover(bundle())[index]

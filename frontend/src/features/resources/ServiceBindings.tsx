@@ -1,3 +1,4 @@
+import { SSHServiceProbe } from "./SSHServiceProbe";
 import { Cloud, Server } from "lucide-react";
 import { serviceLabel, serviceLabels, type ServiceKind } from "./serviceKind";
 import "./ModelServices.css";
@@ -130,7 +131,7 @@ export function ServiceBindings({ onUse }: { onUse?: (id: string) => void }) {
     </SearchableSelect></label>
     {versionState === "error" && <button type="button" onClick={() => void loadVersions(modelValue)}>重新读取版本</button>}
     <label className="field-wide">{kind === "local" ? "本地服务 Base URL" : "厂商 API Base URL"}<input type="url" placeholder={kind === "local" ? "https://inference.example.com/v1" : "例如 https://api.deepseek.com"} value={baseUrl} onChange={e => setBaseUrl(e.target.value)} /></label>
-    <p>使用已加入平台允许列表的 HTTPS 地址，填写模型列表和推理接口共用的基础路径。</p>
+    <p>{kind === "local" ? "填写测评机使用的 HTTP 或 HTTPS 基础地址，可包含端口。保存时不会连接模型服务。" : "使用已加入平台允许列表的 HTTPS 地址，填写模型列表和推理接口共用的基础路径。"}</p>
     <label>{kind === "local" ? "部署的模型名" : "厂商模型 ID"}<input placeholder={kind === "local" ? "部署时指定的服务模型名" : "厂商接口使用的模型标识"} value={remoteModel} onChange={e => setRemoteModel(e.target.value)} /></label>
     <label className="field-wide">{kind === "local" ? "本地服务访问密钥" : "厂商 API Key"}<input type="password" autoComplete="off" value={key} onChange={e => setKey(e.target.value)} /></label>
     <button disabled={busy || !key || !versionId || !baseUrl.trim() || !remoteModel.trim()} onClick={() => perform(async () => {
@@ -144,12 +145,12 @@ export function ServiceBindings({ onUse }: { onUse?: (id: string) => void }) {
     })}>保存服务绑定</button>
     <p role="status">{message}</p>
     <div className="saved-service-list"><div className="spread"><h3>已保存服务</h3><button disabled={busy} onClick={() => perform(refresh)}>刷新列表</button></div>
-      <p className="muted">检测连接会读取模型列表。</p>
+      <p className="muted">本地服务由测评执行环境访问；官方 API 可在此检测模型列表。</p>
       {!targets.length && <p className="muted">暂无已保存服务</p>}
-      {targets.map((target) => <article className="saved-service-row" key={target.id}><div><b>{target.remote_model}</b> <small className="service-kind">{serviceLabel(target.service_kind)}</small><p>{target.base_url}</p></div><div className="inline"><button disabled={busy} onClick={() => perform(async () => {
+      {targets.map((target) => <article className="saved-service-row" key={target.id}><div><b>{target.remote_model}</b> <small className="service-kind">{serviceLabel(target.service_kind)}</small><p>{target.base_url}</p></div><div className="inline">{target.service_kind === "local" ? <SSHServiceProbe targetId={target.id} /> : <button disabled={busy} onClick={() => perform(async () => {
         const result = await api<{ outcome: string; details: { http_status?: number } }>(`/targets/${target.id}/connection-tests`, {});
         setMessage(`${target.remote_model}：${result.outcome === "matched" ? "鉴权与目标模型匹配成功（未调用生成）" : result.outcome}`);
-      })}>检测连接</button><button type="button" className="primary" onClick={() => onUse ? onUse(target.id) : location.assign(`#evaluate?target=${encodeURIComponent(target.id)}`)}>使用此服务</button></div></article>)}
+      })}>检测连接</button>}<button type="button" className="primary" onClick={() => onUse ? onUse(target.id) : location.assign(`#evaluate?target=${encodeURIComponent(target.id)}`)}>使用此服务</button></div></article>)}
     </div>
   </section>;
 }

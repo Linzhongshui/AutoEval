@@ -96,6 +96,12 @@ class StandardInputCompilation(Record, Base):
     payload: Mapped[dict] = mapped_column(JSONB)
 
 
+class CompilationDisplayName(Base):
+    __tablename__ = "compilation_display_name"
+    compilation_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("standard_input_compilation.id"), primary_key=True)
+    name: Mapped[str] = mapped_column(String(128))
+
+
 class Strict(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 

@@ -1,0 +1,4 @@
+interface:
+  display_name: "AutoEval 开发与 PR"
+  short_description: "按仓库约定开发和验证 AutoEval 变更，规范提交与合并请求标题"
+  default_prompt: "使用 $develop-autoeval 按仓库开发流程完成当前改动并整理 PR。"

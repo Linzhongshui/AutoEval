@@ -2,7 +2,7 @@
 
 import json
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -32,6 +32,17 @@ async def follow_up_target_blocker(session, settings, frozen):
     except HTTPException:
         return "target_unavailable"
     return None
+
+
+def round_budget_snapshot(frozen, operation, accepted_at):
+    """Give an explicitly confirmed unmetered Case retry its own execution window."""
+    if operation != "case_retry" or not budget_ignored(frozen):
+        return frozen
+    deadline = accepted_at + timedelta(hours=24)
+    return {
+        **frozen,
+        "model_budget": {**frozen["model_budget"], "execution_deadline": deadline.isoformat()},
+    }
 
 
 async def follow_up_budget_blocker(session, settings, run_id, frozen):

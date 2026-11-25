@@ -2,6 +2,7 @@
 
 from collections import defaultdict
 from dataclasses import asdict
+from datetime import UTC, datetime
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -15,7 +16,11 @@ from autoeval.evaluation.models import (
     ExecutionShard,
     ExecutionShardEnvironment,
 )
-from autoeval.evaluation.resume_budget import follow_up_budget_blocker, follow_up_target_blocker
+from autoeval.evaluation.resume_budget import (
+    follow_up_budget_blocker,
+    follow_up_target_blocker,
+    round_budget_snapshot,
+)
 from autoeval.evaluation.resume_evidence import (
     classify_sample,
     observe_archived_attempt,
@@ -177,7 +182,8 @@ async def preview_scope(session, settings, run, operation, target):
         if target_blocker:
             blockers.append(target_blocker)
         budget_blocker = await follow_up_budget_blocker(
-            session, settings, run.id, snapshot.canonical_body
+            session, settings, run.id,
+            round_budget_snapshot(snapshot.canonical_body, operation, datetime.now(UTC)),
         )
         if budget_blocker:
             blockers.append(budget_blocker)

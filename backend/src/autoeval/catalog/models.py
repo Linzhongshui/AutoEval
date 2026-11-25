@@ -77,6 +77,9 @@ class EvaluationProfile(Record, Base):
     profile_key: Mapped[str] = mapped_column(String(128))
     version: Mapped[str] = mapped_column(String(128))
     dataset_name: Mapped[str] = mapped_column(String(128))
+    compilation_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("standard_input_compilation.id", ondelete="RESTRICT"), index=True
+    )
     full_manifest_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("dataset_manifest.id", ondelete="RESTRICT")
     )

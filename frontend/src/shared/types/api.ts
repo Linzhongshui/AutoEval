@@ -402,6 +402,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/autoeval/v1/planning/compilations/{compilation_id}/copy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Copy Compilation */
+        post: operations["copy_compilation_api_autoeval_v1_planning_compilations__compilation_id__copy_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/autoeval/v1/planning/compilations/{compilation_id}/rename": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rename Compilation */
+        post: operations["rename_compilation_api_autoeval_v1_planning_compilations__compilation_id__rename_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/autoeval/v1/planning/options": {
         parameters: {
             query?: never;
@@ -1859,8 +1893,33 @@ export interface components {
              */
             acknowledge_unknown: true;
         };
+        /** CompilationCopy */
+        CompilationCopy: {
+            /** Name */
+            name: string;
+            /**
+             * Execution
+             * @enum {string}
+             */
+            execution: "local" | "docker";
+            /** Tool Root */
+            tool_root: string;
+            /** Directory */
+            directory: string;
+            /** Concurrency */
+            concurrency: number;
+        };
+        /** CompilationName */
+        CompilationName: {
+            /** Name */
+            name: string;
+        };
         /** CompilationOption */
         CompilationOption: {
+            /** Tool Revisions */
+            tool_revisions?: string[];
+            /** Display Name */
+            display_name?: string | null;
             /** Id */
             id: string;
             /** Dataset */
@@ -1924,6 +1983,8 @@ export interface components {
             task_path?: string | null;
             /** Tool Root */
             tool_root?: string | null;
+            /** Resource Ids */
+            resource_ids?: string[];
         };
         /** ConfigListItem */
         ConfigListItem: {
@@ -2764,6 +2825,8 @@ export interface components {
             /** Lite Manifest Id */
             lite_manifest_id?: string | null;
             tool: components["schemas"]["ToolContract"];
+            /** Compilation Id */
+            compilation_id?: string | null;
         };
         /** RegisterExecutor */
         RegisterExecutor: {
@@ -3948,6 +4011,76 @@ export interface operations {
             };
         };
     };
+    copy_compilation_api_autoeval_v1_planning_compilations__compilation_id__copy_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                compilation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompilationCopy"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_compilation_api_autoeval_v1_planning_compilations__compilation_id__rename_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                compilation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompilationName"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     options_api_autoeval_v1_planning_options_get: {
         parameters: {
             query?: {
@@ -5002,6 +5135,7 @@ export interface operations {
                 dataset_key?: string | null;
                 sample_id?: string | null;
                 state?: string | null;
+                prioritize_retries?: boolean;
                 offset?: number;
                 limit?: number;
                 evidence_version?: "current" | "original";
@@ -5105,6 +5239,7 @@ export interface operations {
                 limit?: number;
                 sample_id?: string | null;
                 state?: string | null;
+                prioritize_retries?: boolean;
                 dataset_key?: string | null;
             };
             header?: never;

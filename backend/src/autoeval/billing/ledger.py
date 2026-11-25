@@ -45,6 +45,29 @@ async def reserve_request(
         raise BudgetBlocked("request_already_reserved")
     if section not in ("evaluation", "analysis"):
         raise BudgetBlocked("unknown_budget_section")
+    max_requests = account.policy.get("max_requests")
+    if max_requests is not None:
+        if type(max_requests) is not int or max_requests < 1:
+            raise BudgetBlocked("invalid_request_limit")
+        request_count = await db.scalar(
+            select(func.count())
+            .select_from(BudgetRequest)
+            .where(BudgetRequest.budget_id == budget_id)
+        )
+        if request_count >= max_requests:
+            raise BudgetBlocked("request_limit_reached")
+    dataset_limits = account.policy.get("max_requests_by_dataset")
+    if dataset_limits is not None:
+        dataset_limit = dataset_limits.get(dataset) if isinstance(dataset_limits, dict) else None
+        if type(dataset_limit) is not int or dataset_limit < 1:
+            raise BudgetBlocked("dataset_request_limit_unconfigured")
+        dataset_count = await db.scalar(
+            select(func.count())
+            .select_from(BudgetRequest)
+            .where(BudgetRequest.budget_id == budget_id, BudgetRequest.dataset == dataset)
+        )
+        if dataset_count >= dataset_limit:
+            raise BudgetBlocked("dataset_request_limit_reached")
     active = await db.scalar(
         select(func.count())
         .select_from(BudgetRequest)

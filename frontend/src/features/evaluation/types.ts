@@ -6,6 +6,7 @@ export type { Param };
 export type Config = components["schemas"]["ConfigListItem"];
 
 export type Target = {
+  service_kind?: "local" | "official" | null;
   service_name?: string;
   id: string;
   remote_model: string;

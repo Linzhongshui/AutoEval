@@ -8876,6 +8876,21 @@
       },
       "ServiceUpdate": {
         "properties": {
+          "service_kind": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "local",
+                  "official"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Kind"
+          },
           "service_name": {
             "type": "string",
             "maxLength": 128,
@@ -9054,6 +9069,21 @@
             "type": "string",
             "format": "uuid",
             "title": "Model Version Id"
+          },
+          "service_kind": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "local",
+                  "official"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Kind"
           },
           "base_url": {
             "type": "string",

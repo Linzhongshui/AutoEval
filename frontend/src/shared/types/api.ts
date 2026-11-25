@@ -2933,6 +2933,8 @@ export interface components {
         };
         /** ServiceUpdate */
         ServiceUpdate: {
+            /** Service Kind */
+            service_kind?: ("local" | "official") | null;
             /** Service Name */
             service_name: string;
             /**
@@ -3034,6 +3036,8 @@ export interface components {
              * Format: uuid
              */
             model_version_id: string;
+            /** Service Kind */
+            service_kind?: ("local" | "official") | null;
             /** Base Url */
             base_url: string;
             /** Remote Model */

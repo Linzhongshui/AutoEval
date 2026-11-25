@@ -50,7 +50,7 @@ def test_console_tabs_drafts_pool_and_explicit_submit(browser_page, submit_agent
     page.get_by_label("模型服务", exact=True).select_option("model")
     page.get_by_label("SSH 执行节点").select_option("node")
     page.get_by_label("最大输出长度（token）").fill("45")
-    page.get_by_label("测评方式").select_option("agentx")
+    page.get_by_role("radio", name="AgentX 轨迹回放").check()
     expect(page.get_by_text("smoke 用于验证回放链路", exact=False)).to_be_visible()
     page.get_by_label("运行模式").select_option("benchmark")
     page.get_by_label("会话并发档位").fill("1,4,8")
@@ -81,7 +81,7 @@ def test_console_tabs_drafts_pool_and_explicit_submit(browser_page, submit_agent
     if submit_agentx:
         page.screenshot(path=str(artifacts / "console-performance.png"), full_page=True)
     else:
-        page.get_by_label("测评方式").select_option("inference")
+        page.get_by_role("radio", name="普通推理").check()
         expect(page.get_by_label("最大输出长度（token）")).to_have_value("45")
         page.get_by_label("目标输入长度（token）").fill("32")
         page.get_by_label("并发数", exact=True).fill("2")

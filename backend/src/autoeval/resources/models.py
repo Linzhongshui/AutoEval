@@ -23,6 +23,7 @@ class TargetBinding(Record, Base):
     model_version_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("asset_version.id", ondelete="RESTRICT")
     )
+    service_kind: Mapped[str | None] = mapped_column(String(16))
     service_name: Mapped[str] = mapped_column(String(128), default="", server_default="")
     archived: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     base_url: Mapped[str] = mapped_column(String(2048))

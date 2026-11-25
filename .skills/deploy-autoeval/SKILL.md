@@ -9,6 +9,8 @@ description: 部署、升级、验收或恢复单团队 AutoEval 测评平台。
 
 目标需要复用已归档的 Linux AMD64 镜像时，先按 [OBS 运行镜像手册](references/obs-images.md) 选择平台、数据集与目标 Docker 引擎，再按下列流程部署和验收。新版本的应用镜像仍按选定源码构建。
 
+DeepSWE 部署先确认执行器。控制台的 AISBench/Harbor 任务走跨环境测评资源流程；实际使用原生 Pier 和 Linux x86_64 节点时，按 [Pier x86 部署与验收](references/deepswe-pier-x86.md) 准备控制端、任务镜像和独立评分环境。
+
 1. 在源码目录运行 `git rev-parse --show-toplevel`、`git status --short`、`git rev-parse HEAD`。读取本次版本的 AGENTS.md、README.md、backend/README.md，确认 frontend、backend、deploy/intranet 都来自同一源码。工作区有未提交修改时，区分“指定提交”和“包含本地改动的快照”；缺少版本选择且差异影响发布时先确认。保留原工作区。
 2. 从任务或受保护部署清单确定目标、既有 Compose 项目/卷、访问路径、允许写入范围、发布源及恢复位置。发现现有服务先取证，再选择首次安装、同工作空间升级或隔离演练。缺目标时仍可完成离线包准备；禁止从历史验收报告选取实际服务器。当前代码只支持受控开发/试用身份。正式生产要求需先核对当前版本的身份实现。
 3. Linux 服务器按[内网单机发布](references/intranet.md)执行。Windows 开发工作站按[本地部署](references/windows.md)执行。升级或迁移先读[验收与恢复](references/acceptance-recovery.md)的停写与备份步骤。所有命令从手册注明的目录运行，匹配目标发布版本。配置、对象和密钥留在受保护位置。

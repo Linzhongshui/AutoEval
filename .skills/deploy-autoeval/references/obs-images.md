@@ -2,6 +2,8 @@
 
 2026-11-24 的 Linux AMD64 快照覆盖 GPQA、MMMU-Pro、AutomationBench、DeepSWE 使用的镜像，以及平台和 Langfuse 服务。9 个归档、136 个不同镜像 ID 均列在 `obs://aisbench/images/autoeval/runtime-20261124/manifest.json`。同目录 `README.md` 提供路径总表。后续快照需按新的清单和独立确认的摘要核对。
 
+DeepSWE 新 x86 部署选用指定的 Ubuntu 24.04 / Python 3.12 执行镜像 `obs://aisbench/images/agent_time/ais_bench_agent_runtime_image_v3.1-20261119-master-ubuntu24.04-py312-x86_64.tar.gz`。先从该独立路径取得执行镜像，再从快照选取对应任务镜像。归档 SHA-256、Docker 标签、镜像 ID 及离线启动命令见 [DeepSWE x86 部署与验收](deepswe-pier-x86.md)。复现旧任务时使用其冻结的模板和镜像。
+
 ## 按目标选包
 
 跨环境首次发起任务还需导入数据资源包，并在目标平台重新绑定模型、SSH 节点和执行模板。快照的数据库、持久化对象、题目文件和各执行器挂载位置见[跨环境测评资源](evaluation-bootstrap.md)。
@@ -30,7 +32,8 @@ printf '%s  %s\n' "$(jq -er .zip_sha256 resources-manifest.json)" resources.zip 
 | 平台服务 | `platform` | 对应发布的前端、Compose、网关配置、TLS、凭据、数据库及对象存储 |
 | GPQA、MMMU-Pro | `dataset-executors` | 资源绑定、各自的数据目录、工具锁和只读挂载 |
 | AutomationBench | `dataset-executors`、`deepswe-lite`、`harbor-support` | 任务源和 Rootless Docker helper。Lite 包提供共用 Harbor runner、探测镜像和 sidecar；600 个任务共用的基础镜像在 harbor-support 包中 |
-| DeepSWE Lite | `dataset-executors`、`deepswe-lite` | 固定任务源、wheelhouse、helper 与样本离线归档挂载 |
+| DeepSWE 原生 Pier，Linux x86_64 | 单题使用 `deepswe-lite` 中的任务镜像，全量使用 `deepswe-full` | 指定的 11 月 19 日执行镜像、Pier 控制端 ZIP、任务目录和所选 Agent 的依赖，见 [Pier x86 手册](deepswe-pier-x86.md) |
+| DeepSWE Lite（平台 Harbor） | `dataset-executors`、`deepswe-lite` | 固定任务源、wheelhouse、helper 与样本离线归档挂载 |
 | DeepSWE 全量 | DeepSWE Lite 两包，再加 `deepswe-full` | 全量包覆盖 113 个任务标签，需将选中任务的镜像供给实际执行分片 |
 | 可选服务或兼容环境 | Langfuse 用 `langfuse`，分析及预算用 `analysis-budget`。独立执行容器或历史任务恢复按原配置选择 `standalone-dataset-runners` 或 `archived-task-runners` | 核对服务绑定的镜像 ID 和 Docker 引擎。只有需要恢复对应能力时才取包 |
 

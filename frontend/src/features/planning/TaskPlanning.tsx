@@ -1,11 +1,12 @@
+import "./ConfigList.css";
 import { duration, ElapsedTime, PlanEstimate, type Report } from "./PlanEstimate";
 import { TableWrap } from "../../shared/ui/TableWrap";
 import { PlanningSelect } from "./PlanningSelect";
-import { serviceLabel } from "../resources/serviceKind";
 import { ServiceBindings } from "../resources/ServiceBindings";
 import { groupSshHosts } from "./sshHosts";
 import { PreflightNodes, type PreflightEvidence, type PreflightProgress } from "./PreflightNodes";
 import { ResourceMultiSelect } from "./ResourceMultiSelect";
+import { serviceLabel } from "../resources/serviceKind";
 import { ModelServices } from "../resources/ModelServices";
 import { ProbeProgress } from "../evaluation/ProbeProgress";
 import { Clock3, LoaderCircle } from "lucide-react";
@@ -20,7 +21,7 @@ import { ExecutionBindings } from "../catalog/ExecutionBindings";
 import { DatasetManifests } from "../catalog/DatasetManifests";
 
 type Options = {
-  compilations: { adaptor_revision?: string; runtime_config?: Record<string, unknown>; id: string; label?: string; sha256: string; target_id: string; dataset: string; input_ready: boolean; config: { subcommand: string; params: Record<string, unknown> } }[];
+  compilations: { tool_revisions?: string[]; display_name?: string | null; adaptor_revision?: string; runtime_config?: Record<string, unknown>; id: string; label?: string; sha256: string; target_id: string; dataset: string; input_ready: boolean; config: { subcommand: string; params: Record<string, unknown> } }[];
   manifests: { id: string; dataset: string; scope: string; sample_count: number; sha256?: string }[];
   curves: { id: string; target_id: string; resource_id: string; resource_kind: string; measured_at: string }[];
 };
@@ -46,6 +47,85 @@ function StrategyChoice({ label, parallel, disabled = false, onChange }: { label
     <button type="button" aria-pressed={!parallel} onClick={() => onChange(false)}>串行执行</button>
     <button type="button" aria-pressed={parallel} disabled={disabled} onClick={() => onChange(true)}>并行执行</button>
   </div>;
+}
+
+type ListedConfig = Options["compilations"][number] & { name: string };
+
+function ConfigActions({ config: c, model, manifests, refresh }: {
+  config: ListedConfig; model: string; manifests: Options["manifests"]; refresh: () => Promise<void>;
+}) {
+  const agent = c.config.subcommand === "harbor_agent";
+  const values = { ...c.config.params, ...c.runtime_config };
+  const defaults = () => ({
+    name: `${c.name} · 副本`, execution: String(values.execution || "local"),
+    tool_root: String(values.ais_bench_root || ""), directory: String((agent ? values.path : values.datasets_dir) || ""),
+    concurrency: String(values[agent ? "n_concurrent_trials" : "batch_size"] ?? 1),
+  });
+  const [draft, setDraft] = useState(defaults);
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const set = (key: keyof typeof draft, value: string) => setDraft(old => ({ ...old, [key]: value }));
+  const bindings = c.runtime_config?.manifest_ids;
+  const available = manifests.filter(m => m.dataset === c.dataset && (!Array.isArray(bindings) || bindings.includes(m.id)));
+  return <>
+    <ManagementDrawer title="查看详情"><dl className="stack">
+      {Object.entries({配置名称: c.name, 数据集: c.dataset, 模型服务: model,
+        执行环境: values.execution === "docker" ? "Docker" : values.execution === "local" ? "执行服务器本机" : "未记录",
+        "AISBench 源码目录": values.ais_bench_root, [agent ? "任务目录" : "数据集目录"]: agent ? values.path : values.datasets_dir,
+        默认并发: values[agent ? "n_concurrent_trials" : "batch_size"] ?? 1,
+        工具版本: c.tool_revisions?.join("、"), 适配器版本: c.adaptor_revision, 配置指纹: c.sha256,
+        [Array.isArray(bindings) ? "绑定样本清单" : "可选样本清单"]: available.map(m => `${m.scope === "full" ? "全量" : "Lite"} · ${m.sample_count} 个样本 · ${m.id.slice(0, 8)}`).join("、") || "暂无",
+      }).map(([label, value]) => <div key={label}><dt>{label}</dt><dd style={{overflowWrap:"anywhere"}}>{String(value ?? "未记录")}</dd></div>)}
+    </dl></ManagementDrawer>
+    <ManagementDrawer title="复制并修改" open={open} onOpenChange={next => {
+      if (!busy) { setDraft(defaults()); setError(""); setOpen(next); }
+    }}>
+      <form className="stack" onSubmit={async e => {
+        e.preventDefault(); if (busy) return;
+        setBusy(true); setError("");
+        try {
+          await apiPost(`/planning/compilations/${c.id}/copy`, {...draft, name: draft.name.trim(), concurrency: Number(draft.concurrency)});
+          await refresh(); setOpen(false);
+        } catch (err) { setError(err instanceof Error ? err.message : "保存失败"); }
+        finally { setBusy(false); }
+      }}>
+        <label>新配置名称<input required maxLength={128} value={draft.name} onChange={e => set("name", e.target.value)} /></label>
+        <label>执行环境<select value={draft.execution} onChange={e => set("execution", e.target.value)}><option value="local">执行服务器本机</option><option value="docker">Docker</option></select></label>
+        <label>AISBench 源码目录<input required value={draft.tool_root} onChange={e => set("tool_root", e.target.value)} /></label>
+        <label>{agent ? "任务目录" : "数据集目录"}<input required={!agent} value={draft.directory} onChange={e => set("directory", e.target.value)} /></label>
+        <label>默认并发<input required type="number" min={1} max={256} value={draft.concurrency} onChange={e => set("concurrency", e.target.value)} /></label>
+        {error && <p role="alert">{error}</p>}
+        <button className="primary" disabled={busy || !draft.name.trim()}>保存为新配置</button>
+      </form>
+    </ManagementDrawer>
+  </>;
+}
+
+function ConfigNameEditor({ id, current, onSaved }: { id: string; current: string; onSaved: (name: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState(current);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  return <ManagementDrawer title="重命名" open={open} onOpenChange={next => {
+    if (saving) return;
+    setOpen(next); setName(current); setError("");
+  }}>
+    <form className="stack" onSubmit={async event => {
+      event.preventDefault();
+      if (saving || !name.trim()) return;
+      setSaving(true);
+      try {
+        const result = await apiPost<{display_name: string}>(`/planning/compilations/${id}/rename`, {name: name.trim()});
+        onSaved(result.display_name); setOpen(false);
+      } catch { setError("保存失败，请重试"); }
+      finally { setSaving(false); }
+    }}>
+      <label>执行配置名称<input autoFocus required maxLength={128} value={name} onChange={e => setName(e.target.value)} /></label>
+      {error && <p role="alert">{error}</p>}
+      <button className="primary" disabled={saving || !name.trim()}>保存名称</button>
+    </form>
+  </ManagementDrawer>;
 }
 
 export function TaskPlanning({ poolRevision, onManagePool, initialTarget = "" }: { initialTarget?: string; poolRevision: number; onManagePool: (add?: boolean) => void }) {
@@ -120,7 +200,7 @@ export function TaskPlanning({ poolRevision, onManagePool, initialTarget = "" }:
     const seen = new Set<string>();
     collected.compilations = collected.compilations.filter(c => {
       const params = Object.fromEntries(Object.entries(c.config.params).filter(([key]) => !["work_dir", "container_name"].includes(key)));
-      const key = stable({ target: c.target_id, dataset: c.dataset, subcommand: c.config.subcommand, adaptor: c.adaptor_revision, runtime: c.runtime_config, params });
+      const key = stable({ named: c.display_name ? c.id : undefined, target: c.target_id, dataset: c.dataset, subcommand: c.config.subcommand, adaptor: c.adaptor_revision, runtime: c.runtime_config, params });
       if (seen.has(key)) return false;
       seen.add(key); return true;
     });
@@ -334,6 +414,13 @@ export function TaskPlanning({ poolRevision, onManagePool, initialTarget = "" }:
     return () => { stopped = true; clearTimeout(timer); };
   // Resource checks follow execution selection, independently of optional estimation inputs.
   }, [preflightFingerprint, ready, checkRequest]);
+  const groups = datasets.map(d => {
+    const rows = options.compilations.filter(c => c.target_id === target && c.input_ready && c.dataset === d && (!Array.isArray(c.runtime_config?.resource_ids) || resources.rows.some(r => (c.runtime_config!.resource_ids as string[]).includes(r.id))));
+    return {dataset: d, configs: rows.map((c, index) => ({
+      ...c, name: c.display_name || `${d} · ${c.config.subcommand === "llm_accuracy" ? "精度测评" : "Agent 测评"}${rows.length > 1 ? ` · 方案 ${index + 1}` : ""}`,
+    }))};
+  });
+  const listedConfigs = groups.flatMap(group => group.configs);
   return <div className="planning-layout"><section className="card stack planning-card" aria-label="发起测评">
     <h2>1. 模型服务</h2>
     <p className="planning-intro">支持 GPQA、MMMU-Pro、DeepSWE、AutomationBench 的全量或已绑定 Lite 清单。Agent 工作流通过 AISBench Harbor 执行，需绑定配置与清单并通过环境检查。</p>
@@ -341,7 +428,20 @@ export function TaskPlanning({ poolRevision, onManagePool, initialTarget = "" }:
       <div className="planning-service-field"><div className="planning-service-heading"><label htmlFor="planning-service">模型服务</label><ManagementDrawer title="管理服务" open={managingServices} onOpenChange={setManagingServices} onDismiss={targets.retry}><ModelServices onUse={useService} /></ManagementDrawer></div><PlanningSelect id="planning-service" label="规划模型服务" value={target} options={targets.rows.map(t => ({ id: t.id, label: t.service_name || t.remote_model, detail: `${serviceLabel(t.service_kind)} · ${t.remote_model} · ${t.base_url} · ${t.id.slice(0, 8)}` }))} onChange={id => { setTarget(id); setSelection({}); }} onAdd={() => setAddingService(true)} /><ManagementDrawer title="新增模型服务" hideTrigger open={addingService} onOpenChange={setAddingService} onDismiss={targets.retry}><ServiceBindings onUse={useService} /></ManagementDrawer></div>
     </div>
     {targets.error && <p role="alert">{targets.error}</p>}
-    <h2>2. 数据集与样本范围</h2>
+    <div className="spread"><h2>2. 数据集与样本范围</h2>
+      <ManagementDrawer title="执行配置列表">
+        <section className="config-list"><div className="config-list-toolbar"><ManagementDrawer title="新增执行配置" onDismiss={() => void action(refresh)}><StandardInputs /></ManagementDrawer></div>
+        {listedConfigs.length ? <div className="table-wrap"><table>
+          <thead><tr><th>配置名称</th><th>数据集</th><th>操作</th></tr></thead>
+          <tbody>{listedConfigs.map(c => <tr key={c.id}>
+            <td><strong>{c.name}</strong><small title={c.id}>配置标识 · {c.id.slice(0, 8)}</small></td><td className="config-list-dataset">{c.dataset}</td>
+            <td><div className="config-list-actions"><ConfigActions config={c} model={targets.rows.find(t => t.id === c.target_id)?.remote_model || c.target_id} manifests={options.manifests} refresh={refresh} /><ConfigNameEditor id={c.id} current={c.name} onSaved={name =>
+              setOptions(previous => ({ ...previous, compilations: previous.compilations.map(row =>
+                row.id === c.id ? { ...row, display_name: name } : row) }))} /></div></td>
+          </tr>)}</tbody>
+        </table></div> : <p>{target ? "当前模型服务暂无可用执行配置。" : "请先在控制台选择模型服务。"}</p>}</section>
+      </ManagementDrawer>
+    </div>
     <p className="muted">勾选后默认选择第一项可用执行配置，并填入绑定资源和唯一的全量清单。可手动更改配置和样本范围。</p>
     <div className="dataset-select-all-mobile">{selectAllButton}</div>
     <TableWrap><table className="planning-table"><thead><tr><th scope="col">{selectAllButton}</th><th>数据集</th><th>执行配置</th><th>样本范围</th><th>状态</th></tr></thead><tbody>{datasets.map(d => {
@@ -352,8 +452,8 @@ export function TaskPlanning({ poolRevision, onManagePool, initialTarget = "" }:
         manifest.dataset === d && (!Array.isArray(allowedManifests) || allowedManifests.includes(manifest.id)));
       const check = preflight?.result?.dataset_checks?.find(row => row.dataset === d);
       const assigned = resources.rows.find(r => r.id === check?.assigned_resource_id);
-      const configs = options.compilations.filter(c => c.target_id === target && c.input_ready && c.dataset === d && (!Array.isArray(c.runtime_config?.resource_ids) || resources.rows.some(r => (c.runtime_config!.resource_ids as string[]).includes(r.id))));
-      return <tr key={d}><td><input type="checkbox" aria-label={`启用 ${d}`} checked={active} onChange={e => { autoFillDataset(d, e.target.checked); }} /></td><td>{d}</td><td data-label="执行配置"><select disabled={!active || !target} aria-label={`${d} 执行配置`} value={selection[d]?.compilation || ""} onChange={e => setSelection(rows => ({ ...rows, [d]: { ...rows[d], compilation: e.target.value } }))}><option value="">{!target ? "先选择模型服务" : !configs.length ? "暂无可用配置" : "请选择执行配置"}</option>{configs.map((c, index) => <option key={c.id} value={c.id}>{d} · {c.config.subcommand === "llm_accuracy" ? "精度测评" : "Agent 测评"}{configs.length > 1 ? ` · 方案 ${index + 1}` : ""}</option>)}</select>{active && chosenConfig && assigned && <small className="muted">{check?.tool_revision && `${chosenConfig.config.subcommand === "harbor_agent" ? "Harbor" : "AISBench"} ${check.tool_revision.slice(0, 12)}`}</small>}</td><td data-label="样本范围"><select disabled={!active || !selection[d]?.compilation} aria-label={`${d} 样本范围`} value={selection[d]?.manifest || ""} onChange={e => setSelection(rows => ({ ...rows, [d]: { ...rows[d], manifest: e.target.value } }))}><option value="">请选择已绑定清单</option>{availableManifests.map(m => <option key={m.id} value={m.id}>{m.scope === "full" ? "全量" : "Lite"} · {m.sample_count} 个样本 · {m.id.slice(0, 8)}</option>)}</select></td><td><span className="planning-row-state">{!active ? "未启用" : !configs.length ? "需配置" : selection[d]?.compilation && selection[d]?.manifest ? "已配置" : "待补全"}</span></td></tr>;
+      const configs = groups.find(group => group.dataset === d)!.configs;
+      return <tr key={d}><td><input type="checkbox" aria-label={`启用 ${d}`} checked={active} onChange={e => { autoFillDataset(d, e.target.checked); }} /></td><td>{d}</td><td data-label="执行配置"><select disabled={!active || !target} aria-label={`${d} 执行配置`} value={selection[d]?.compilation || ""} onChange={e => setSelection(rows => ({ ...rows, [d]: { ...rows[d], compilation: e.target.value } }))}><option value="">{!target ? "先选择模型服务" : !configs.length ? "暂无可用配置" : "请选择执行配置"}</option>{configs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>{active && chosenConfig && assigned && <small className="muted">{check?.tool_revision && `${chosenConfig.config.subcommand === "harbor_agent" ? "Harbor" : "AISBench"} ${check.tool_revision.slice(0, 12)}`}</small>}</td><td data-label="样本范围"><select disabled={!active || !selection[d]?.compilation} aria-label={`${d} 样本范围`} value={selection[d]?.manifest || ""} onChange={e => setSelection(rows => ({ ...rows, [d]: { ...rows[d], manifest: e.target.value } }))}><option value="">请选择已绑定清单</option>{availableManifests.map(m => <option key={m.id} value={m.id}>{m.scope === "full" ? "全量" : "Lite"} · {m.sample_count} 个样本 · {m.id.slice(0, 8)}</option>)}</select></td><td><span className="planning-row-state">{!active ? "未启用" : !configs.length ? "需配置" : selection[d]?.compilation && selection[d]?.manifest ? "已配置" : "待补全"}</span></td></tr>;
     })}</tbody></table></TableWrap>
     {enabled.map(dataset => {
       const bound = options.compilations.filter(c => c.target_id === target && c.input_ready && c.dataset === dataset);

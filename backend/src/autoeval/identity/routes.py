@@ -49,6 +49,10 @@ def _state_cookie_error(settings: Settings, code: str) -> RedirectResponse:
 
 
 def _admin_accounts(settings: Settings) -> set[str]:
+    """AE_ADMIN_ACCOUNTS：逗号分隔的 ``provider:provider_uid`` 条目。
+
+    使用平台下发的稳定 provider_uid 而非可变登录名，登录名修改不影响首管理员引导。
+    """
     return {entry.strip() for entry in settings.admin_accounts if ":" in entry}
 
 
@@ -156,12 +160,12 @@ async def callback(
                 )
             ).scalar_one_or_none()
             if user is None:
-                # 管理员白名单仅在"账号创建"时引导赋权（按稳定的 provider:uid 首次登录）；
-                # 已有账号不再套用白名单，角色以平台内设置为准，避免被降级的账号
-                # 下次登录又被白名单恢复为管理员。
+                # 管理员白名单仅在"账号创建"时引导赋权（按稳定的 provider:provider_uid
+                # 首次登录匹配）；已有账号不再套用白名单，角色以平台内设置为准，
+                # 避免被降级的账号下次登录又被白名单恢复为管理员。
                 bootstrap_role = (
                     "admin"
-                    if f"{profile.provider}:{profile.login}" in _admin_accounts(settings)
+                    if f"{profile.provider}:{profile.uid}" in _admin_accounts(settings)
                     else "regular"
                 )
                 user = PlatformUser(
@@ -241,4 +245,20 @@ async def me(request: Request):
         return {"data": principal.as_view()}
     if settings.auth_mode == "local":
         return {"data": local_principal().as_view()}
-    raise HTTPException(401, "Not authenticated")
+    # 区分“从未登录”与“会话已失效”：仅在已有会话失效时提示重新登录，
+    # 首次访问的用户只会看到普通登录入口。
+    if request.cookies.get(SESSION_COOKIE):
+        return JSONResponse(
+            status_code=401,
+            content={
+                "error": {"code": "SESSION_INVALID", "message": "会话已失效，请重新登录"},
+                "request_id": request.state.request_id,
+            },
+        )
+    return JSONResponse(
+        status_code=401,
+        content={
+            "error": {"code": "NOT_AUTHENTICATED", "message": "Not authenticated"},
+            "request_id": request.state.request_id,
+        },
+    )

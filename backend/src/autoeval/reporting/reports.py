@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 
 from botocore.exceptions import BotoCoreError, ClientError
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, or_, select
 from sqlalchemy.exc import SQLAlchemyError
@@ -16,6 +16,7 @@ from autoeval.catalog.benchmarks import compare_baseline
 from autoeval.catalog.datasets import read_manifest
 from autoeval.catalog.models import BenchmarkBaseline
 from autoeval.evaluation.models import EvaluationReport
+from autoeval.identity.guards import Principal, require_admin
 from autoeval.infrastructure.audit import record_audit
 from autoeval.infrastructure.models import EvaluationRun, RunSnapshot
 from autoeval.infrastructure.responses import Envelope, PageEnvelope
@@ -23,6 +24,9 @@ from autoeval.reporting.report_integrity import verified_report_body
 from autoeval.reporting.report_view import report_data
 
 router = APIRouter(prefix="/api/autoeval/v1/reports", tags=["reports"])
+
+# 审核与撤销是治理操作：仅管理员可执行（矩阵约定），普通用户对报告只读
+ADMIN_GUARD = Depends(require_admin)
 
 
 class ReportView(BaseModel):
@@ -210,8 +214,18 @@ async def detail(report_id: uuid.UUID, request: Request):
 
 
 @router.post("/{report_id}/review", response_model=Envelope[dict])
-async def review(report_id: uuid.UUID, body: ReviewInput, request: Request):
-    """Mark one immutable report as an approved history source; never edits evidence."""
+async def review(
+    report_id: uuid.UUID,
+    body: ReviewInput,
+    request: Request,
+    principal: Principal = ADMIN_GUARD,
+):
+    """Mark one immutable report as an approved history source; never edits evidence.
+
+    仅管理员可审核（approve）或撤销（revoke）；操作人与操作结果写入审计与
+    报告字段，普通用户调用会被角色守卫以 403 拒绝。
+    """
+    actor = f"{principal.provider}:{principal.login}"
     if body.decision == "approve" and body.note is not None:
         body = body.model_copy(update={"note": body.note.strip() or None})
     try:
@@ -244,7 +258,7 @@ async def review(report_id: uuid.UUID, body: ReviewInput, request: Request):
                 if status != "verified":
                     raise HTTPException(409, "Report evidence is not verified")
                 row.review_status = "approved"
-                row.reviewed_by = "local-operator"
+                row.reviewed_by = actor
                 row.reviewed_at = datetime.now(UTC)
                 row.review_note = body.note
                 action = "report.review.approve"
@@ -253,7 +267,7 @@ async def review(report_id: uuid.UUID, body: ReviewInput, request: Request):
                 if previous != "approved":
                     raise HTTPException(409, "Only approved reports can be revoked")
                 row.review_status = "revoked"
-                row.reviewed_by = "local-operator"
+                row.reviewed_by = actor
                 row.reviewed_at = datetime.now(UTC)
                 row.review_note = body.note
                 action = "report.review.revoke"
@@ -267,6 +281,7 @@ async def review(report_id: uuid.UUID, body: ReviewInput, request: Request):
                 request_id=request.state.request_id,
                 details={"previous": previous, "note": body.note},
                 resource_type="evaluation_report",
+                actor=actor,
             )
             return {
                 "data": review_data(row),

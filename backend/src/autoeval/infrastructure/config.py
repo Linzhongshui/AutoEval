@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     auth_mode: Literal["local", "oauth"] = "local"
     # 逗号分隔的纯文本列表（NoDecode 跳过 pydantic-settings 的 JSON 解码）
     oauth_enabled_providers: Annotated[list[str], NoDecode] = ["github", "gitcode"]
+    # 首管理员引导白名单：provider:provider_uid（稳定标识，而非可变登录名）
     admin_accounts: Annotated[list[str], NoDecode] = []
     github_client_id: SecretStr = SecretStr("")
     github_client_secret: SecretStr = SecretStr("")
@@ -69,10 +70,34 @@ class Settings(BaseSettings):
         return value
 
     @model_validator(mode="after")
-    def local_only(self):
-        if self.environment == "production":
+    def production_identity_config(self):
+        # 免登录（local）模式仅限开发/测试环境；正式环境必须走 OAuth：
+        # 至少配置一个平台的完整应用凭据，且前端源/回调必须是非本机地址，
+        # 否则拒绝启动（维护接口自然随之受限，data workbench 亦拒绝生产环境）。
+        if self.environment != "production":
+            return self
+        if self.auth_mode != "oauth":
             raise ValueError(
-                "Production identity is not implemented; local auth is development only"
+                "Production requires OAuth identity; AE_AUTH_MODE=local is development only"
+            )
+        providers_ready = (
+            self.github_client_id.get_secret_value()
+            and self.github_client_secret.get_secret_value()
+        ) or (
+            self.gitcode_client_id.get_secret_value()
+            and self.gitcode_client_secret.get_secret_value()
+        )
+        if not providers_ready:
+            raise ValueError(
+                "Production OAuth requires at least one fully configured provider "
+                "(GitHub or GitCode application credentials)"
+            )
+        loopback = ("http://localhost", "http://127.0.0.1")
+        if self.oauth_redirect_base.startswith(loopback) or self.frontend_origin.startswith(
+            loopback
+        ):
+            raise ValueError(
+                "Production requires a public frontend origin and OAuth redirect base"
             )
         return self
 

@@ -14,6 +14,7 @@ from sqlalchemy import select
 
 from autoeval.catalog.dataset_identity import report_dataset
 from autoeval.evaluation.models import EvaluationReport
+from autoeval.identity.guards import Principal, require_admin
 from autoeval.infrastructure.audit import AuditEvent
 from autoeval.infrastructure.models import RunSnapshot
 from autoeval.reporting.models import LeaderboardRecord
@@ -79,6 +80,9 @@ router = APIRouter(
     dependencies=[Depends(development)],
 )
 
+# 榜单录入、编辑、审核/撤销/下架均为治理操作：仅管理员可执行，普通用户只读发布榜
+ADMIN_GUARD = Depends(require_admin)
+
 
 def view(row):
     return {
@@ -90,10 +94,10 @@ def view(row):
     }
 
 
-def audit(session, request, row, action, reason):
+def audit(session, request, row, action, reason, actor="local-operator"):
     session.add(
         AuditEvent(
-            actor="local-operator",
+            actor=actor,
             action=action,
             resource_type="leaderboard_record",
             resource_id=str(row.id),
@@ -242,7 +246,7 @@ async def entries(request: Request, offset: int = 0, limit: int = 20, include_te
 
 
 @router.post("/entries", status_code=201)
-async def create(body: EntryInput, request: Request):
+async def create(body: EntryInput, request: Request, principal: Principal = ADMIN_GUARD):
     async with request.app.state.sessions() as session, session.begin():
         # Serialize source identity to make import retries safe across processes.
         from sqlalchemy import text
@@ -269,12 +273,21 @@ async def create(body: EntryInput, request: Request):
         )
         session.add(row)
         await session.flush()
-        audit(session, request, row, "leaderboard_created", "录入待评审数据")
+        audit(
+            session,
+            request,
+            row,
+            "leaderboard_created",
+            "录入待评审数据",
+            f"{principal.provider}:{principal.login}",
+        )
         return {"data": view(row)}
 
 
 @router.post("/entries/{entry_id}/edit")
-async def edit(entry_id: uuid.UUID, body: EditInput, request: Request):
+async def edit(
+    entry_id: uuid.UUID, body: EditInput, request: Request, principal: Principal = ADMIN_GUARD
+):
     async with request.app.state.sessions() as session, session.begin():
         row = await session.scalar(
             select(LeaderboardRecord).where(LeaderboardRecord.id == entry_id).with_for_update()
@@ -289,12 +302,21 @@ async def edit(entry_id: uuid.UUID, body: EditInput, request: Request):
         row.payload = body.entry.model_dump(mode="json")
         row.state = "draft"
         row.revision += 1
-        audit(session, request, row, "leaderboard_edited", body.reason)
+        audit(
+            session,
+            request,
+            row,
+            "leaderboard_edited",
+            body.reason,
+            f"{principal.provider}:{principal.login}",
+        )
         return {"data": view(row)}
 
 
 @router.post("/entries/{entry_id}/review")
-async def review(entry_id: uuid.UUID, body: Decision, request: Request):
+async def review(
+    entry_id: uuid.UUID, body: Decision, request: Request, principal: Principal = ADMIN_GUARD
+):
     async with request.app.state.sessions() as session, session.begin():
         row = await session.scalar(
             select(LeaderboardRecord).where(LeaderboardRecord.id == entry_id).with_for_update()
@@ -315,7 +337,14 @@ async def review(entry_id: uuid.UUID, body: Decision, request: Request):
             await validate_report(request, session, EntryInput.model_validate(row.payload))
         row.state = after
         row.revision += 1
-        audit(session, request, row, "leaderboard_" + body.action, body.reason)
+        audit(
+            session,
+            request,
+            row,
+            "leaderboard_" + body.action,
+            body.reason,
+            f"{principal.provider}:{principal.login}",
+        )
         return {"data": view(row)}
 
 

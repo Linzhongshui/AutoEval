@@ -28,13 +28,21 @@ export type ProvidersState =
 // 网络失败或 5xx 视为身份无法确认（error），由登录守卫拦截并提示，
 // 绝不当作访客放行——访客只有在后端确认（local 模式返回本地操作员、
 // OAuth 模式校验会话成功）之后才能进入应用。
-export function useCurrentUser(): { auth: AuthState; refresh: () => void } {
+// SESSION_INVALID（曾登录但会话已失效/被吊销）与 NOT_AUTHENTICATED
+// （从未登录）分开处理：仅在会话失效时才提示“重新登录”。
+export function useCurrentUser(): {
+  auth: AuthState;
+  refresh: () => void;
+  reLoginNotice: string | null;
+} {
   const [auth, setAuth] = useState<AuthState>({ status: "loading" });
+  const [reLoginNotice, setReLoginNotice] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
     setAuth({ status: "loading" });
+    setReLoginNotice(null);
     apiGet<CurrentUser>("/auth/me", controller.signal)
       .then((user) => {
         if (active) setAuth({ status: "signed-in", user });
@@ -43,6 +51,9 @@ export function useCurrentUser(): { auth: AuthState; refresh: () => void } {
         if (!active) return;
         if (error instanceof ApiError && error.status === 401) {
           setAuth({ status: "guest" });
+          if (error.code === "SESSION_INVALID") {
+            setReLoginNotice(error.message);
+          }
         } else {
           setAuth({ status: "error" });
         }
@@ -52,7 +63,7 @@ export function useCurrentUser(): { auth: AuthState; refresh: () => void } {
       controller.abort();
     };
   }, [attempt]);
-  return { auth, refresh: () => setAttempt((value) => value + 1) };
+  return { auth, refresh: () => setAttempt((value) => value + 1), reLoginNotice };
 }
 
 // 读取可用登录方式。请求失败（failed）与空列表（ready + []）是两种不同状态：

@@ -18,12 +18,14 @@ export function LoginPage({
   localMode,
   providers,
   onRetry,
+  notice = null,
 }: {
   error: string | null;
   onEnter: () => void;
   localMode: boolean;
   providers: ProvidersState;
   onRetry: () => void;
+  notice?: string | null;
 }) {
   const message = error ? (errorMessages[error] ?? "登录未完成，请重试。") : "";
 
@@ -37,6 +39,12 @@ export function LoginPage({
           <div className="login-error" role="alert">
             <AlertCircle size={16} />
             {message}
+          </div>
+        )}
+        {!message && notice && (
+          <div className="login-notice" role="status">
+            <AlertCircle size={16} />
+            {notice}
           </div>
         )}
         {localMode ? (

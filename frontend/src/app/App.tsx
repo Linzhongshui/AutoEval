@@ -72,7 +72,7 @@ export function App() {
   const [poolRevision, setPoolRevision] = useState(0);
   const poolPage = page === "config/ssh-pool" || page === "config/ssh-pool/add";
   const [toast, setToast] = useState("");
-  const { auth, refresh } = useCurrentUser();
+  const { auth, refresh, reLoginNotice } = useCurrentUser();
   const loginPage = page === "login" || page.startsWith("login?");
   const loginError = page.startsWith("login?") ? new URLSearchParams(page.slice(6)).get("error") : null;
   const { providers, reload: reloadProviders } = useGateProviders(auth.status === "guest");
@@ -124,7 +124,7 @@ export function App() {
     tasks: "追踪每一次测评，定位每一个问题。",
     reports: "查看测评报告，追溯历史结果。",
     leaderboard: "按来源与比较条件查看模型成绩。",
-    "data-workbench": "评审报告成绩、维护榜单数据及导入官方来源。",
+    "data-workbench": "管理员评审报告成绩、维护榜单数据及导入官方来源；普通用户只读公布榜单。",
     "admin/users": "查看平台账号、调整角色、停用与恢复账号；所有变更写入审计记录。",
     "admin/config": "维护预算开关、归档清单与 Langfuse 链接等平台级配置，保存后立即生效。",
   };
@@ -162,9 +162,10 @@ export function App() {
   if (auth.status === "guest") {
     // 访客（oauth 模式未登录）一律进入登录页；登录方式读取失败或为空时，
     // 登录页呈现对应错误与重试，后端确认身份之前不放行进入控制台。
+    // 仅当后端确认"会话已失效"才提示重新登录，首次访问只显示登录入口。
     return (
       <div className="login-shell">
-        <LoginPage error={null} onEnter={() => go("console")} localMode={false} providers={providers} onRetry={retryAuth} />
+        <LoginPage error={null} onEnter={() => go("console")} localMode={false} providers={providers} onRetry={retryAuth} notice={reLoginNotice} />
       </div>
     );
   }
@@ -179,7 +180,7 @@ export function App() {
         </div>
         <div className="workspace">工作空间：本地单工作空间</div>
         <nav>
-          {(isAdmin ? allMenus : menus).filter(menu => menu.id !== "data-workbench" || workbenchEnabled).map((menu) => (
+          {(isAdmin ? allMenus : menus).filter(menu => menu.id !== "data-workbench" || (workbenchEnabled && isAdmin)).map((menu) => (
             <a
               key={menu.id}
               href={`#${menu.id}`}
@@ -273,14 +274,14 @@ export function App() {
         )}
 
         {page === "leaderboard" && (<div className="stack"><PublishedLeaderboard /><details onToggle={(event) => setCandidateScoresOpen(event.currentTarget.open)}><summary>平台运行报告候选成绩（未人工评审）</summary>{candidateScoresOpen && <RealLeaderboard open={(id) => go(`report/${id}`)} />}</details></div>)}
-        {workbenchEnabled && page === "data-workbench" && <DataWorkbench />}
-        {page.startsWith("admin/") && user && !isAdmin && (
+        {workbenchEnabled && page === "data-workbench" && isAdmin && <DataWorkbench />}
+        {(page.startsWith("admin/") || page === "data-workbench") && user && !isAdmin && (
           <section className="card admin-forbidden" role="alert">
             <div className="admin-forbidden-head">
               <ShieldAlert size={22} />
               <h2>403 · 无权访问</h2>
             </div>
-            <p>该页面为管理员专属。普通用户可使用测评、任务与报告功能；如需权限，请联系管理员调整你的角色。</p>
+            <p>该页面的评审与维护操作仅管理员可执行。普通用户可使用测评、任务与报告功能，并只读查看榜单；如需权限，请联系管理员调整你的角色。</p>
             <button className="primary" type="button" onClick={() => go("console")}>返回控制台</button>
           </section>
         )}

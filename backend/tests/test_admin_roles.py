@@ -165,6 +165,9 @@ async def test_admin_role_update_and_last_admin_protection_live():
             )
             assert again.status_code == 200
             assert again.json()["data"]["role"] == "regular"
+            # 降级立即生效：原管理员会话再访问管理接口必须 403（角色按请求实时校验）
+            stale_admin = await client.get("/api/autoeval/v1/admin/users")
+            assert stale_admin.status_code == 403
         # 审计事件必须记录操作人与变更内容
         async with sessions() as session:
             audit_rows = (
@@ -306,6 +309,52 @@ async def test_admin_config_read_write_and_startup_overlay_live():
         async with sessions() as session:
             await session.execute(delete(PlatformConfig))
             await session.commit()
+        await _cleanup_user(sessions, admin.id)
+        await engine.dispose()
+
+
+@INFRA_ONLY
+async def test_production_maintenance_endpoints_stay_guarded_live():
+    """正式环境（oauth）下维护接口不被测试/本地放行：匿名 401、普通用户 403、管理员可执行。"""
+    settings = _settings(
+        environment="production",
+        auth_mode="oauth",
+        oauth_enabled_providers=[],
+        github_client_id="gid",
+        github_client_secret="gsec",
+        oauth_redirect_base="https://api.example.com",
+        frontend_origin="https://app.example.com",
+        database_url=DATABASE_URL,
+    )
+    app = _make_app(settings)
+    engine, sessions = create_database(settings)
+    regular, regular_session = await _make_user(sessions, "regular")
+    admin, admin_session = await _make_user(sessions, "admin")
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app), base_url="http://test"
+        ) as anon:
+            assert (await anon.get("/api/autoeval/v1/admin/users")).status_code == 401
+            assert (await anon.get("/api/autoeval/v1/admin/config")).status_code == 401
+            assert (await anon.get("/api/autoeval/v1/audit-events")).status_code == 401
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://test",
+            cookies={"ae_session": str(regular_session)},
+        ) as regular_client:
+            assert (await regular_client.get("/api/autoeval/v1/admin/users")).status_code == 403
+            assert (await regular_client.get("/api/autoeval/v1/admin/config")).status_code == 403
+            assert (await regular_client.get("/api/autoeval/v1/audit-events")).status_code == 403
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://test",
+            cookies={"ae_session": str(admin_session)},
+        ) as admin_client:
+            assert (await admin_client.get("/api/autoeval/v1/admin/users")).status_code == 200
+            assert (await admin_client.get("/api/autoeval/v1/admin/config")).status_code == 200
+            assert (await admin_client.get("/api/autoeval/v1/audit-events")).status_code == 200
+    finally:
+        await _cleanup_user(sessions, regular.id)
         await _cleanup_user(sessions, admin.id)
         await engine.dispose()
 

@@ -2,6 +2,7 @@
 
 import asyncio
 import copy
+import json
 import os
 import subprocess
 import sys
@@ -130,6 +131,52 @@ def test_invalid_parameters_and_bypasses_are_rejected(params):
     entry = discover(bundle())[0]
     with pytest.raises(ValueError):
         compile_config(entry, CompileInput(adjustments={"params": params}))
+
+
+def test_repository_agent_config_preserves_source_and_locks_compiled_values():
+    source = bundle()
+    path = next(path for path in source.files if path.endswith("/DeepSWE/standard_config.json"))
+    value = json.loads(source.files[path])
+    config = {"agent": {"step_limit": 500}, "model": {"model_kwargs": {"temperature": 1.0}}}
+    args = ["--ak", "config=" + json.dumps(config)]
+    value["params"]["extra_cli_args"] = args
+    source.files[path] = raw = json.dumps(value)
+    entry = next(
+        row for row in discover(source) if path == row["files"]["standard_config.json"]["path"]
+    )
+    assert entry["files"]["standard_config.json"]["raw"] == raw
+    assert entry["locked_fields"]["params.agent_kwargs.config.agent.step_limit"] == 500
+    result = compile_config(
+        entry,
+        CompileInput(
+            adjustments={"params": {"agent_kwargs": {"config": {"agent": {"step_limit": 1}}}}}
+        ),
+    )
+    assert result["config"]["params"]["agent_kwargs"]["config"] == config
+    assert "extra_cli_args" not in result["config"]["params"]
+    with pytest.raises(ValueError, match="can bypass"):
+        compile_config(entry, CompileInput(adjustments={"params": {"extra_cli_args": args}}))
+
+
+@pytest.mark.parametrize(
+    "args, kwargs",
+    [
+        (["--ak", "config={}", "--reuse"], {}),
+        (["--ak", "config=[]"], {}),
+        (["--ak", "config={"], {}),
+        (["--ak", 'config={"api_key":"secret"}'], {}),
+        (["--ak", "config={}"], {"config": {"agent": {}}}),
+    ],
+)
+def test_repository_agent_config_rejects_invalid_input_with_path(args, kwargs):
+    source = bundle()
+    path = next(path for path in source.files if path.endswith("/DeepSWE/standard_config.json"))
+    value = json.loads(source.files[path])
+    value["params"].update(extra_cli_args=args, agent_kwargs=kwargs)
+    source.files[path] = json.dumps(value)
+    with pytest.raises(ValueError) as error:
+        discover(source)
+    assert path in str(error.value)
 
 
 def test_environment_cannot_override_locked_task_path():

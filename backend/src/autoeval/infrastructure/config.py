@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     oauth_enabled_providers: Annotated[list[str], NoDecode] = ["github", "gitcode"]
     # 首管理员引导白名单：provider:provider_uid（稳定标识，而非可变登录名）
     admin_accounts: Annotated[list[str], NoDecode] = []
+    # 首超级管理员引导白名单：provider:provider_uid；仅账号创建时生效
+    superadmin_accounts: Annotated[list[str], NoDecode] = []
     github_client_id: SecretStr = SecretStr("")
     github_client_secret: SecretStr = SecretStr("")
     gitcode_client_id: SecretStr = SecretStr("")
@@ -62,7 +64,9 @@ class Settings(BaseSettings):
     allowed_model_hosts: list[str] = ["api.deepseek.com"]
     docker_executable: str = "docker"
 
-    @field_validator("oauth_enabled_providers", "admin_accounts", mode="before")
+    @field_validator(
+        "oauth_enabled_providers", "admin_accounts", "superadmin_accounts", mode="before"
+    )
     @classmethod
     def split_csv_list(cls, value):
         if isinstance(value, str):

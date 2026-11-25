@@ -56,6 +56,11 @@ def _admin_accounts(settings: Settings) -> set[str]:
     return {entry.strip() for entry in settings.admin_accounts if ":" in entry}
 
 
+def _superadmin_accounts(settings: Settings) -> set[str]:
+    """AE_SUPERADMIN_ACCOUNTS：同上格式，用于首超级管理员引导。"""
+    return {entry.strip() for entry in settings.superadmin_accounts if ":" in entry}
+
+
 @router.get("/providers")
 async def providers(request: Request):
     settings: Settings = request.app.state.settings
@@ -160,14 +165,16 @@ async def callback(
                 )
             ).scalar_one_or_none()
             if user is None:
-                # 管理员白名单仅在"账号创建"时引导赋权（按稳定的 provider:provider_uid
-                # 首次登录匹配）；已有账号不再套用白名单，角色以平台内设置为准，
-                # 避免被降级的账号下次登录又被白名单恢复为管理员。
-                bootstrap_role = (
-                    "admin"
-                    if f"{profile.provider}:{profile.uid}" in _admin_accounts(settings)
-                    else "regular"
-                )
+                # 白名单仅在"账号创建"时引导赋权（按稳定的 provider:provider_uid
+                # 首次登录匹配，超管白名单优先）；已有账号不再套用白名单，角色以
+                # 平台内设置为准，避免被降级的账号下次登录又被白名单恢复。
+                account_key = f"{profile.provider}:{profile.uid}"
+                if account_key in _superadmin_accounts(settings):
+                    bootstrap_role = "superadmin"
+                elif account_key in _admin_accounts(settings):
+                    bootstrap_role = "admin"
+                else:
+                    bootstrap_role = "regular"
                 user = PlatformUser(
                     provider=profile.provider,
                     provider_uid=profile.uid,

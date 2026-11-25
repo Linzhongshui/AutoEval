@@ -170,7 +170,8 @@ export function App() {
     );
   }
   const user = auth.status === "signed-in" ? auth.user : undefined;
-  const isAdmin = user?.role === "admin";
+  // 管理员及以上（admin / superadmin）可见管理入口；具体操作权力由后端按角色裁决
+  const isAdmin = user?.role === "admin" || user?.role === "superadmin";
 
   return (
     <div className="shell">
@@ -285,7 +286,7 @@ export function App() {
             <button className="primary" type="button" onClick={() => go("console")}>返回控制台</button>
           </section>
         )}
-        {page === "admin/users" && isAdmin && <AdminUsers notify={setToast} />}
+        {page === "admin/users" && isAdmin && user && <AdminUsers notify={setToast} viewer={user} />}
         {page === "admin/config" && isAdmin && <AdminConfig notify={setToast} />}
 
         <footer className="page-foot">

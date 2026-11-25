@@ -119,7 +119,16 @@ async def require_user(request: Request) -> Principal:
 
 
 async def require_admin(request: Request) -> Principal:
+    """管理员及以上（admin / superadmin）均可通过。"""
     principal = await require_user(request)
-    if principal.role != "admin":
+    if principal.role not in ("admin", "superadmin"):
         raise HTTPException(403, "Admin role required")
+    return principal
+
+
+async def require_superadmin(request: Request) -> Principal:
+    """仅超级管理员：角色调整与对其他管理员的处置。"""
+    principal = await require_user(request)
+    if principal.role != "superadmin":
+        raise HTTPException(403, "Superadmin role required")
     return principal

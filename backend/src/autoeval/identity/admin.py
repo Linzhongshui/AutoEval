@@ -77,21 +77,21 @@ def _audit(
     )
 
 
-async def _ensure_not_last_admin(session, user_id, action: str) -> None:
-    """降级/停用管理员前校验：必须存在另一位未停用的管理员。"""
-    other_admins = (
+async def _ensure_not_last_superadmin(session, user_id, action: str) -> None:
+    """处置超级管理员前校验：必须存在另一位未停用的超级管理员。"""
+    others = (
         await session.execute(
             select(func.count())
             .select_from(PlatformUser)
             .where(
-                PlatformUser.role == "admin",
+                PlatformUser.role == "superadmin",
                 PlatformUser.suspended_at.is_(None),
                 PlatformUser.id != user_id,
             )
         )
     ).scalar_one()
-    if other_admins == 0:
-        raise HTTPException(409, f"最后一个有效管理员不可{action}")
+    if others == 0:
+        raise HTTPException(409, f"最后一个有效超级管理员不可{action}")
 
 
 @router.get("/users")
@@ -139,7 +139,7 @@ async def list_users(
 
 
 class UserPatch(BaseModel):
-    role: Literal["admin", "regular"] | None = None
+    role: Literal["superadmin", "admin", "regular"] | None = None
     suspended: bool | None = None
 
 
@@ -159,14 +159,21 @@ async def update_user(
                 raise HTTPException(404, "用户不存在")
             changes: dict[str, Any] = {}
             if patch.role is not None and patch.role != target.role:
-                if target.role == "admin" and patch.role != "admin":
-                    await _ensure_not_last_admin(session, target.id, action="降级")
+                # 角色调整（任何方向，含设超管）仅超级管理员可执行；
+                # 管理员不能提拔普通用户，也不能降级其他管理员。
+                if principal.role != "superadmin":
+                    raise HTTPException(403, "仅超级管理员可以调整角色")
+                if target.role == "superadmin" and patch.role != "superadmin":
+                    await _ensure_not_last_superadmin(session, target.id, action="降级")
                 changes["role"] = {"from": target.role, "to": patch.role}
                 target.role = patch.role
             if patch.suspended is not None and (target.suspended_at is not None) != patch.suspended:
+                if target.role != "regular" and principal.role != "superadmin":
+                    # 管理员只能停用/恢复普通用户，不能互相停用，不能动超管
+                    raise HTTPException(403, "仅超级管理员可以停用管理员或超级管理员")
+                if patch.suspended and target.role == "superadmin":
+                    await _ensure_not_last_superadmin(session, target.id, action="停用")
                 if patch.suspended:
-                    if target.role == "admin":
-                        await _ensure_not_last_admin(session, target.id, action="停用")
                     # 停用即吊销该用户全部会话，已登录会话立刻失效
                     revoked = (
                         await session.execute(

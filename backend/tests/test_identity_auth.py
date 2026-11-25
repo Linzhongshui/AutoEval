@@ -622,9 +622,7 @@ async def _delete_user_by_uid(sessions, provider_uid: str):
                 )
             )
         )
-        await session.execute(
-            delete(PlatformUser).where(PlatformUser.provider_uid == provider_uid)
-        )
+        await session.execute(delete(PlatformUser).where(PlatformUser.provider_uid == provider_uid))
         await session.commit()
 
 
@@ -713,6 +711,47 @@ async def test_admin_whitelist_requires_stable_provider_uid(monkeypatch):
                 delete(PlatformUser).where(PlatformUser.provider_uid == login_shaped.uid)
             )
             await session.commit()
+        await engine.dispose()
+
+
+@pytest.mark.skipif(os.getenv("AE_INFRA_TEST") != "1", reason="Requires real PostgreSQL")
+async def test_superadmin_whitelist_bootstraps_superadmin(monkeypatch):
+    # AE_SUPERADMIN_ACCOUNTS 命中的账号首次登录即超管（优先于管理员白名单）
+    profile = ProviderProfile(
+        provider="gitcode",
+        uid=f"uid-{uuid_lib.uuid4().hex[:12]}",
+        login="first-owner",
+        display_name="First Owner",
+        email=None,
+        avatar_url=None,
+    )
+    app = _oauth_app(monkeypatch, providers={"gitcode": profile})
+    engine, sessions = create_database(app.state.settings)
+    app.state.settings.superadmin_accounts = [f"gitcode:{profile.uid}"]
+    app.state.settings.admin_accounts = [f"gitcode:{profile.uid}"]
+    token = uuid_lib.uuid4().hex
+    await _seed_state(sessions, token, "gitcode")
+    try:
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://test",
+            cookies={"ae_oauth_state": token},
+        ) as client:
+            response = await client.get(
+                "/api/autoeval/v1/auth/callback/gitcode",
+                params={"code": "c", "state": token},
+            )
+        assert response.status_code == 302
+        assert response.headers["location"] == "http://localhost:5173/#console"
+        async with sessions() as session:
+            role = (
+                await session.execute(
+                    select(PlatformUser.role).where(PlatformUser.provider_uid == profile.uid)
+                )
+            ).scalar_one()
+        assert role == "superadmin"
+    finally:
+        await _delete_user_by_uid(sessions, profile.uid)
         await engine.dispose()
 
 

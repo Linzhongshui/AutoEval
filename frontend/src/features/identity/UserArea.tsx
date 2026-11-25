@@ -28,6 +28,7 @@ export function UserArea({
         <span className="user-avatar user-avatar-fallback">{user.display_name.slice(0, 1)}</span>
       )}
       <span className="user-name" title={user.login}>{user.display_name}</span>
+      {user.role === "superadmin" && <span className="user-role">超级管理员</span>}
       {user.role === "admin" && <span className="user-role">管理员</span>}
       {!isLocal && (
         <button type="button" className="user-logout" onClick={signOut} title="退出登录">

@@ -22,7 +22,9 @@ class PlatformUser(Record, Base):
     __table_args__ = (
         UniqueConstraint("provider", "provider_uid", name="uq_platform_user_provider_uid"),
         CheckConstraint("provider IN ('github','gitcode')", name="ck_platform_user_provider"),
-        CheckConstraint("role IN ('admin','regular')", name="ck_platform_user_role"),
+        CheckConstraint(
+            "role IN ('superadmin','admin','regular')", name="ck_platform_user_role"
+        ),
     )
 
 

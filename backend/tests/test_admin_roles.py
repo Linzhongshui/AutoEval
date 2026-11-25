@@ -106,68 +106,115 @@ async def test_admin_users_list_search_and_pagination_live():
 
 
 @INFRA_ONLY
-async def test_admin_role_update_and_last_admin_protection_live():
+async def test_role_changes_require_superadmin_live():
+    """角色变更收归超管：管理员不能提拔/降级任何人、不能停用管理员；
+    超管可任免三角色；最后一位有效超管受保护；降级即时生效（旧会话 403）。"""
     settings = _settings(auth_mode="oauth", oauth_enabled_providers=[], database_url=DATABASE_URL)
     app = _make_app(settings)
     engine, sessions = create_database(settings)
-    admin_a, session_a = await _make_user(sessions, "admin", login=f"op-{uuid_lib.uuid4().hex[:6]}")
-    admin_b, _ = await _make_user(sessions, "admin")
+    superadmin, sup_session = await _make_user(
+        sessions, "superadmin", login=f"sa-{uuid_lib.uuid4().hex[:6]}"
+    )
+    admin_a, admin_a_session = await _make_user(
+        sessions, "admin", login=f"op-{uuid_lib.uuid4().hex[:6]}"
+    )
+    admin_b, admin_b_session = await _make_user(sessions, "admin")
     regular, _ = await _make_user(sessions, "regular")
-    # 开发库中可能存在真实管理员：临时降级其余管理员，保证"最后一位"场景可复现
-    displaced = await _demote_admins_except(sessions, [admin_a.id, admin_b.id])
+    # 开发库中已有真实超管：临时降为 admin，保证"最后一位超管"场景可复现
+    displaced = await _demote_superadmins_except(sessions, [superadmin.id])
     try:
+        # —— 管理员矩阵：不可改角色、不可停用管理员，可停用/恢复普通用户 ——
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app),
             base_url="http://test",
-            cookies={"ae_session": str(session_a)},
+            cookies={"ae_session": str(admin_a_session)},
         ) as client:
-            # 先降到只剩 admin_a 一位有效管理员
-            demoted = await client.patch(
+            denied_promote = await client.patch(
+                f"/api/autoeval/v1/admin/users/{regular.id}", json={"role": "admin"}
+            )
+            assert denied_promote.status_code == 403
+            denied_demote = await client.patch(
                 f"/api/autoeval/v1/admin/users/{admin_b.id}", json={"role": "regular"}
             )
-            assert demoted.status_code == 200
-            assert demoted.json()["data"]["role"] == "regular"
-
-            # 目标不存在与空更新的错误码（此时 admin_a 仍是管理员）
+            assert denied_demote.status_code == 403
+            denied_super = await client.patch(
+                f"/api/autoeval/v1/admin/users/{admin_b.id}", json={"role": "superadmin"}
+            )
+            assert denied_super.status_code == 403
+            denied_suspend = await client.patch(
+                f"/api/autoeval/v1/admin/users/{admin_b.id}", json={"suspended": True}
+            )
+            assert denied_suspend.status_code == 403
+            # 管理员保留的权力：停用/恢复普通用户
+            ok_suspend = await client.patch(
+                f"/api/autoeval/v1/admin/users/{regular.id}", json={"suspended": True}
+            )
+            assert ok_suspend.status_code == 200
+            assert ok_suspend.json()["data"]["suspended_at"] is not None
+            ok_restore = await client.patch(
+                f"/api/autoeval/v1/admin/users/{regular.id}", json={"suspended": False}
+            )
+            assert ok_restore.status_code == 200
+            assert ok_restore.json()["data"]["suspended_at"] is None
+            # 目标不存在与空更新的错误码
             missing = await client.patch(
                 f"/api/autoeval/v1/admin/users/{uuid_lib.uuid4()}", json={"role": "admin"}
             )
             assert missing.status_code == 404
             empty = await client.patch(f"/api/autoeval/v1/admin/users/{regular.id}", json={})
             assert empty.status_code == 422
-
-            # 此时只剩 admin_a：降级、停用都必须拒绝
-            last_demote = await client.patch(
-                f"/api/autoeval/v1/admin/users/{admin_a.id}", json={"role": "regular"}
-            )
-            assert last_demote.status_code == 409
-            assert "最后一个有效管理员" in last_demote.json()["error"]["message"]
-            last_suspend = await client.patch(
-                f"/api/autoeval/v1/admin/users/{admin_a.id}", json={"suspended": True}
-            )
-            assert last_suspend.status_code == 409
-            async with sessions() as session:
-                role_still = (
+        # 角色全部未被改动
+        async with sessions() as session:
+            roles = dict(
+                (
                     await session.execute(
-                        select(PlatformUser.role).where(PlatformUser.id == admin_a.id)
+                        select(PlatformUser.id, PlatformUser.role).where(
+                            PlatformUser.id.in_([regular.id, admin_b.id])
+                        )
                     )
-                ).scalar_one()
-            assert role_still == "admin"
+                ).all()
+            )
+        assert roles[admin_b.id] == "admin" and roles[regular.id] == "regular"
 
-            # 出现第二位管理员后，原保护解除：提升 regular 再降级 admin_a 均可执行
+        # —— 超管矩阵：任免三角色 + 降级即时生效 + 最后超管保护 ——
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://test",
+            cookies={"ae_session": str(sup_session)},
+        ) as client:
             promoted = await client.patch(
                 f"/api/autoeval/v1/admin/users/{regular.id}", json={"role": "admin"}
             )
             assert promoted.status_code == 200
             assert promoted.json()["data"]["role"] == "admin"
-            again = await client.patch(
-                f"/api/autoeval/v1/admin/users/{admin_a.id}", json={"role": "regular"}
+            appointed = await client.patch(
+                f"/api/autoeval/v1/admin/users/{admin_b.id}", json={"role": "superadmin"}
             )
-            assert again.status_code == 200
-            assert again.json()["data"]["role"] == "regular"
-            # 降级立即生效：原管理员会话再访问管理接口必须 403（角色按请求实时校验）
-            stale_admin = await client.get("/api/autoeval/v1/admin/users")
-            assert stale_admin.status_code == 403
+            assert appointed.status_code == 200
+            assert appointed.json()["data"]["role"] == "superadmin"
+            # 仍有一位超管时，可降级另一位超管
+            demoted_b = await client.patch(
+                f"/api/autoeval/v1/admin/users/{admin_b.id}", json={"role": "regular"}
+            )
+            assert demoted_b.status_code == 200
+            assert demoted_b.json()["data"]["role"] == "regular"
+            # 只剩自己一位有效超管：降级 / 停用自己都必须 409
+            last_demote = await client.patch(
+                f"/api/autoeval/v1/admin/users/{superadmin.id}", json={"role": "admin"}
+            )
+            assert last_demote.status_code == 409
+            assert "最后一个有效超级管理员" in last_demote.json()["error"]["message"]
+            last_suspend = await client.patch(
+                f"/api/autoeval/v1/admin/users/{superadmin.id}", json={"suspended": True}
+            )
+            assert last_suspend.status_code == 409
+        # 被降级管理员的旧会话立即 403（角色按请求实时校验）
+        async with httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=app),
+            base_url="http://test",
+            cookies={"ae_session": str(admin_b_session)},
+        ) as stale:
+            assert (await stale.get("/api/autoeval/v1/admin/users")).status_code == 403
         # 审计事件必须记录操作人与变更内容
         async with sessions() as session:
             audit_rows = (
@@ -182,12 +229,18 @@ async def test_admin_role_update_and_last_admin_protection_live():
                 .scalars()
                 .all()
             )
-        assert audit_rows, "角色变更必须写入 audit_event"
-        assert audit_rows[0].actor == f"github:{admin_a.login}"
-        assert audit_rows[0].details["changes"]["role"]["to"] == "admin"
+        assert audit_rows, "操作必须写入 audit_event"
+        role_rows = [
+            row
+            for row in audit_rows
+            if "role" in row.details.get("changes", {})
+        ]
+        assert role_rows, "角色变更必须写入 audit_event"
+        assert role_rows[0].actor == f"github:{superadmin.login}"
+        assert role_rows[0].details["changes"]["role"]["to"] == "admin"
     finally:
-        await _restore_admin_roles(sessions, displaced)
-        for uid in (admin_a.id, admin_b.id, regular.id):
+        await _restore_superadmins(sessions, displaced)
+        for uid in (superadmin.id, admin_a.id, admin_b.id, regular.id):
             await _cleanup_user(sessions, uid)
         await engine.dispose()
 
@@ -389,14 +442,15 @@ async def _cleanup_user(sessions, user_id):
         await session.commit()
 
 
-async def _demote_admins_except(sessions, keep_ids):
-    """临时把其余有效管理员降为普通用户，返回被降级的管理员 id 列表。"""
+async def _demote_superadmins_except(sessions, keep_ids):
+    """临时把其余有效超管降为管理员（直改数据库，绕过接口守卫），
+    返回被降级的超管 id 列表，便于复现"最后一位超管"场景。"""
     async with sessions() as session:
         rows = (
             (
                 await session.execute(
                     select(PlatformUser).where(
-                        PlatformUser.role == "admin",
+                        PlatformUser.role == "superadmin",
                         PlatformUser.suspended_at.is_(None),
                         PlatformUser.id.notin_(keep_ids),
                     )
@@ -406,12 +460,12 @@ async def _demote_admins_except(sessions, keep_ids):
             .all()
         )
         for row in rows:
-            row.role = "regular"
+            row.role = "admin"
         await session.commit()
         return [row.id for row in rows]
 
 
-async def _restore_admin_roles(sessions, user_ids):
+async def _restore_superadmins(sessions, user_ids):
     async with sessions() as session:
         rows = (
             (await session.execute(select(PlatformUser).where(PlatformUser.id.in_(user_ids))))
@@ -419,5 +473,5 @@ async def _restore_admin_roles(sessions, user_ids):
             .all()
         )
         for row in rows:
-            row.role = "admin"
+            row.role = "superadmin"
         await session.commit()

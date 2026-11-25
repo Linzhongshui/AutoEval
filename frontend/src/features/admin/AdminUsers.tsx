@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Ban, RotateCcw, Search } from "lucide-react";
 import { apiGetPage, apiPatch, ApiError } from "../../shared/api";
 import { Badge } from "../../shared/ui/Badge";
+import type { CurrentUser } from "../identity/useCurrentUser";
 
 export type AdminUser = {
   id: string;
@@ -9,12 +10,26 @@ export type AdminUser = {
   login: string;
   display_name: string;
   email: string | null;
-  role: "admin" | "regular";
+  role: "superadmin" | "admin" | "regular";
   suspended_at: string | null;
   created_at: string | null;
 };
 
-export function AdminUsers({ notify }: { notify: (message: string) => void }) {
+const roleLabels = {
+  superadmin: "超级管理员",
+  admin: "管理员",
+  regular: "普通用户",
+} as const;
+
+export function AdminUsers({
+  notify,
+  viewer,
+}: {
+  notify: (message: string) => void;
+  viewer: CurrentUser;
+}) {
+  // 角色变更（任何方向）仅超级管理员可执行；管理员只能停用/恢复普通用户
+  const canManageRoles = viewer.role === "superadmin";
   const [query, setQuery] = useState("");
   const [appliedQuery, setAppliedQuery] = useState("");
   const [rows, setRows] = useState<AdminUser[]>([]);
@@ -94,7 +109,12 @@ export function AdminUsers({ notify }: { notify: (message: string) => void }) {
             <tbody>
               {rows.map((user) => {
                 const suspended = user.suspended_at !== null;
-                const isAdmin = user.role === "admin";
+                const demoting = user.role !== "regular";
+                // 停用/恢复：超管可处置任何账号；管理员只能处置普通用户
+                const canSuspend = canManageRoles || user.role === "regular";
+                const suspendHint = canSuspend
+                  ? undefined
+                  : "仅超级管理员可以停用管理员或超级管理员";
                 return (
                   <tr key={user.id} className={suspended ? "suspended-row" : ""}>
                     <td>
@@ -111,20 +131,22 @@ export function AdminUsers({ notify }: { notify: (message: string) => void }) {
                     <td>
                       <select
                         value={user.role}
-                        disabled={suspended || busyId === user.id}
+                        disabled={suspended || busyId === user.id || !canManageRoles}
+                        title={canManageRoles ? undefined : "仅超级管理员可以调整角色"}
                         onChange={(event) => {
                           const next = event.target.value as AdminUser["role"];
                           mutate(
                             user.id,
                             { role: next },
-                            `已将 ${user.display_name} 调整为${next === "admin" ? "管理员" : "普通用户"}`,
-                            isAdmin && next === "regular"
-                              ? `确认将管理员 ${user.display_name} 降级为普通用户？`
+                            `已将 ${user.display_name} 调整为${roleLabels[next]}`,
+                            demoting && next === "regular"
+                              ? `确认将${roleLabels[user.role]} ${user.display_name} 降级为普通用户？`
                               : undefined,
                           );
                         }}
                         aria-label={`${user.display_name} 的角色`}
                       >
+                        <option value="superadmin">超级管理员</option>
                         <option value="admin">管理员</option>
                         <option value="regular">普通用户</option>
                       </select>
@@ -138,11 +160,11 @@ export function AdminUsers({ notify }: { notify: (message: string) => void }) {
                         {suspended ? (
                           <button
                             type="button"
-                            disabled={busyId === user.id}
+                            disabled={busyId === user.id || !canSuspend}
+                            title={suspendHint ?? "恢复账号"}
                             onClick={() =>
                               mutate(user.id, { suspended: false }, `已恢复 ${user.display_name} 的账号`, undefined)
                             }
-                            title="恢复账号"
                           >
                             <RotateCcw size={14} />恢复
                           </button>
@@ -150,7 +172,8 @@ export function AdminUsers({ notify }: { notify: (message: string) => void }) {
                           <button
                             type="button"
                             className="user-action-danger"
-                            disabled={busyId === user.id}
+                            disabled={busyId === user.id || !canSuspend}
+                            title={suspendHint ?? "停用账号"}
                             onClick={() =>
                               mutate(
                                 user.id,
@@ -159,7 +182,6 @@ export function AdminUsers({ notify }: { notify: (message: string) => void }) {
                                 `停用后 ${user.display_name} 将立即退出且无法登录，确认停用？`,
                               )
                             }
-                            title="停用账号"
                           >
                             <Ban size={14} />停用
                           </button>

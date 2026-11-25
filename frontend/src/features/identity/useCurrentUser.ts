@@ -8,7 +8,7 @@ export type CurrentUser = {
   display_name: string;
   email: string | null;
   avatar_url: string | null;
-  role: "admin" | "regular";
+  role: "superadmin" | "admin" | "regular";
 };
 
 export type ProviderOption = { provider: string; display_name: string };

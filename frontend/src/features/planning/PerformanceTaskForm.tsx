@@ -31,6 +31,12 @@ export function PerformanceTaskForm({ poolRevision, onManagePool }: Props) {
   useEffect(() => { if (poolRevision) retry.current(); }, [poolRevision]);
   const [kind, setKind] = useState("inference");
   const [target, setTarget] = useState("");
+  const [managingServices, setManagingServices] = useState(false);
+  function useService(id: string) {
+    setTarget(id);
+    setManagingServices(false);
+    targets.retry();
+  }
   const [resource, setResource] = useState("");
   const [input, setInput] = useState("512");
   const [output, setOutput] = useState("128");
@@ -123,7 +129,7 @@ export function PerformanceTaskForm({ poolRevision, onManagePool }: Props) {
         <h3><Server size={17} />执行资源</h3>
         <div className="pf-fields">
           <div className="pf-node"><div className="pf-node-label"><label htmlFor="perf-model-service">模型服务</label>
-            <ManagementDrawer title="管理模型服务" onDismiss={targets.retry}><ModelServices /></ManagementDrawer></div>
+            <ManagementDrawer title="管理模型服务" open={managingServices} onOpenChange={setManagingServices} onDismiss={targets.retry}><ModelServices onUse={useService} /></ManagementDrawer></div>
             <select id="perf-model-service" aria-label="模型服务" required value={target} onChange={e => setTarget(e.target.value)}>
             <option value="">选择模型服务</option>{targets.rows.map(t => <option key={t.id} value={t.id}>{t.service_name || t.remote_model} · {serviceLabel(t.service_kind)}</option>)}</select></div>
           <div className="pf-node">

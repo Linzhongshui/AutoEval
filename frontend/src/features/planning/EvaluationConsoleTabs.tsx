@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { TaskPlanning } from "./TaskPlanning";
 import { PerformanceTaskForm } from "./PerformanceTaskForm";
 
-type Props = { page: string; go: (page: string) => void; poolRevision: number; onManagePool: (add?: boolean) => void };
+type Props = { initialTarget?: string; page: string; go: (page: string) => void; poolRevision: number; onManagePool: (add?: boolean) => void };
 
 const tabs = [
   { path: "console", label: "精度测评", id: "accuracy" },

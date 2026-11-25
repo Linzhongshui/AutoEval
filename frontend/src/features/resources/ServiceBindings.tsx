@@ -21,7 +21,7 @@ async function api<T>(path: string, body?: unknown): Promise<T> {
   if (!response.ok) throw new Error(result.error?.message || "服务配置请求失败");
   return result.data;
 }
-export function ServiceBindings() {
+export function ServiceBindings({ onUse }: { onUse?: (id: string) => void }) {
   const [models, setModels] = useState<Model[]>([]);
   const [choices, setChoices] = useState<Choice[]>([]);
   const [versions, setVersions] = useState<Version[]>([]);
@@ -149,7 +149,7 @@ export function ServiceBindings() {
       {targets.map((target) => <article className="saved-service-row" key={target.id}><div><b>{target.remote_model}</b> <small className="service-kind">{serviceLabel(target.service_kind)}</small><p>{target.base_url}</p></div><div className="inline"><button disabled={busy} onClick={() => perform(async () => {
         const result = await api<{ outcome: string; details: { http_status?: number } }>(`/targets/${target.id}/connection-tests`, {});
         setMessage(`${target.remote_model}：${result.outcome === "matched" ? "鉴权与目标模型匹配成功（未调用生成）" : result.outcome}`);
-      })}>检测连接</button><a href={`#evaluate?target=${encodeURIComponent(target.id)}`}>使用此服务</a></div></article>)}
+      })}>检测连接</button><button type="button" className="primary" onClick={() => onUse ? onUse(target.id) : location.assign(`#evaluate?target=${encodeURIComponent(target.id)}`)}>使用此服务</button></div></article>)}
     </div>
   </section>;
 }

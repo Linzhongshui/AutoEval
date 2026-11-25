@@ -47,6 +47,7 @@ const menus = [
 ];
 
 export function App() {
+  const [initialTarget, setInitialTarget] = useState("");
   const [page, setPage] = useState(location.hash.slice(1) || "console");
   const [profiles, setProfiles] = useProfiles(page === "config" || page.startsWith("config/"));
   const [workbenchEnabled, setWorkbenchEnabled] = useState(false);
@@ -80,7 +81,12 @@ export function App() {
         setPoolRevision(value => value + 1);
       }
       if (hash.startsWith("planned-run/")) { location.replace(`#run/${hash.slice(12)}`); return; }
-      if (hash.startsWith("evaluate?")) { location.replace("#console"); return; }
+      if (hash.startsWith("evaluate?")) {
+        setInitialTarget(new URLSearchParams(hash.slice(9)).get("target") || "");
+        location.replace("#console");
+        return;
+      }
+      if (hash !== "console") setInitialTarget("");
       setPage(hash);
     };
     onHashChange();
@@ -168,7 +174,7 @@ export function App() {
 
         {page === "home" && <Overview go={go} />}
         {(consolePage || (poolPage && poolReturn)) && <div hidden={!consolePage}>
-          <EvaluationConsoleTabs page={consolePage ? page : poolReturn!} go={go} poolRevision={poolRevision} onManagePool={(add) => {
+          <EvaluationConsoleTabs initialTarget={initialTarget} page={consolePage ? page : poolReturn!} go={go} poolRevision={poolRevision} onManagePool={(add) => {
             openPool(add ? "config/ssh-pool/add" : "config/ssh-pool", page);
           }} />
         </div>}

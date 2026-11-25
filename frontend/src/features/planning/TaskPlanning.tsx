@@ -48,12 +48,20 @@ function StrategyChoice({ label, parallel, disabled = false, onChange }: { label
   </div>;
 }
 
-export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: number; onManagePool: (add?: boolean) => void }) {
+export function TaskPlanning({ poolRevision, onManagePool, initialTarget = "" }: { initialTarget?: string; poolRevision: number; onManagePool: (add?: boolean) => void }) {
   const targets = useOptions<Target>("/target-bindings");
   const ssh = useOptions<Resource>("/ssh-resources");
   const retryResources = useRef(ssh.retry);
   useEffect(() => { if (poolRevision) retryResources.current(); }, [poolRevision]);
-  const [target, setTarget] = useState("");
+  const [target, setTarget] = useState(initialTarget);
+  const [managingServices, setManagingServices] = useState(false);
+  function useService(id: string) {
+    setTarget(id);
+    setSelection({});
+    setAddingService(false);
+    setManagingServices(false);
+    targets.retry();
+  }
   const [addingService, setAddingService] = useState(false);
   const resourceKind = "customer_ssh";
   const [resource, setResource] = useState("");
@@ -330,7 +338,7 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
     <h2>1. 模型服务</h2>
     <p className="planning-intro">支持 GPQA、MMMU-Pro、DeepSWE、AutomationBench 的全量或已绑定 Lite 清单。Agent 工作流通过 AISBench Harbor 执行，需绑定配置与清单并通过环境检查。</p>
     <div className="planning-fields">
-      <div className="planning-service-field"><div className="planning-service-heading"><label htmlFor="planning-service">模型服务</label><ManagementDrawer title="管理服务" onDismiss={targets.retry}><ModelServices /></ManagementDrawer></div><PlanningSelect id="planning-service" label="规划模型服务" value={target} options={targets.rows.map(t => ({ id: t.id, label: t.service_name || t.remote_model, detail: `${serviceLabel(t.service_kind)} · ${t.remote_model} · ${t.base_url} · ${t.id.slice(0, 8)}` }))} onChange={id => { setTarget(id); setSelection({}); }} onAdd={() => setAddingService(true)} /><ManagementDrawer title="新增模型服务" hideTrigger open={addingService} onOpenChange={setAddingService} onDismiss={targets.retry}><ServiceBindings /></ManagementDrawer></div>
+      <div className="planning-service-field"><div className="planning-service-heading"><label htmlFor="planning-service">模型服务</label><ManagementDrawer title="管理服务" open={managingServices} onOpenChange={setManagingServices} onDismiss={targets.retry}><ModelServices onUse={useService} /></ManagementDrawer></div><PlanningSelect id="planning-service" label="规划模型服务" value={target} options={targets.rows.map(t => ({ id: t.id, label: t.service_name || t.remote_model, detail: `${serviceLabel(t.service_kind)} · ${t.remote_model} · ${t.base_url} · ${t.id.slice(0, 8)}` }))} onChange={id => { setTarget(id); setSelection({}); }} onAdd={() => setAddingService(true)} /><ManagementDrawer title="新增模型服务" hideTrigger open={addingService} onOpenChange={setAddingService} onDismiss={targets.retry}><ServiceBindings onUse={useService} /></ManagementDrawer></div>
     </div>
     {targets.error && <p role="alert">{targets.error}</p>}
     <h2>2. 数据集与样本范围</h2>

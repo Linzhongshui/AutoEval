@@ -89,3 +89,36 @@ def test_configure_service_by_source(browser_page, kind):
     manager.get_by_label("服务来源").select_option("official" if kind == "local" else "local")
     expect(manager.get_by_text("暂无匹配的模型服务")).to_be_visible()
     assert writes == ["/credentials", "/target-bindings"]
+
+@pytest.mark.parametrize("entry", ["accuracy", "performance", "direct"])
+def test_use_saved_service(browser_page, entry):
+    page, url, _ = browser_page
+    row = {"id": "binding", "service_name": "Example", "remote_model": "Example",
+           "service_kind": "local", "base_url": "https://model.invalid"}
+    writes = []
+
+    def mock(route):
+        path = urlsplit(route.request.url).path
+        if route.request.method != "GET":
+            writes.append(path)
+        data = [row] if path.endswith("/target-bindings") else []
+        if path.endswith("/planning/options"):
+            data = {"compilations": [], "manifests": [], "curves": []}
+        route.fulfill(json={"data": data, "next_offset": None})
+
+    page.route("**/api/autoeval/v1/**", mock)
+    perf = entry == "performance"
+    page.goto(url + ("/#console/performance" if perf else "/#console"))
+    if entry == "direct":
+        page.get_by_label("规划模型服务", exact=True).click()
+        page.get_by_role("button", name="新增模型服务", exact=False).last.click()
+    else:
+        page.get_by_role("button", name="管理模型服务" if perf else "管理服务", exact=True).click()
+        page.get_by_role("button", name="新增服务", exact=True).click()
+    page.get_by_role("button", name="使用此服务").click()
+    expect(page.get_by_role("dialog")).to_have_count(0)
+    if perf:
+        expect(page.get_by_label("模型服务", exact=True)).to_have_value("binding")
+    else:
+        expect(page.get_by_label("规划模型服务", exact=True)).to_contain_text("Example")
+    assert writes == []

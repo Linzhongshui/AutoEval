@@ -290,7 +290,9 @@ async def execute_job(sessions, settings, identifier):
         return
     # Remote probe submission is never automatically repeated after an uncertain response.
     async with sessions() as session:
-        snapshot = await current_preflight(session, inputs, require_selection=False)
+        snapshot = await current_preflight(
+            session, inputs, probe_container=[getattr(adapter, "container_id", None), getattr(adapter, "image_id", None)]
+        )
         if previous == "pending":
             # Selection preflight may expire while users review budgets. Refresh read-only
             # environment evidence here; never let a stale check imply a model was called.
@@ -299,6 +301,11 @@ async def execute_job(sessions, settings, identifier):
                 try:
                     resource = await adapter.preflight()
                 except Exception as exc:
+                    frames = traceback.extract_tb(exc.__traceback__)
+                    logging.getLogger(__name__).warning(
+                        "Probe preflight blocked job=%s type=%s stages=%s",
+                        identifier, type(exc).__name__, [frame.name for frame in frames],
+                    )
                     raise ProbePreflightBlocked(
                         "探测前环境检查失败，未提交模型请求，请检查执行资源后重试"
                     ) from exc

@@ -47,6 +47,13 @@ def route_compilation(compilation, route):
     result = copy.deepcopy(compilation)
     params = result["config"]["params"]
     field = "url" if result["config"]["subcommand"] == "llm_accuracy" else "api_base"
+    if field == "api_base":
+        upstream = urlsplit(params.get("api_base") or "").hostname
+        gateway = urlsplit(route["base_url"]).hostname
+        hosts = [host for host in params.get("extra_allowed_hosts", []) if host.lower() != upstream]
+        if gateway and gateway not in {host.lower() for host in hosts}:
+            hosts.append(gateway)
+        params["extra_allowed_hosts"] = hosts
     params[field] = route["base_url"]
     if any(key in params for key in ("host_ip", "host_port", "model_overrides")):
         raise ValueError("Alternate model routing must be removed for budgeted execution")

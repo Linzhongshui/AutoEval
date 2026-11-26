@@ -1,5 +1,7 @@
 # 标准仓输入接入
 
+编译 DeepSWE、AutomationBench 的 Harbor 配置时，平台从模型目标的 `api_base` 提取主机名或 IP，并追加到 `params.extra_allowed_hosts`。已有条目保留，主机名忽略大小写去重。标准仓锁定该列表时，若缺少目标主机，编译会报告冲突。启用预算网关时，执行副本将原模型主机替换为网关主机。
+
 更新：新版默认输入契约已升级为适配器 `955089a`，Docker 参数移至 `runtime_config`，不再生成 `--no-template`；下文旧版本说明保留为历史输入契约参考。统一输出新增能力及尚未开放的远程执行边界见[新版接入说明](./unified-output-integration.md)。
 
 本模块只登记标准输入、建立模型映射并生成适配器启动配置，不执行测评。输出格式、结果收集、报告、基线审批及门禁均未接入。本机已增加迁移 `0023_standard_inputs`；其他环境先执行 `uv run alembic upgrade head`，再重启 API。

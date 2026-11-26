@@ -35,6 +35,13 @@ def test_private_budget_routing_and_no_fallback(tmp_path):
         "config": {"subcommand": "llm_accuracy", "params": {"url": "https://api.deepseek.com/v1"}}
     }
     assert route_compilation(compiled, route)["config"]["params"]["url"] == route["base_url"]
+    harbor = {"config": {"subcommand": "harbor_agent", "params": {"api_base": ""}}}
+    harbor["config"]["params"].update(api_base="https://model.internal/v1",
+                                      extra_allowed_hosts=["proxy", "model.internal"])
+    routed = route_compilation(harbor, route)["config"]["params"]
+    assert routed["api_base"] == route["base_url"]
+    assert routed["extra_allowed_hosts"] == ["proxy", "172.17.0.99"]
+    assert harbor["config"]["params"]["extra_allowed_hosts"] == ["proxy", "model.internal"]
     assert compiled["config"]["params"]["url"] == "https://api.deepseek.com/v1"
     with pytest.raises(ValueError, match="fallback forbidden"):
         execution_route(settings, run, target, "AutomationBench")

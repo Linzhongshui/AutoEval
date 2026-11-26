@@ -40,6 +40,14 @@ def test_template_requires_selected_node_to_offer_exact_tool_revision(tmp_path, 
     assert execution_template(settings, uuid4(), task) is None
     task["tool"]["revision"] = "different"
     assert execution_template(settings, node, task) is None
+    entries = json.loads(file.read_text())
+    alternate = {**entries[node]["executors"][tool], "revision": "different", "image_id": "sha256:" + "2" * 64}
+    entries[node]["executors"][f"{tool}@different"] = alternate
+    file.write_text(json.dumps(entries))
+    assert execution_template(settings, node, task)["image_id"] == alternate["image_id"]
+    alternate["revision"] = "wrong"
+    file.write_text(json.dumps(entries))
+    assert execution_template(settings, node, task) is None
 
 
 def test_container_identity_must_match_owner_even_when_name_and_image_match():

@@ -1665,8 +1665,8 @@
 .monitor-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .monitor-list > li { margin: 0; }
 .monitor-list > li > button { display: grid; grid-template-columns: 84px 165px minmax(100px, 1fr) minmax(0, 3fr) 96px; align-items: center; gap: 12px; width: 100%; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: white; text-align: left; }
-.monitor-list > li > button:hover { background: #f7f6ff; }
-.monitor-list > li > button.active { border-color: var(--primary); background: #f4f1ff; }
+.monitor-list > li > button:hover { background: var(--accent-hover); }
+.monitor-list > li > button.active { border-color: var(--primary); background: var(--accent-hover); }
 .monitor-list .monitor-snapshot-dataset { overflow-wrap: anywhere; }
 .monitor-list .monitor-snapshot-summary { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; }
 .monitor-list .badge { justify-self: start; }
@@ -1737,6 +1737,15 @@ textarea { font: inherit; }
 .planning-card > label > input[type="number"] { max-width: 160px; }
 .planning-summary { position: sticky; top: 20px; max-height: calc(100vh - 40px); overflow-y: auto; }
 .planning-summary > h2 { margin: 0; }
+.planning-summary > .primary { font-weight: 600; }
+.planning-summary > .primary:disabled {
+  background: #f0f1f5;
+  border-color: var(--border);
+  color: #596278;
+  opacity: 1;
+  box-shadow: none;
+  text-decoration: none;
+}
 .planning-checklist { margin: 0; display: grid; gap: 14px; }
 .planning-checklist > div { display: grid; grid-template-columns: 80px minmax(0, 1fr); gap: 12px; }
 .planning-checklist dt { color: #606982; }
@@ -1894,8 +1903,10 @@ textarea { font: inherit; }
 .preflight-details dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 12px; }
 .preflight-details dt, .planning-execution-note { color: #606982; }
 .preflight-details dd, .planning-execution-note p { margin: 0; }
-.planning-execution-note { font-size: 13px; line-height: 1.6; }
-.planning-execution-note summary { width: fit-content; color: #4930d8; cursor: pointer; }
+.planning-execution-note { display: grid; gap: 6px; font-size: 14px; line-height: 1.6; }
+.planning-execution-note summary { width: fit-content; color: var(--primary); font-weight: 600; cursor: pointer; }
+.planning-execution-note summary:hover { text-decoration: underline; }
+.planning-execution-note details[open] > p { margin-top: 6px; }
 .planning-blocker .link { display: block; margin-top: 4px; }
 .preflight-status { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 6px; font-size: 12px; line-height: 1.5; font-weight: 550; white-space: nowrap; }
 .preflight-status.checking { color: #5138dc; background: #eeeaff; }
@@ -1993,7 +2004,7 @@ textarea { font: inherit; }
   justify-content: center;
   gap: 6px;
   color: var(--primary);
-  background: #efecff;
+  background: var(--accent-soft);
   opacity: 1;
 }
 .probe-progress-card { display:grid;gap:10px;padding:16px;border:1px solid #ddd8fc;border-radius:10px;background:#f5f3ff;color:#465078;text-align:left; }
@@ -2075,8 +2086,31 @@ textarea { font: inherit; }
 /* Align sibling selectors independently of the resource hint below configuration. */
 .planning-table td[data-label="执行配置"],
 .planning-table td[data-label="样本范围"] { vertical-align: top; }
-.planning-table td[data-label="执行配置"] > select,
-.planning-table td[data-label="样本范围"] > select { display: block; margin: 0; height: 40px; box-sizing: border-box; }
+@container planning (max-width: 660px) {
+  .dataset-select-all-mobile, .planning-table, .planning-table tbody { display: block; }
+  .planning-table thead { display: none; }
+  .planning-table tr {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .planning-table tr:last-child { border-bottom: 0; }
+  .planning-table tr:hover { background: transparent; }
+  .planning-table td { min-width: 0; border: 0; padding: 0; }
+  .planning-table td:nth-child(2) { font-weight: 600; }
+  .planning-table td:last-child { grid-column: 3; grid-row: 1; }
+  .planning-table td[data-label] { grid-column: 1 / -1; }
+  .planning-table td[data-label]::before {
+    content: attr(data-label);
+    display: block;
+    margin-bottom: 4px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+}
 .ssh-pool-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

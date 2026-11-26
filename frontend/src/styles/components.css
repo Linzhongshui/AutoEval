@@ -33,12 +33,13 @@
 }
 .primary {
   background: var(--accent);
-  border-color: var(--primary);
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--primary));
   color: var(--on-accent);
   box-shadow: 0 3px 6px var(--accent-soft);
 }
 .primary:hover {
   background: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--primary));
   text-decoration: underline;
   color: var(--on-accent);
 }
@@ -263,7 +264,7 @@
 .mode-row .tabs {
   margin: 0;
   gap: 0;
-  border: 1px solid #dcd8f4;
+  border: 1px solid var(--accent-border);
   border-radius: 6px;
 }
 .mode-row .tabs button {

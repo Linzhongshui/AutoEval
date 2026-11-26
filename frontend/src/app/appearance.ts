@@ -2,6 +2,7 @@ export const presets = [
   { name: "紫色", color: "#5138ff" },
   { name: "蓝色", color: "#2563eb" },
   { name: "青绿色", color: "#0f766e" },
+  { name: "金黄色", color: "#ffd700" },
 ] as const;
 
 export const layouts = {

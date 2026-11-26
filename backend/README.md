@@ -147,6 +147,8 @@ SSH 节点是执行资源，容器由平台按子任务创建。首次预检也�
 模板无需 `container_id`。镜像必须包含匹配的工具及平台适配器，数据可以包含在镜像中，
 或通过只读挂载提供。平台仍校验工具版本、评分文件和数据目录。
 
+同一节点有多个工具版本时，可在 `executors` 中以 `harbor@<完整revision>` 等键登记版本专用模板。平台优先读取精确版本键，缺少该键时再检查默认工具模板的版本。API 与规划工作进程应指向同一份 `AE_PLANNING_CONTAINER_CONFIG`。
+
 Unified evaluation accepts SSH resources. Configure the protected
 `AE_PLANNING_CONTAINER_CONFIG` mapping by SSH binding UUID. Each binding's
 `executors` object maps tool names to execution templates with `revision`,

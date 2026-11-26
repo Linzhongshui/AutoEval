@@ -11,7 +11,7 @@ import { ModelServices } from "../resources/ModelServices";
 import { ProbeProgress } from "../evaluation/ProbeProgress";
 import { Clock3, LoaderCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { apiGet, apiGetPage, apiPost } from "../../shared/api";
+import { ApiError, apiGet, apiGetPage, apiPost } from "../../shared/api";
 import type { Resource, Target } from "../evaluation/types";
 import { useOptions } from "../evaluation/hooks";
 import { usePolling } from "../../shared/hooks/usePolling";
@@ -41,6 +41,23 @@ const preflightReasons: Record<string, string> = {
 const describePreflight = (reasons: string[]) =>
   reasons.map(reason => preflightReasons[reason] ?? reason).join("；");
 type Job = { id: string; state: string; created_at?: string; updated_at?: string; result?: { preflight_valid_until?: string; preflight_progress?: PreflightProgress; progress?: { stage: string; current_concurrency?: number | null; completed_levels: number; total_levels: number; observed_at?: string } | null; report?: Report; throughput_profile_id?: string; reason?: string; dispatch_blocked?: boolean; remote_check?: { state: string; checked_at: string }; execution_ready?: boolean; supported_datasets?: string[]; blocking_reasons?: string[]; dataset_checks?: DatasetCheck[]; tool_versions?: Record<string, { expected: string; actual: string | null }> } };
+function DatasetSelect({ label, value, disabled, placeholder, options, onChange }: {
+  label: string;
+  value: string;
+  disabled: boolean;
+  placeholder: string;
+  options: { id: string; label: string }[];
+  onChange: (value: string) => void;
+}) {
+  const selected = options.find(option => option.id === value)?.label ?? placeholder;
+  return <select aria-label={label} value={value} disabled={disabled}
+    onChange={event => onChange(event.target.value)}>
+    <button type="button">{selected}</button>
+    <option value="">{placeholder}</option>
+    {options.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+  </select>;
+}
+
 const datasets = ["GPQA", "MMMU-Pro", "DeepSWE", "AutomationBench"];
 function StrategyChoice({ label, parallel, disabled = false, onChange }: { label: string; parallel: boolean; disabled?: boolean; onChange: (parallel: boolean) => void }) {
   return <div className="strategy-choices" role="group" aria-label={label}>
@@ -160,6 +177,7 @@ export function TaskPlanning({ poolRevision, onManagePool, initialTarget = "" }:
   const checkDetails = useRef<HTMLDetailsElement>(null);
   const firstBlocker = useRef<HTMLDetailsElement>(null);
   const [preflight, setPreflight] = useState<Job | null>(null);
+  const [checkError, setCheckError] = useState("");
   const [checkRequest, setCheckRequest] = useState(0);
   const [checkExpired, setCheckExpired] = useState(false);
   const [concurrency, setConcurrency] = useState<Record<string, number>>({});
@@ -305,7 +323,7 @@ export function TaskPlanning({ poolRevision, onManagePool, initialTarget = "" }:
     : null;
   const probeBlocked = !!probe && ["pending", "running", "unresolved"].includes(probe.state);
   const checking = !!preflight && ["pending", "running"].includes(preflight.state);
-  const preflightLabel = !preflight ? (checkExpired ? "已过期" : "未检查") : ({ pending: "排队中", running: "检查中", completed: preflight.result?.execution_ready ? "检查通过" : "存在阻塞", failed: "检查失败", cancelled: "已取消" } as Record<string, string>)[preflight.state] || "状态待确认";
+  const preflightLabel = !preflight ? (checkError ? "请求失败" : checkExpired ? "已过期" : "未检查") : ({ pending: "排队中", running: "检查中", completed: preflight.result?.execution_ready ? "检查通过" : "存在阻塞", failed: "检查失败", cancelled: "已取消" } as Record<string, string>)[preflight.state] || "状态待确认";
   const preflightTone = checking ? "checking" : preflight?.result?.execution_ready ? "passed" : "blocked";
   const autoFillDataset = (dataset: string, active: boolean) => {
     setEnabled(rows => active ? [...new Set([...rows, dataset])] : rows.filter(row => row !== dataset));
@@ -374,7 +392,7 @@ export function TaskPlanning({ poolRevision, onManagePool, initialTarget = "" }:
   const missingInput = !target ? "请选择模型服务" : !enabled.length ? "请启用至少一个数据集"
     : incomplete ? `请补全 ${enabled.filter(d => !selection[d]?.compilation || !selection[d]?.manifest).join("、")} 的配置或样本范围`
     : !resource ? "请选择 SSH 节点" : "";
-  const blocker = missingInput || (checkExpired ? "环境检查已过期，请重新检查。" : blocked ? failureReason : "");
+  const blocker = missingInput || checkError || (checkExpired ? "环境检查已过期，请重新检查。" : blocked ? failureReason : "");
   function revealBlocker() {
     const details = checkDetails.current;
     if (!details) return;
@@ -405,12 +423,17 @@ export function TaskPlanning({ poolRevision, onManagePool, initialTarget = "" }:
   useEffect(() => {
     setPreflight(null);
     setCheckExpired(false);
+    setCheckError("");
     setMessage("");
     if (!ready || !requestedCheck.current || requestedCheck.current !== preflightFingerprint) return;
     let stopped = false;
     const timer = setTimeout(() => { requestedCheck.current = ""; void apiPost<Job>("/planning/resources/preflight", JSON.parse(preflightFingerprint))
       .then(result => { if (!stopped) setPreflight(result); })
-      .catch(() => { if (!stopped) setMessage("环境检查失败，请重试。"); }); }, 350);
+      .catch(error => {
+        if (!stopped) setCheckError(error instanceof ApiError
+          ? `环境检查请求失败（${error.status}）：${error.message}`
+          : "无法获取环境检查结果，请检查网络或服务连接。");
+      }); }, 350);
     return () => { stopped = true; clearTimeout(timer); };
   // Resource checks follow execution selection, independently of optional estimation inputs.
   }, [preflightFingerprint, ready, checkRequest]);
@@ -453,7 +476,26 @@ export function TaskPlanning({ poolRevision, onManagePool, initialTarget = "" }:
       const check = preflight?.result?.dataset_checks?.find(row => row.dataset === d);
       const assigned = resources.rows.find(r => r.id === check?.assigned_resource_id);
       const configs = groups.find(group => group.dataset === d)!.configs;
-      return <tr key={d}><td><input type="checkbox" aria-label={`启用 ${d}`} checked={active} onChange={e => { autoFillDataset(d, e.target.checked); }} /></td><td>{d}</td><td data-label="执行配置"><select disabled={!active || !target} aria-label={`${d} 执行配置`} value={selection[d]?.compilation || ""} onChange={e => setSelection(rows => ({ ...rows, [d]: { ...rows[d], compilation: e.target.value } }))}><option value="">{!target ? "先选择模型服务" : !configs.length ? "暂无可用配置" : "请选择执行配置"}</option>{configs.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>{active && chosenConfig && assigned && <small className="muted">{check?.tool_revision && `${chosenConfig.config.subcommand === "harbor_agent" ? "Harbor" : "AISBench"} ${check.tool_revision.slice(0, 12)}`}</small>}</td><td data-label="样本范围"><select disabled={!active || !selection[d]?.compilation} aria-label={`${d} 样本范围`} value={selection[d]?.manifest || ""} onChange={e => setSelection(rows => ({ ...rows, [d]: { ...rows[d], manifest: e.target.value } }))}><option value="">请选择已绑定清单</option>{availableManifests.map(m => <option key={m.id} value={m.id}>{m.scope === "full" ? "全量" : "Lite"} · {m.sample_count} 个样本 · {m.id.slice(0, 8)}</option>)}</select></td><td><span className="planning-row-state">{!active ? "未启用" : !configs.length ? "需配置" : selection[d]?.compilation && selection[d]?.manifest ? "已配置" : "待补全"}</span></td></tr>;
+      return <tr key={d}>
+        <td><input type="checkbox" aria-label={`启用 ${d}`} checked={active}
+          onChange={event => autoFillDataset(d, event.target.checked)} /></td>
+        <td>{d}</td>
+        <td data-label="执行配置">
+          <DatasetSelect label={`${d} 执行配置`} disabled={!active || !target}
+            value={selection[d]?.compilation || ""}
+            placeholder={!target ? "先选择模型服务" : !configs.length ? "暂无可用配置" : "请选择执行配置"}
+            options={configs.map(c => ({ id: c.id, label: c.name }))}
+            onChange={compilation => setSelection(rows => ({ ...rows, [d]: { ...rows[d], compilation } }))} />
+          {active && chosenConfig && assigned && <small className="muted">{check?.tool_revision && `${chosenConfig.config.subcommand === "harbor_agent" ? "Harbor" : "AISBench"} ${check.tool_revision.slice(0, 12)}`}</small>}
+        </td>
+        <td data-label="样本范围">
+          <DatasetSelect label={`${d} 样本范围`} disabled={!active || !selection[d]?.compilation}
+            value={selection[d]?.manifest || ""} placeholder="请选择已绑定清单"
+            options={availableManifests.map(m => ({ id: m.id, label: `${m.scope === "full" ? "全量" : "Lite"} · ${m.sample_count} 个样本 · ${m.id.slice(0, 8)}` }))}
+            onChange={manifest => setSelection(rows => ({ ...rows, [d]: { ...rows[d], manifest } }))} />
+        </td>
+        <td><span className="planning-row-state">{!active ? "未启用" : !configs.length ? "需配置" : selection[d]?.compilation && selection[d]?.manifest ? "已配置" : "待补全"}</span></td>
+      </tr>;
     })}</tbody></table></TableWrap>
     {enabled.map(dataset => {
       const bound = options.compilations.filter(c => c.target_id === target && c.input_ready && c.dataset === dataset);
@@ -469,7 +511,7 @@ export function TaskPlanning({ poolRevision, onManagePool, initialTarget = "" }:
     <div className="spread"><h2>3. SSH 执行资源</h2><button type="button" onClick={() => onManagePool()}>管理 SSH 资源池</button></div>
     {resources.loading ? <p role="status">正在加载 SSH 节点…</p> : resources.error ? <div className="inline"><p role="alert">{resources.error}</p><button onClick={resources.retry}>重新加载</button></div> : !resources.rows.length ? <div className="notice"><p>资源池暂无可用的 SSH 节点。</p><button type="button" onClick={() => onManagePool(true)}>添加 SSH 节点</button></div> : <ResourceMultiSelect hosts={hosts} showChips={!preflight || (checking && !result?.preflight_progress && !checks.length)} value={resourceIds} onChange={ids => { manualNodeSelection.current = true; setResourceIds(ids); setResource(ids[0] || ""); }} />}
     <div className="planning-actions">
-      <button disabled={busy || !ready || checking} onClick={() => { requestedCheck.current = preflightFingerprint; setCheckRequest(n => n + 1); }}>{checking ? "正在检查…" : preflight || checkExpired ? "重新检查" : "环境检查"}</button>
+      <button disabled={busy || !ready || checking} onClick={() => { requestedCheck.current = preflightFingerprint; setCheckRequest(n => n + 1); }}>{checking ? "正在检查…" : preflight || checkExpired || checkError ? "重新检查" : "环境检查"}</button>
       <p className="muted">仅检查环境，不发起测评。</p>
     </div>
     {preflight && <PreflightNodes hosts={hosts} selectedIds={resourceIds} datasets={enabled} job={preflight} />}
@@ -564,7 +606,7 @@ export function TaskPlanning({ poolRevision, onManagePool, initialTarget = "" }:
       <div><dt>数据集并行</dt><dd>{enabled.length ? `最多 ${parallel} 个` : "待选择"}</dd></div>
       {payload.tasks.length > 0 && <div><dt>样本并行</dt><dd>{payload.tasks.map(({ dataset }) => `${dataset} ${currentConcurrency(dataset)}`).join(" · ")}</dd></div>}
       <div><dt>环境检查</dt><dd className="preflight-summary">
-        <span role="status" className={`preflight-status ${preflight ? preflightTone : "idle"}`}>
+        <span role="status" className={`preflight-status ${checkError ? "blocked" : preflight ? preflightTone : "idle"}`}>
           {preflight?.state === "completed" && result?.execution_ready && checks.length ? `${passedCount}/${enabled.length} 通过` : preflightLabel}
         </span>
         {checking && preflight && <ElapsedTime key={preflight.id} label="环境检查已耗时" startedAt={preflight.created_at} />}

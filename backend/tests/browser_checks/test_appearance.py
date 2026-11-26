@@ -131,7 +131,7 @@ def test_color_contrast_persistence_and_reset(browser_page):
     expect(page.locator(".sidebar-foot")).to_contain_text(f"v{VERSION}")
     dialog = settings(page)
     field = dialog.get_by_label("自定义颜色")
-    for label, color in [("青绿色", "#0f766e"), ("蓝色", "#2563eb")]:
+    for label, color in [("青绿色", "#0f766e"), ("蓝色", "#2563eb"), ("金黄色", "#ffd700")]:
         dialog.get_by_role("button", name=label).click()
         expect(field).to_have_value(color)
     for color in ["#ffffff", "#000000"]:

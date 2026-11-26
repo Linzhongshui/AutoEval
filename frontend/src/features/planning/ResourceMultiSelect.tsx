@@ -30,10 +30,10 @@ export function ResourceMultiSelect({ hosts, value, showChips, onChange }: {
     if (event.key === "Escape") { setOpen(false); trigger.current?.focus(); }
   }}>
     <span id={`${id}-label`}>候选 SSH 主机</span>
-    <button ref={trigger} type="button" className="resource-multi-trigger" aria-label="规划执行资源" aria-expanded={open} aria-controls={`${id}-options`} onClick={() => { setQuery(""); setOpen(current => !current); }}>
+    <button ref={trigger} type="button" className="resource-multi-trigger select-trigger" aria-label="规划执行资源" aria-expanded={open} aria-controls={`${id}-options`} onClick={() => { setQuery(""); setOpen(current => !current); }}>
       <span>{selected.length ? "调整资源配置" : "请选择 SSH 主机"}</span>
       {selected.length > 0 && <small>已选 {selected.length} 台主机</small>}
-      <ChevronDown size={18} aria-hidden="true" />
+      <ChevronDown className="select-chevron" size={18} aria-hidden="true" />
     </button>
     {showChips && !!selected.length && <div className="inline resource-selected">{selected.map(host => <button type="button" className="badge" key={host.key} aria-label={`移除主机 ${host.label}`} onClick={() => onChange(value.filter(id => !host.resources.some(resource => resource.id === id)))}>{host.label} <X size={14} aria-hidden="true" /></button>)}</div>}
     {open && <div id={`${id}-options`} className="resource-multi-menu" role="group" aria-labelledby={`${id}-label`}>

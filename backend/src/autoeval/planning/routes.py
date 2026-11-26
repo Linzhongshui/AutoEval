@@ -9,9 +9,13 @@ from typing import Any, Literal
 from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select, text
+from sqlalchemy.dialects.postgresql import insert
 
+from autoeval.catalog.adaptor_versions import LEGACY_ADAPTOR, RUNTIME_FIELDS
 from autoeval.catalog.datasets import DatasetManifest
+from autoeval.catalog.standard_compilation import validate_config
 from autoeval.catalog.standard_inputs import (
+    CompilationDisplayName,
     StandardInputCompilation,
     StandardInputVersion,
     digest,
@@ -34,7 +38,14 @@ from autoeval.infrastructure.responses import (
 from autoeval.planning.artifacts import artifact, current_preflight
 from autoeval.planning.models import PlanningArtifact, PlanningJob
 from autoeval.planning.planning_engine import DATASETS, apply_concurrency
-from autoeval.planning.schemas import ApplyInput, CurveInput, PlanInput, ProbeInput, Strict
+from autoeval.planning.schemas import (
+    ApplyInput,
+    CurveInput,
+    PerformanceTask,
+    PlanInput,
+    ProbeInput,
+    Strict,
+)
 from autoeval.planning.schemas import ResourceRef as ResourceRef
 from autoeval.planning.schemas import TaskInput as TaskInput
 
@@ -68,6 +79,8 @@ class ProbeReconciled(BaseModel):
 
 
 class CompilationOption(BaseModel):
+    tool_revisions: list[str] = Field(default_factory=list)
+    display_name: str | None = None
     id: str
     dataset: str | None
     label: str
@@ -125,6 +138,103 @@ class AppliedPlan(BaseModel):
 
 router = APIRouter(prefix="/api/autoeval/v1/planning", tags=["task planning"])
 
+class CompilationName(Strict):
+    name: str = Field(min_length=1, max_length=128)
+
+
+class CompilationCopy(CompilationName):
+    execution: Literal["local", "docker"]
+    tool_root: str = Field(min_length=1, max_length=1024)
+    directory: str = Field(max_length=1024)
+    concurrency: int = Field(ge=1, le=256)
+
+
+@router.post("/compilations/{compilation_id}/copy")
+async def copy_compilation(compilation_id: uuid.UUID, body: CompilationCopy, request: Request):
+    import hashlib
+
+    from autoeval.catalog.datasets import canonical_manifest
+    from autoeval.catalog.models import EvaluationProfile
+
+    if not body.name.strip():
+        raise HTTPException(422, "请输入配置名称")
+    async with request.app.state.sessions() as session, session.begin():
+        original = await session.get(StandardInputCompilation, compilation_id)
+        if not original or compilation_id in request.app.state.settings.archived_compilation_ids:
+            raise HTTPException(404, "执行配置不存在")
+        payload = copy.deepcopy(original.payload)
+        if not payload.get("input_ready"):
+            raise HTTPException(422, "源配置尚未就绪")
+        config = payload["config"]
+        params = config["params"]
+        runtime = payload.setdefault("runtime_config", {})
+        agent = config["subcommand"] == "harbor_agent"
+        changes = {"execution": body.execution, "ais_bench_root": body.tool_root,
+                   "n_concurrent_trials" if agent else "batch_size": body.concurrency}
+        if body.directory or not agent or params.get("path"):
+            changes["path" if agent else "datasets_dir"] = body.directory
+        for key in ("ais_bench_root", "path", "datasets_dir"):
+            if key in changes and (not changes[key].startswith("/") or ".." in changes[key].split("/")):
+                raise HTTPException(422, "请输入执行环境内的绝对路径")
+        identity = digest({"source": str(compilation_id), "settings": body.model_dump()})[:32]
+        changes.update(work_dir="/work/autoeval/inputs/" + identity, container_name="autoeval-input-" + identity)
+        for key, value in changes.items():
+            field = "params." + key
+            locked = payload.get("locked_fields", {})
+            if field in locked and locked[field] != value:
+                raise HTTPException(422, "标准锁定字段不可修改：" + key)
+            before = runtime.get(key, params.get(key))
+            if key in RUNTIME_FIELDS:
+                runtime[key] = value
+            if key not in RUNTIME_FIELDS or payload.get("adaptor_revision") == LEGACY_ADAPTOR:
+                params[key] = value
+            if before != value:
+                payload.setdefault("overrides", []).append({"field": field, "before": before, "after": value, "source": "configuration-copy"})
+                payload.setdefault("field_sources", {})[field] = "configuration-copy"
+        try:
+            validate_config(config)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        payload.pop("sha256", None)
+        payload["copied_from"] = str(compilation_id)
+        sha = digest(payload)
+        payload["sha256"] = sha
+        await session.execute(text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": sha})
+        existing = await session.scalar(select(StandardInputCompilation.id).where(StandardInputCompilation.sha256 == sha))
+        if existing:
+            return envelope({"id": str(existing)}, request)
+        row = StandardInputCompilation(input_id=original.input_id, model_id=original.model_id, sha256=sha, payload=payload)
+        session.add(row)
+        await session.flush()
+        session.add(CompilationDisplayName(compilation_id=row.id, name=body.name.strip()))
+        profiles = await session.scalars(select(EvaluationProfile).where(EvaluationProfile.compilation_id == compilation_id))
+        for profile in profiles:
+            key = "copy-" + row.id.hex + "-" + profile.id.hex
+            fields = {"profile_key": key, "version": profile.version, "dataset_name": profile.dataset_name,
+                          "full_manifest_id": profile.full_manifest_id, "lite_manifest_id": profile.lite_manifest_id,
+                          "compilation_id": row.id}
+            document = {k: str(v) if isinstance(v, uuid.UUID) else v for k, v in fields.items()}
+            checksum = hashlib.sha256(canonical_manifest({**document, "tool": profile.contract})).hexdigest()
+            session.add(EvaluationProfile(**fields, contract=profile.contract, sha256=checksum))
+        return envelope({"id": str(row.id)}, request)
+
+
+@router.post("/compilations/{compilation_id}/rename")
+async def rename_compilation(compilation_id: uuid.UUID, body: CompilationName, request: Request):
+    name = body.name.strip()
+    if not name:
+        raise HTTPException(422, "请输入执行配置名称")
+    async with request.app.state.sessions() as session, session.begin():
+        row = await session.get(StandardInputCompilation, compilation_id)
+        if row is None:
+            raise HTTPException(404, "执行配置不存在")
+        await session.execute(
+            insert(CompilationDisplayName).values(compilation_id=compilation_id, name=name)
+            .on_conflict_do_update(index_elements=["compilation_id"], set_={"name": name})
+        )
+    return {"data": {"id": str(compilation_id), "display_name": name}, "request_id": request.state.request_id}
+
+
 @router.get("/options", response_model=ObjectPageEnvelope[PlanningOptions])
 async def options(request: Request, offset: int = 0, limit: int = 100, include_test: bool = False):
     from autoeval.catalog.models import EvaluationProfile
@@ -141,6 +251,10 @@ async def options(request: Request, offset: int = 0, limit: int = 100, include_t
                 .limit(limit + 1)
             )
         )
+        names = dict((await session.execute(
+            select(CompilationDisplayName.compilation_id, CompilationDisplayName.name)
+            .where(CompilationDisplayName.compilation_id.in_([c.id for c in compilations]))
+        )).all())
         profiles = list(
             await session.scalars(
                 select(EvaluationProfile)
@@ -177,6 +291,22 @@ async def options(request: Request, offset: int = 0, limit: int = 100, include_t
         )
         sources = {r.id: r.benchmark for r in source_rows}
         labels = {r.id: r.source_model + " / " + r.benchmark for r in source_rows}
+        tool_revisions = {}
+        for dataset, binding, contract in (await session.execute(
+            select(EvaluationProfile.dataset_name, EvaluationProfile.compilation_id, EvaluationProfile.contract)
+            .where(EvaluationProfile.compilation_id.is_(None) | EvaluationProfile.compilation_id.in_([c.id for c in compilations]))
+        )).all():
+            if contract.get("revision"):
+                tool_revisions.setdefault(binding or dataset, set()).add(contract["revision"])
+        scoped_manifests = {}
+        for profile in await session.scalars(
+            select(EvaluationProfile).where(
+                EvaluationProfile.compilation_id.in_([c.id for c in compilations])
+            )
+        ):
+            scoped_manifests.setdefault(profile.compilation_id, set()).update(
+                str(mid) for mid in (profile.full_manifest_id, profile.lite_manifest_id) if mid
+            )
         manifest_ids = {m for p in profiles for m in (p.full_manifest_id, p.lite_manifest_id) if m}
         manifests = list(
             await session.scalars(
@@ -195,15 +325,26 @@ async def options(request: Request, offset: int = 0, limit: int = 100, include_t
                             "dataset": "GPQA"
                             if sources.get(c.input_id) == "GPQA_Diamond"
                             else sources.get(c.input_id),
+                            "display_name": names.get(c.id),
+                            "tool_revisions": sorted(tool_revisions.get(
+                                c.id if c.id in scoped_manifests else ("GPQA" if sources.get(c.input_id) == "GPQA_Diamond" else sources.get(c.input_id)), set()
+                            )),
                             "label": labels.get(c.input_id, "")
                             + " / "
                             + c.payload.get("template_version", ""),
                             "sha256": c.sha256,
                             "adaptor_revision": c.payload.get("adaptor_revision"),
                             "runtime_config": {
-                                k: v
-                                for k, v in c.payload.get("runtime_config", {}).items()
-                                if k not in {"work_dir", "container_name"}
+                                **{
+                                    k: v
+                                    for k, v in c.payload.get("runtime_config", {}).items()
+                                    if k not in {"work_dir", "container_name"}
+                                },
+                                **(
+                                    {"manifest_ids": sorted(scoped_manifests[c.id])}
+                                    if c.id in scoped_manifests
+                                    else {}
+                                ),
                             },
                             "target_id": (c.payload.get("credential_binding") or {}).get(
                                 "target_id"
@@ -295,7 +436,7 @@ async def import_curve(body: CurveInput, request: Request):
 
 
 @router.post("/resources/preflight", status_code=202, response_model=Envelope[JobAccepted])
-async def preflight(body: PlanInput, request: Request):
+async def preflight(body: PlanInput | PerformanceTask, request: Request):
     async with request.app.state.sessions() as session:
         inputs = await resolve_inputs(session, request.app.state.settings, body)
     return await enqueue("preflight", inputs, request)

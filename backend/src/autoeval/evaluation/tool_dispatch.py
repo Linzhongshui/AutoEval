@@ -14,6 +14,7 @@ TOOLS = {
     "llm_accuracy": ToolDispatch("aisbench", "batch_size"),
     "harbor_agent": ToolDispatch("harbor", "n_concurrent_trials", uses_trials=True),
     "peir": ToolDispatch("peir", "concurrency"),
+    "llm_perf": ToolDispatch("llm_perf", "concurrency"),
     "agentx": ToolDispatch("agentx", "concurrency"),
 }
 

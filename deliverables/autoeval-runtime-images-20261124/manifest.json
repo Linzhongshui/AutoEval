@@ -1,0 +1,367 @@
+{
+  "inventory_date": "2026-11-24",
+  "bucket": "aisbench",
+  "region": "cn-north-4",
+  "platform": "linux/amd64",
+  "archives": {
+    "deepswe-full": {
+      "key": "deepswe/deep-swe-v1.1-task-images.tar.gz",
+      "size": 24013532317,
+      "sha256": "57c6f414a64ac2bed28a1fb66b3abf5b9d677453265d69b878a2e7002e323bde",
+      "refs": {
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh77w0w2z8qs6m904k2hs9eg058325j8-v1.1": "sha256:358c536a429373d1fe62808ebf82b8fff782e61952e11a732b395d0d2eb9ffe0",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7fwz4nedevfex8ssk2p8xbt9836scp-v1.1": "sha256:b98ca8b8177124f93b72932041ea3b09fa40268e9683d433284ab8e3c3832096",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh77sbk25h3f5383rz7xqx98th822fd4-v1.1": "sha256:c29c2c09813a17664cc9e5c48b7fe944646df95b0e0e61c2d018d98054b4acfd",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh788hvxvxaz825205djm3ctth822xms-v1.1": "sha256:2d659cc423754efad757422aa6aa9019433d243c9a5d7bd49e65f82e92c054cc",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh70h37djmvc9ac48jeh25gwz582xgqv-v1.1": "sha256:bd18d154c3b1c1bc8ce860260e3c1ad0434b858b5c1ca3efddb59d80a82db6f1",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh73faxghpn90rtyxsrjmpjpsx83f4ws-v1.1": "sha256:ad208f8065cea82b2559124935d9ea2e029daa3f748bfe1da35fc72d57432d99",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh77krxpg096a66tm8s8ztcarn82zzyv-v1.1": "sha256:7a88c69fda035132c5a53b685a4fd9d0bdb8e7f38dfce44b4a151b244944bdc5",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh724kgmvy32trvakc1q6a6sa583fdx7-v1.1": "sha256:124bef38bc78b9c5f90281d0d41f6eea3401d8e3fed896fdcc9e990280826b55",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7dk7mmh6ewnyc9h46wyag19d831gmy-v1.1": "sha256:8bc827b802390131b0a9b4c77d30b12b4ac9802f8582baa7687f675e282e5bcc",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh74r2t7kdnt7h2efdk0hf5asx82zr0s-v1.1": "sha256:3a2a36320527b90d1d38ea375d700f950a9a3dad93be4d3f35b2c304d636d76e",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7ezsk4ze1jyjta967ypwnxhh83etpm-v1.1": "sha256:070479bd834b40fed3299f3819e56b160bd2c00b1e460b5baf4335a2501d84bd",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7b36e22me6fzbav0na7kt14h82wk1m-v1.1": "sha256:9dca7373ed704bac79711327154f76558ce250fd15ef94078b5428aa5b04e3fa",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh70247kxfz01g03p1dpz9fqv183g47e-v1.1": "sha256:ff23a4e398a0cf7079d6593da65ee561708ad5394a887cf06622dd62d00158da",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7322qjz1xfjspavxy0kamf9h83277p-v1.1": "sha256:aa0ce379caffc0adf6566d719b107e1b98f514ac38bf39c2eb875f32ef531bd2",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh77n9t7ybdq9387d08jzdp1y183ffe6-v1.1": "sha256:84f553981b0f496936ca1d2aaf251f0be7673c06e207e7845860b4b59a815fc1",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7ajwvesks1d5kkpeqx7y79sd8238zn-v1.1": "sha256:84f553981b0f496936ca1d2aaf251f0be7673c06e207e7845860b4b59a815fc1",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh77k18d31qx7jj0c7nyv0xd8s82cznp-v1.1": "sha256:d2739d5fa0721c6729c5b50b1084ce30b923ec93e37e98c27d31a659482b93d5",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh731cskx45z0t0961464d9ezx8220nt-v1.1": "sha256:fbd0693b8305a9a39b1ea7a777c72ea338872579ecfb522e9075ab6f9bc7a756",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7ejvdhks3x059j6jwfncaj4982yxrv-v1.1": "sha256:eb78bf37328ff5b20d0ee1df23d8ed5b71f5fefc956bcae724aa504ffcde18cd",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh73xpqyc0vqx9prf3m106nqe5821dcb-v1.1": "sha256:4470ee46f12cbe30d7152ed96ed0b987a3ddf8bfd876ecb96304771587135e99",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh73sgee6751fmh72hwwctyscx832frj-v1.1": "sha256:7d3f66c9483c45e9953fcb9b50e050045872aa100ff19378ca7938d21d5adc80",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh77y2107s6xkqyf61mj1dsm0983kmp1-v1.1": "sha256:6292897c8bdaa0b5825c1fb3c36261088a3ffcf74c8b34a21e786b3d3d7a1c21",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7adk413brr6nnvzntz1qvb51833me1-v1.1": "sha256:dbb331d7603c728439cca9057a0d917d3912c87b927664689332b8506c76ebf8",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh754n098chwgtm24jakheqsw5833ec6-v1.1": "sha256:886e64cad852b7f75bee491f4550fff253e1c9414e678bda0d233764454af51f",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh71j0gr2axgn6v1f92cam6s6x82rkv6-v1.1": "sha256:9d3d4a19620e7d4b19a082e9ae1688e3e4f7be8db355f80f32a034d3512f9bad",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh719np6e210pf8skawv132rw183pfyy-v1.1": "sha256:c48af463095bc4bcb5a5feb32618853351129b98ed26cc4a618618e5923587b8",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh74mb9dzz76a6zgdqmmf5mvk1833cnk-v1.1": "sha256:4b0096407046954bf07e75324a4030c1883c39b09e7a647e144f0dbc8e9abb3e",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh76g3pdaddrcg12k7jse0xrzn83a5fd-v1.1": "sha256:77484f10c3eb1c2d4d0098db97d79ee71eeb5b791cf0c9fe24e85c9794f6519c",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh74m2j63pskf6htk1sxxevvv1823hvd-v1.1": "sha256:00e9d05826212b863ee5aeb2efb5f33d269cff56a6668ecda21773fc56e39fdb",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7bmp04pqht2pcvp8qce1afm582ph2j-v1.1": "sha256:3454deb5792588265cac517cf1298f7596091e0d54876433f26d9a0045e58299",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7faaexjnnv9h4vt84e0r1v4d82qtv7-v1.1": "sha256:8e95a75f64a7d578f3da26f3d7509bdf768ee770a1bac9123627c106b9e29cd8",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh72dq33t9djm894gqagmgpkhd82yvjv-v1.1": "sha256:d0955c3858a7e9e6230cc2fc6c0d790967cbaa5e560fa70cbc123a4429a89990",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh76dadw64v8013j689380xsg182yhfc-v1.1": "sha256:9d1daecfb8edea777b25d25066316cc2edc8515852fba0e539045bffba65d1e2",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh749pxv8w35vksyfhe7p8tg8x82p0vg-v1.1": "sha256:9444a79818110e14ad584945502628f38d5692c6bee8bebf1f236877a60677c2",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh79vadftp8bjw2qzqjw8a0b9s82ytpj-v1.1": "sha256:d21e21b43b2808e84976dbfb9938d94ab583655e0acb145cee7b4fd5734e3be8",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7aq6h38q4e91mragyvr8cd3n82xxxr-v1.1": "sha256:2568666ca36a878d028e3b5a93ebc9995d16b1b29e399c887e1e6478b632529f",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh78zjag0xnxppgym5v4sshav982y8s4-v1.1": "sha256:a5fce90418501fa2868b242afb1384137593ea88f4122b7c9e67394771687c93",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh73t6ych6s1a4vtkbgr61ecr1823tt2-v1.1": "sha256:e284ebd364522ca0f3218d2dd8541f39dfea4b002a90eedbdc617d08eb80d0a5",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7987m8hz4g19ngkk2zfe3v4n82y0e2-v1.1": "sha256:f914ba43571a30173596c965de1684d96f9d9e520ecbb5b3a5c0b1d824a4e8ae",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7fmf1y6r9ajpg3htmaj237h182vztd-v1.1": "sha256:83ecfcc0805add06fe60c6a6be8d757beaffeac52decfd863cc8b5983dc620aa",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7ag6w2nh5a47ta6bg7hj2mk1823qwj-v1.1": "sha256:cec162314de60f131f7556a1f26642a93fb1297ce0b25ea04d538c573808bf25",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh74j15mp1vrxx737y8b47tc8h832a37-v1.1": "sha256:79022be7ae2de0c1876bb63bd8370434def7aa2b82350bfe63b6a11d00f244f7",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7anfdjd1c4e5ejxncny0j1ed82xjm4-v1.1": "sha256:67b1fa6f34cbaba625ca3164bde19292fc0e246dd8c9902a23999474da0c9584",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7398skqnxqwg9hbmdj7ncmk1822aa0-v1.1": "sha256:06b223b996630c980b16cc4f23b2d7eb2f420446e267ee95c3a014e924f59d64",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh71jf6d7mtqaw5z1h69krrarx820dys-v1.1": "sha256:ee0b417d9037636091bba913a609cf888b775b5f623faf3809ab862b0b7aa6d0",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh70k6aj3y457hgtraar0rmgdn822qx8-v1.1": "sha256:e215a2945c732650dd17b990a752ef804ec73c33b0bf3436be48e6b40eeebca8",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh74b2m0tjfn59vq8btqrj774s821570-v1.1": "sha256:119119622ebad57330a4195dc423c204aeada00fdad4838acce9a502b1304a0a",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh799f394epg9pb2j9fhzky98183e8ec-v1.1": "sha256:2e3b4d257d5137ebd813f7f5254e6d84768be4640377f6759ba23efc7b471167",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh71y4gxtry9p0m42wvg4th515831mwz-v1.1": "sha256:18361aca09f4e9497a9997ed34a897332678f3c59c3cca3490557f1357a09cc1",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh74gnp94dw8fx3h047h4m4ht9830bat-v1.1": "sha256:a19e1c4ae772543af1fde99395019b611afb2be1c7b845a4f0392e8eca9e6bb8",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh71b98xenay7p45357036xq5x82tcdf-v1.1": "sha256:26e552903680da2450c58140fb0980272b20547cfed71ea19b7cb4bf2a8ea80d",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7evrvtwkk64hraqvefgx9ndd821j43-v1.1": "sha256:97996226aab84044cf3b4c6f16b956075e356865388c514bd273593c25f19746",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh72pgvncj82fnbfq2bvmy1qs183jdc5-v1.1": "sha256:e7c68c97eb9f18aed2ec3721046fe7be264c73e29095e77fe5812c0407fa7cf2",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh705e1hgmtj22pyetcmqa8ygs83bh33-v1.1": "sha256:0712a1478fc84c22b34221017d81b9303eda79d674c8aa8969c38485c4647156",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7cshjqfe84fmtb2ye37nrd6h82dds6-v1.1": "sha256:0712a1478fc84c22b34221017d81b9303eda79d674c8aa8969c38485c4647156",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7dkes3xb054yt1fd3g6nym5s83bz2h-v1.1": "sha256:0712a1478fc84c22b34221017d81b9303eda79d674c8aa8969c38485c4647156",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh71vrtr4b1jj5vavv6aybnvjd83pcar-v1.1": "sha256:e1a570987b7b09d8c5415b27ac7518211abd7c7fc4a609c4fe5e0b5a97a0ecee",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7anwezzyc0zgk160c9peh13n82r12z-v1.1": "sha256:d9740e0f7412175bd131d953ecb44e2a4695f15a394b2bcfd7741f6f85a2d729",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh72w47mwm321wh9xj47vskc8d822e9t-v1.1": "sha256:073756639eb64522e40b5ca899687ba9e6571b9b967f23385cb8892db435691f",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh75kn07w0t92m4xxd3dy0cgp982jz6m-v1.1": "sha256:16f3202367c11789748053c85a4fc47db30d6fb356aa3389f2b84fb61bab4313",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh75wxkjyha9441e7m9tpetb2582mn63-v1.1": "sha256:95e463b315491e377efcf7d57a5099fedebd1131c6e0f2d43323232db4c0c986",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7fkjmy67qny9z98mt6bj52m182ygdy-v1.1": "sha256:bdafc0e4f8d9e7c7e560f84861f95acdf208ed7a98a8c338721e6eefbcfca178",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7brwh7cv23ggeshkz85ac5fx831x5k-v1.1": "sha256:101639dde98c1b250116d94876cf186cbab102f844bbb3a78e38815cee78b389",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh73snc7v9x3psk69rg4eqvjgs836v5a-v1.1": "sha256:6a1a4c89b26c0be7e26b760ce8b310b7cc68f930cce462efaaa3b2633a254955",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7ccr1w93zymhy42k5hs2m9w1831xpx-v1.1": "sha256:6a1a4c89b26c0be7e26b760ce8b310b7cc68f930cce462efaaa3b2633a254955",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7fr6f1yw1289ye5ttsfvaqen8319dq-v1.1": "sha256:6a1a4c89b26c0be7e26b760ce8b310b7cc68f930cce462efaaa3b2633a254955",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7dvkse99x41x83c5z6f2eq7n82w8fm-v1.1": "sha256:ea95b82423590ce2dd3b8ed38dd784968ddd8a5a6cffe2943aa4ae79dcec0939",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh72a3qcr0kjpdr153havavn8s83bx8t-v1.1": "sha256:9ce7e2670ccfec00a5b4ff9eb0b3225e00bbc32fed9f5e1c5224f177e058ead8",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh74gd4v9cty7573mr6k7va39183ngrq-v1.1": "sha256:8a0c1ba7fa7254b2c2a7aafe4b2cc4ef2f70ce636ecd3b3d04cf533e4eb03698",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7ahy57bb3jmdjzmbvq257swh8353nm-v1.1": "sha256:a945cc9c87c6516b96a7211bdea89549ad73929fba8c391e577fa805a069adb5",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh727w7pxd9cv476t3cxptxcg182e1e5-v1.1": "sha256:90918cab9d0a9f41344b2372c67fdb1105131d9881a813b2cb97705db230f032",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh79vjbp8dv1pyk7t09zdb9xx9821628-v1.1": "sha256:2fa01f4c8d132110f23ad0cd34d8308e4f23d92f59d64e33b084d31ff2bb2e7d",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7cc4hqw7wb87h3kwwnkq0pv1830gjz-v1.1": "sha256:874ca5748b81f60b71308aaf7e4404de81094965c186717d7eb23acaa59dd4da",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7bnb92eb32zvxx50fzjnshes822db0-v1.1": "sha256:19c8244a02993e42e3e2009ad40bb9ff615e16f4311494d8e83090a2b5bac5bf",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7c2re7cvbseq7xz6samd1xr182y1dc-v1.1": "sha256:0bec04ca7c2b4f688a76739941f91ebd7f3cf4ce725e1691a93a0135d023db54",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh75ggdejhnymjbhkbtkxvhz758352br-v1.1": "sha256:405120de96fb13abb94b1518222a4a8b1148ed2aa05fe4627307dd03c7c195a9",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh79s1ny2ab454f8caet44rv5n82za06-v1.1": "sha256:7d130ed256010e67bfc13bcb218c79a47b22f7b4ddfedd5c4852862303ed48d2",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh71gkadwafw4ry4r6g37era0182qpms-v1.1": "sha256:426327ed1422567d66b2b52d0ea3935274bd31b3f38e9028cadf181191bad102",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7e0e2z02keqh6j7db6bcg1c9822140-v1.1": "sha256:33b31ab76c1f207438dacfe28e23e4eecffc0549458f89ca81335779d3f24f4d",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh79vgnwnp3wfz0b63ft8zbs81822re8-v1.1": "sha256:6da49d54a4d87382e407d946b90ea01aeed111ca6a84c46bbdf58391b0cd2a79",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh70cshdjenz3z5gq2wrqzhjmn82xbb0-v1.1": "sha256:f96609015e854defef4de64033b29932598b23ed539c87dc6a21d0861e231e62",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh72mtcjbhgxmwq036jccx77dh83dj5n-v1.1": "sha256:fe7b7eb1a4a0f0eefd4439a8e1c95a9ad1943bafbeece2969e7c76e33ac77024",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh79xyw12drtaz3reht4enc2hs83ef6v-v1.1": "sha256:fe7b7eb1a4a0f0eefd4439a8e1c95a9ad1943bafbeece2969e7c76e33ac77024",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7czqrrmrm1vnwfx1nhtjh9as833esn-v1.1": "sha256:62be7b6ee60809bcd7330937e0d81ad19fc746a8464fee02c5ee49680c2fc907",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7ajcjberhnnhk914qezwwt0x830v6v-v1.1": "sha256:37f5e09931a2586b2a6ec201b3a34ee910ea3d0eb0ffa99c7d610938ec3175df",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh72qraccnjwdet6ynagsccr4x82y65c-v1.1": "sha256:b7c28e35319169c239008fa8694667820a0de4fd95c77700d560276356bae723",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7c7rrg3zke74w7068nawak9x82t6am-v1.1": "sha256:f2ec2c0aa8f9f60c991d29a124b0d651ffdf67f1c6ed9ddb20a184ec2e233fc8",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh734ehfw2s3bztf7pzc9xf3x18212bs-v1.1": "sha256:73e04e06af4e2cebace3c75797360454378b40662764f8899e6d8c1ee9aa9991",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh78c5dwwna57y757p2y5ktw79836dnv-v1.1": "sha256:7ac5c734bb62b71fa697e3da94416f313a69eb54370b72ebfe7db2d59fc81d25",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh72088pg9vkc6peacnkc35yy9832jff-v1.1": "sha256:ce8dc2764d2013dd2b30c304d1218bda1791661d2b0ee193664ea651d039de17",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7f7cahc5ddm1qzpxz13kpmrh8235pc-v1.1": "sha256:f08103fa95bffd90de35d86e715a9f8d1c1fef07faa7854f237302c92484aa39",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh71kat2v58yys3pnyybkgycax832vj2-v1.1": "sha256:e6710f73641f4941fffb372c1d62f8d8e3b95db981cb62828ec4a6e3a56597c0",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh75rc2q0zhmsqwk7wewfwwtrx830v2n-v1.1": "sha256:ff01634858b933ede36a2a772380b8aee962d1cbf5792de84037df9bbf8c43ea",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh757d8ggvnfaszv8zcav3msy982ma7f-v1.1": "sha256:689dae3a6b548d05658ebbe5921c77898fdb638915b963357d7ae8e2a04176e3",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh79betfed7ets4an20cr4j57182y9wt-v1.1": "sha256:fae4d5c53b6f4ef38ed98b6dd1efb3f577bedafa749e775f38643231330799e6",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh70bg8gy4xks4eyh1s71ecmk9822p9c-v1.1": "sha256:9db098712361f28a132a2b74cc85c4bf1fc6dce61e1336b82ede8d91b252b74b",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh73dq4n55jdxasppe6jjmth4183d47n-v1.1": "sha256:77b7a533eb23944b95405934df51a34c7edd7a99b82e411f8ca611d4a8d45c16",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh771gpr8crkjsnt9pj81bafgs8229em-v1.1": "sha256:ad152b8e9f86ddb97aed49e644f8300c7d43863e2b5becc9da77d2bc10440059",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7drfg2vkvdvfh9xx0nfd5pz9821xr7-v1.1": "sha256:3acec561c6fac9705f3ade94ea11a746245c0aa894a08fd2f1541750906e2b23",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh70nj38qyatmsmj1d5zh57j25820vrx-v1.1": "sha256:f6203e3d3dfd7d405e891344b70a41bfaa9f53b842757db03221fd2321055ac3",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh77yap0nc4zwm5bysc954xbr182tptg-v1.1": "sha256:24d48828a38a60d1a9773b464d25cb25ca94f0fa9a214b08faf2fde8446c2f75",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh79dnvkvq8j9bs22ededmsc79823akj-v1.1": "sha256:026523cec5e68615ff9711f958a235102a7fea42feda19f2c8b04f394c1c291e",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh75679ajj3b8dtd7se3h7z0a1833y6r-v1.1": "sha256:85f743fa1c3b772abbac100056350657e771a10196c31512f68fc4dc114c19cd",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7d5m4ed35zfp7gyhx7wdahed82yw72-v1.1": "sha256:85f743fa1c3b772abbac100056350657e771a10196c31512f68fc4dc114c19cd",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh701jywhzgddknqwzsq6npjv98226tq-v1.1": "sha256:ce61756508753ab6b8ac8415dc13f22fa335546dcf027f9f9c146c1f7be57f82",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh712k0bfwxew9fvg12k70g59n83pw33-v1.1": "sha256:da11db810808bfa987a9a954e1d755943b44dfb094dc5f5023a8cb251d1f7549",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh786tyr77qk4ycrz24nm2kynh82zaam-v1.1": "sha256:38c3ffb9b94b9ed51d850b4275e9deebbe1c4af8431467f6b2bb1914c27f74d0",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7eq7eek21pjhv1zx8c2cmmed82yd7v-v1.1": "sha256:59d73f800b94b5d7ddc8be3f50c426aa2d834ba92d3b213ea5b50fcd7a86bd43",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7fj3hc92zehtc8azrm32xzb182w9dr-v1.1": "sha256:a285bdc4eee3a02a0d1a61e78485307714af06a7b31fadd79bf833db69b3e306",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh71t2fb7qvx4y0svvv77e5p3182hnvq-v1.1": "sha256:bdc599c0ac2cfdddfe9f2f79ffae39f07fe5b70cfc44b1fc2bc6c0ff17023e36",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7992s6336c7yhv34x198jqy182zpmt-v1.1": "sha256:c8de025cba4dab8a2c21371d82d5370bdac55504d59d15f772606726a9616903",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh75azsnb5eqs3mf4xm0zkzha582rvcd-v1.1": "sha256:04e9114251d3fbe7978ca4b670c70359de137f59c665fa7fec93b5c1e7ddd533",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh7191qb52n5pfwh0a4yhahmt18343sn-v1.1": "sha256:89e32acbd385bbdc49d514b5896dfd1259ce29df420f5aa7706c449630b408bc"
+      },
+      "uri": "obs://aisbench/deepswe/deep-swe-v1.1-task-images.tar.gz"
+    },
+    "platform": {
+      "key": "images/autoeval/runtime-20261124/platform-6c3c16f50bbd.tar.gz",
+      "size": 999486214,
+      "sha256": "6c3c16f50bbdf34a8be4cdffbb248f1667b908fd192d8287092162adec5181be",
+      "refs": {
+        "autoeval/platform:case-window-08eb3dd": "sha256:684c2d09e1907be68e52e96031a62984bf6507816cc1009fc526f581edc31052",
+        "autoeval/platform:harbor-workdir-663bb5940780": "sha256:7dfed859149df34f2bbb321ddc02742b4ade61c06c94cf7ea97f46624c581328",
+        "autoeval/platform:main-f4d0ea9": "sha256:7dfed859149df34f2bbb321ddc02742b4ade61c06c94cf7ea97f46624c581328",
+        "autoeval/platform:budget-bridge-20261117": "sha256:dc62f157110d70c3e96a57cab4eddc0adff439a70b7bd42e9be71b9d1a05d339",
+        "docker.m.daocloud.io/library/python:3.13-alpine": "sha256:67fd5f7b4b120eaa3308775fe87aff98a2492287576bd6656ef785d54a1b5605",
+        "docker.1ms.run/library/python:3.12.12-slim-bookworm": "sha256:9cb180cb36bd45dc786105b834d3cb5f3b1d69a6a63c79ca10fc64f108aa649a",
+        "docker.m.daocloud.io/bitnamilegacy/minio:latest": "sha256:ed85a6fd1548f908ab978af49ecc724039ea945c6aef8fb7083a29d67838e403",
+        "docker.m.daocloud.io/library/nginx:1.28.0-alpine": "sha256:c318e336065b17ff460aeac6d14bce5d0b13e35f25d5cb1843b635359fc00c9a",
+        "docker.m.daocloud.io/temporalio/auto-setup:1.27.2": "sha256:6697cac6ce122978874e3c18368ac1a8b2ad8efb47dfa4d10b2a8523ce636586",
+        "docker.m.daocloud.io/library/postgres:16.6": "sha256:eee71f45c6dfebd5d85644a85eb955b1f27d84ea4edccf9e21f51761cbed3818",
+        "docker.m.daocloud.io/library/docker:27.5.1-dind": "sha256:d2dc198f7d839eae26b5a9cb0e7cdc4e2c97d9cb4ea66dbeb0a4c0c7f0b165f8"
+      },
+      "uri": "obs://aisbench/images/autoeval/runtime-20261124/platform-6c3c16f50bbd.tar.gz"
+    },
+    "dataset-executors": {
+      "key": "images/autoeval/runtime-20261124/dataset-executors-f80971b0cc3e.tar.gz",
+      "size": 1458496835,
+      "sha256": "f80971b0cc3ef6701c9be93d0d22f4bb92abeeade0fa77f6d32f6fff61cf5b2b",
+      "refs": {
+        "autoeval/r13-aisbench:031a793-locked": "sha256:8041cc1ce01f088865f1f1c4474c630ba688a1c724b5c92de784ffc69f3504a6",
+        "autoeval/r13-aisbench:525ed17-locked": "sha256:6e074d466d3e24ee0121b47da0d6d7e06fa1a148d0ac724a80f865e62936edb3",
+        "autoeval-automationbench-scheduler:acceptance-20261116": "sha256:b5ec5b4bd298d430eaee990430cdef8e1beeb45e2fda3767784103fb2bc10bae",
+        "autoeval/ais_bench-harbor_agent:v3.1-20261013-master-ubuntu24.04-py312-x86_64-SJTUyh-autoeval": "sha256:dcca0fe127fd5391f5dceecd6df119441e4c4ae64a7629c8ca1218d935ce4f14",
+        "autoeval/ais_bench-llm_accuracy:v3.1-20261013-master-ubuntu24.04-py312-x86_64-SJTUyh-autoeval": "sha256:b5f733e688dd89efcec3a27276024eff8d739becf31516960b0f842362ed28e2"
+      },
+      "uri": "obs://aisbench/images/autoeval/runtime-20261124/dataset-executors-f80971b0cc3e.tar.gz"
+    },
+    "langfuse": {
+      "key": "images/autoeval/runtime-20261124/langfuse-fca3bcb64ee9.tar.gz",
+      "size": 1291136909,
+      "sha256": "fca3bcb64ee9596ab95939c974a562cabdaaa68992d38a69ea01d20e2a175899",
+      "refs": {
+        "docker.m.daocloud.io/langfuse/langfuse-worker:4": "sha256:2bdf2f145be5d977a08891f76c0b439b13a0bbbb25accf0339d6eeeec2694f58",
+        "docker.m.daocloud.io/langfuse/langfuse:4": "sha256:692335e0e5b51cdae7231dadb5aa26e5ece3ef275bb4855bc2620ecc0bef4567",
+        "docker.m.daocloud.io/library/postgres:16": "sha256:275447c94b11b151decd1f29877965301d5a77032037c46de93d990f739f00a9",
+        "docker.m.daocloud.io/library/redis:7-alpine": "sha256:f84b0c4678011602b9b98c227a4dcd5468bf8b088b02fdd4165cb7758bad8058",
+        "docker.m.daocloud.io/clickhouse/clickhouse-server:25.12-alpine": "sha256:9531cda1a267c8b6797ef9a89fd9bc3e8fe8d6ce86ef3130112218795fe2e585",
+        "docker.m.daocloud.io/bitnamilegacy/minio:latest": "sha256:ed85a6fd1548f908ab978af49ecc724039ea945c6aef8fb7083a29d67838e403"
+      },
+      "uri": "obs://aisbench/images/autoeval/runtime-20261124/langfuse-fca3bcb64ee9.tar.gz"
+    },
+    "harbor-support": {
+      "key": "images/autoeval/runtime-20261124/harbor-support-cd834d2bcba3.tar.gz",
+      "size": 1474314386,
+      "sha256": "cd834d2bcba320df814c65fb0660c5e4d22d31ec2e05f96c60568448b6fce89c",
+      "refs": {
+        "harbor-automationbench:e45f2f2ac0d7e2215205fa44": "sha256:086c2b1898ad38faa5420a29046e8430c285e2fae35bdea3977b5fc5b6afa779"
+      },
+      "uri": "obs://aisbench/images/autoeval/runtime-20261124/harbor-support-cd834d2bcba3.tar.gz"
+    },
+    "analysis-budget": {
+      "key": "images/autoeval/runtime-20261124/analysis-budget-70cd777dc7e3.tar.gz",
+      "size": 132339256,
+      "sha256": "70cd777dc7e37a3394193361d42900629dfe0fc0b4ed3f551486ea4764ef1e9c",
+      "refs": {
+        "autoeval/lite-budget:20261120": "sha256:7cbc3f594d90e9f8907fd5e337e4eb3cd80074a1be93b9118341cb75813e06f8",
+        "autoeval/platform:release-afa33d1-20261118": "sha256:85f82e260cb75b0a5ea3b9a8027d34e824230fdca9f225815c024362f5bbdb80"
+      },
+      "uri": "obs://aisbench/images/autoeval/runtime-20261124/analysis-budget-70cd777dc7e3.tar.gz"
+    },
+    "standalone-dataset-runners": {
+      "key": "images/autoeval/runtime-20261124/standalone-dataset-runners-052ed6d2c69f.tar.gz",
+      "size": 2354916151,
+      "sha256": "052ed6d2c69fcc55469aebc10d33a072252c64659e5baf7f95c932c0e8808899",
+      "refs": {
+        "ghcr.io/aisbench/agent-runtime:v3.1-20261119-master-ubuntu24.04-py312-x86_64": "sha256:534fff6192092241a223210263ec6bf6c39fadf44653b8bf23c0cb65f32cdb1c",
+        "autoeval/ais_bench-harbor_agent:v3.1-20261013-master-ubuntu24.04-py312-x86_64": "sha256:02f4660de487ce841614118a3255a43dd25f8278bc1c327e324ea5786cb5864e",
+        "autoeval/ais_bench-llm_accuracy:v3.1-20261013-master-ubuntu24.04-py312-x86_64": "sha256:1cd4db90a9405bb6abd4e298086f6e0dcf431c5a8b6554f49d3093788cb00304"
+      },
+      "uri": "obs://aisbench/images/autoeval/runtime-20261124/standalone-dataset-runners-052ed6d2c69f.tar.gz"
+    },
+    "archived-task-runners": {
+      "key": "images/autoeval/runtime-20261124/archived-task-runners-2f026715c4ca.tar.gz",
+      "size": 1474421545,
+      "sha256": "2f026715c4ca1bff4dfe07de8c00a2a3290d2af7064cd78ce8e6daaf9ffd1151",
+      "refs": {
+        "autoeval/r13-harbor:locked-cli-runtime-path": "sha256:b303e3bc7e33799004511ad1ab7f82fa382cf57d25f0bb399bac3e68286f4150"
+      },
+      "uri": "obs://aisbench/images/autoeval/runtime-20261124/archived-task-runners-2f026715c4ca.tar.gz"
+    },
+    "deepswe-lite": {
+      "key": "deepswe/deepswe-lite-linux-amd64-20261124.tar.gz",
+      "size": 2430514926,
+      "sha256": "605d6aed81ef2b26f8fbbe0100483963a46a8a838dfa19f2e2f51909d5928909",
+      "refs": {
+        "autoeval/harbor-runner:main-f4d0ea9": "sha256:e47830dda8601e32f2dad4bc09f80f13bab76d92c790df177d6cb7285ac7fb86",
+        "autoeval/harbor-kernel-probe:alpine-3.23.4": "sha256:3cb067eab609612d81b4d82ff8ad71d73482bb3059a87b642d7e14f0ed659cde",
+        "harbor-prebuilt:harbor-docker-egress-control-sidecar--b67f71411fe7d8f5": "sha256:68ad0b68479ee4857f60e2998046a3aa59eaf8db3a57f90ce7f5bd0a6f7aeab6",
+        "public.ecr.aws/d3j8x8q7/swe-bench-202605:kh75679ajj3b8dtd7se3h7z0a1833y6r-v1.1": "sha256:85f743fa1c3b772abbac100056350657e771a10196c31512f68fc4dc114c19cd"
+      },
+      "uri": "obs://aisbench/deepswe/deepswe-lite-linux-amd64-20261124.tar.gz"
+    }
+  },
+  "usage_by_image_id": {
+    "platform": {
+      "sha256:684c2d09e1907be68e52e96031a62984bf6507816cc1009fc526f581edc31052": [
+        "autoeval-platform-api-1",
+        "autoeval-platform-planning-execution-1"
+      ],
+      "sha256:7dfed859149df34f2bbb321ddc02742b4ade61c06c94cf7ea97f46624c581328": [
+        "autoeval-platform_reconciler_1",
+        "autoeval-platform_monitored_1",
+        "autoeval-platform_workflow_1",
+        "autoeval-platform-langfuse-1",
+        "autoeval-platform-result-1",
+        "autoeval-platform-probe-1",
+        "autoeval-platform-planning-1",
+        "autoeval-platform-dispatcher-1"
+      ],
+      "sha256:dc62f157110d70c3e96a57cab4eddc0adff439a70b7bd42e9be71b9d1a05d339": [
+        "autoeval-budget-gateway-20261117"
+      ],
+      "sha256:c318e336065b17ff460aeac6d14bce5d0b13e35f25d5cb1843b635359fc00c9a": [
+        "autoeval-unified-gateway",
+        "autoeval-platform_gateway_1"
+      ],
+      "sha256:eee71f45c6dfebd5d85644a85eb955b1f27d84ea4edccf9e21f51761cbed3818": [
+        "autoeval-platform_temporal-db_1",
+        "autoeval-platform_postgres_1"
+      ],
+      "sha256:6697cac6ce122978874e3c18368ac1a8b2ad8efb47dfa4d10b2a8523ce636586": [
+        "autoeval-platform_temporal_1"
+      ],
+      "sha256:ed85a6fd1548f908ab978af49ecc724039ea945c6aef8fb7083a29d67838e403": [
+        "autoeval-platform_storage_1"
+      ],
+      "sha256:9cb180cb36bd45dc786105b834d3cb5f3b1d69a6a63c79ca10fc64f108aa649a": [
+        "autoeval-platform_network-anchor_1"
+      ],
+      "sha256:67fd5f7b4b120eaa3308775fe87aff98a2492287576bd6656ef785d54a1b5605": [
+        "harborstack-dind-fwd"
+      ],
+      "sha256:d2dc198f7d839eae26b5a9cb0e7cdc4e2c97d9cb4ea66dbeb0a4c0c7f0b165f8": [
+        "harborstack-dind"
+      ]
+    },
+    "analysis-budget": {
+      "sha256:7cbc3f594d90e9f8907fd5e337e4eb3cd80074a1be93b9118341cb75813e06f8": [
+        "autoeval-lite-budget-retake-20261120"
+      ],
+      "sha256:85f82e260cb75b0a5ea3b9a8027d34e824230fdca9f225815c024362f5bbdb80": [
+        "autoeval-analysis-live20-20261116"
+      ]
+    },
+    "langfuse": {
+      "sha256:692335e0e5b51cdae7231dadb5aa26e5ece3ef275bb4855bc2620ecc0bef4567": [
+        "harborstack-autoeval-langfuse-web-1"
+      ],
+      "sha256:2bdf2f145be5d977a08891f76c0b439b13a0bbbb25accf0339d6eeeec2694f58": [
+        "harborstack-autoeval-langfuse-worker-1"
+      ],
+      "sha256:275447c94b11b151decd1f29877965301d5a77032037c46de93d990f739f00a9": [
+        "harborstack-autoeval-postgres-1"
+      ],
+      "sha256:9531cda1a267c8b6797ef9a89fd9bc3e8fe8d6ce86ef3130112218795fe2e585": [
+        "harborstack-autoeval-clickhouse-1"
+      ],
+      "sha256:ed85a6fd1548f908ab978af49ecc724039ea945c6aef8fb7083a29d67838e403": [
+        "harborstack-autoeval-minio-1"
+      ],
+      "sha256:f84b0c4678011602b9b98c227a4dcd5468bf8b088b02fdd4165cb7758bad8058": [
+        "harborstack-autoeval-redis-1"
+      ]
+    },
+    "dataset-executors": {
+      "sha256:b5f733e688dd89efcec3a27276024eff8d739becf31516960b0f842362ed28e2": [
+        "51278e81-b71b-4425-b89f-fd90ce287402/image_id"
+      ],
+      "sha256:6e074d466d3e24ee0121b47da0d6d7e06fa1a148d0ac724a80f865e62936edb3": [
+        "51278e81-b71b-4425-b89f-fd90ce287402/executors/aisbench/image_id",
+        "c84c335e-2249-40a1-b856-613a607d2f23/executors/aisbench/image_id"
+      ],
+      "sha256:b5ec5b4bd298d430eaee990430cdef8e1beeb45e2fda3767784103fb2bc10bae": [
+        "81d71829-f3d0-40cc-ae54-afe2d7fa5303/image_id",
+        "c84c335e-2249-40a1-b856-613a607d2f23/image_id"
+      ],
+      "sha256:e47830dda8601e32f2dad4bc09f80f13bab76d92c790df177d6cb7285ac7fb86": [
+        "c84c335e-2249-40a1-b856-613a607d2f23/executors/harbor/image_id"
+      ],
+      "sha256:dcca0fe127fd5391f5dceecd6df119441e4c4ae64a7629c8ca1218d935ce4f14": [
+        "7a5169a3-2e43-4cb4-a78c-186f69659efa/image_id"
+      ],
+      "sha256:8041cc1ce01f088865f1f1c4474c630ba688a1c724b5c92de784ffc69f3504a6": [
+        "7a5169a3-2e43-4cb4-a78c-186f69659efa/executors/aisbench/image_id"
+      ]
+    },
+    "harbor-support": {
+      "sha256:086c2b1898ad38faa5420a29046e8430c285e2fae35bdea3977b5fc5b6afa779": [
+        "harbor-automationbench:e45f2f2ac0d7e2215205fa44"
+      ],
+      "sha256:3cb067eab609612d81b4d82ff8ad71d73482bb3059a87b642d7e14f0ed659cde": [
+        "autoeval/harbor-kernel-probe:alpine-3.23.4"
+      ],
+      "sha256:68ad0b68479ee4857f60e2998046a3aa59eaf8db3a57f90ce7f5bd0a6f7aeab6": [
+        "harbor-prebuilt:harbor-docker-egress-control-sidecar--b67f71411fe7d8f5"
+      ]
+    },
+    "standalone-dataset-runners": {
+      "sha256:534fff6192092241a223210263ec6bf6c39fadf44653b8bf23c0cb65f32cdb1c": [
+        "agent-runtime-dsv4flash"
+      ],
+      "sha256:02f4660de487ce841614118a3255a43dd25f8278bc1c327e324ea5786cb5864e": [
+        "autoeval-ais-bench-harbor-agent"
+      ],
+      "sha256:1cd4db90a9405bb6abd4e298086f6e0dcf431c5a8b6554f49d3093788cb00304": [
+        "autoeval-ais-bench-llm-accuracy"
+      ]
+    },
+    "archived-task-runners": {
+      "sha256:b303e3bc7e33799004511ad1ab7f82fa382cf57d25f0bb399bac3e68286f4150": [
+        "historical AutomationBench / DeepSWE execution template"
+      ]
+    }
+  },
+  "dataset_archives": {
+    "GPQA": [
+      "dataset-executors"
+    ],
+    "MMMU-Pro": [
+      "dataset-executors"
+    ],
+    "AutomationBench": [
+      "deepswe-lite",
+      "harbor-support",
+      "dataset-executors"
+    ],
+    "DeepSWE": [
+      "deepswe-lite",
+      "deepswe-full",
+      "dataset-executors"
+    ]
+  },
+  "deep_swe_task_tags": 113,
+  "automationbench_task_dockerfiles": 600
+}

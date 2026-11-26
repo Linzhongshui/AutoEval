@@ -16,6 +16,12 @@ PLANNER_REVISION = "0ee9abf49a57c5accc62df8900693cdcea88ea9a"
 ADAPTOR_REVISION = "955089ab32ef696c231d628f5ad0d9da28f430c4"
 
 
+if __package__:
+    from . import performance_adapter
+else:
+    import performance_adapter
+
+
 def installed_revision(distribution):
     try:
         package = importlib.metadata.distribution(distribution)
@@ -110,6 +116,22 @@ def inspect_dataset(task, *, networks, validated):
     config = task["compilation"]["config"]
     params = config["params"]
     runtime = task["compilation"].get("runtime_config", {})
+    if config["subcommand"] in {"llm_perf", "agentx"} and params.get("kind") in {"agentx", "inference"}:
+        reasons = []
+        revision = None
+        try:
+            revision = verify_tool(task)
+            if task["compilation"]["adaptor_revision"] != performance_adapter.adapter_digest():
+                raise ValueError("performance_adapter_mismatch")
+            performance_adapter.check_environment(params)
+        except (ValueError, ImportError, OSError, subprocess.SubprocessError):
+            reasons.append("performance_environment_unavailable")
+        return {
+            "task_id": task["task_id"], "dataset": task["dataset"],
+            "tool_root": params["ais_bench_root"], "data_path": params.get("corpus_path", params["tokenizer_path"]),
+            "tool_revision": revision, "expected_tool_revision": task["tool"]["revision"],
+            "blocking_reasons": reasons, "warnings": [],
+        }
     data_path = (
         runtime.get("datasets_dir")
         if config["subcommand"] == "llm_accuracy"
@@ -120,8 +142,6 @@ def inspect_dataset(task, *, networks, validated):
         reasons.append("dataset_path_missing")
     elif not Path(data_path).is_dir():
         reasons.append("dataset_path_unavailable")
-    if task["dataset"] in {"DeepSWE", "AutomationBench"} and not networks:
-        reasons.append("harbor_network_unavailable")
     try:
         tool_revision = verify_tool(task)
     except (KeyError, OSError, ValueError, subprocess.SubprocessError):
@@ -135,6 +155,8 @@ def inspect_dataset(task, *, networks, validated):
                 reasons.append("task_selection_preflight_failed")
         except (OSError, ValueError, subprocess.SubprocessError):
             reasons.append("tool_environment_preflight_unavailable")
+    if task["dataset"] in {"DeepSWE", "AutomationBench"} and not networks:
+        reasons.append("harbor_network_unavailable")
     return {
         "task_id": task["task_id"],
         "dataset": task["dataset"],
@@ -188,13 +210,14 @@ def preflight(tasks=None):
                 // 1024**2,
             ),
         )
-    validated = set(os.environ.get("AE_VALIDATED_DATASETS", "").split(","))
+    validated = {name.strip() for name in os.environ.get("AE_VALIDATED_DATASETS", "").split(",")}
     checks = (
         [inspect_dataset(task, networks=networks, validated=validated) for task in tasks]
         if tasks is not None
         else []
     )
     if tasks is None:
+        # A probe without a task selection reports only previously declared capabilities.
         supported = [
             d
             for d in ["GPQA", "MMMU-Pro", "DeepSWE"]
@@ -203,13 +226,12 @@ def preflight(tasks=None):
     else:
         supported = sorted({c["dataset"] for c in checks if not c["blocking_reasons"]})
     blockers = []
+    if tasks and all(t["compilation"]["config"]["params"].get("kind") in {"agentx", "inference"} for t in tasks):
+        adaptor_ready = all(t["compilation"]["adaptor_revision"] == performance_adapter.adapter_digest() for t in tasks)
+        versions["adaptor"] = {"actual": performance_adapter.adapter_digest(), "expected": tasks[0]["compilation"]["adaptor_revision"]}
     if not adaptor_ready:
         blockers.append("adaptor_revision_mismatch")
-    selection_ready = (
-        bool(supported)
-        if tasks is None
-        else len(supported) == len({task["dataset"] for task in tasks})
-    )
+    selection_ready = bool(supported) and all(not check["blocking_reasons"] for check in checks)
     if not selection_ready:
         blockers.append("no_supported_datasets")
     return {
@@ -277,7 +299,10 @@ def validate_spec(spec):
             "credential",
         }.issubset(spec):
             raise ValueError("Unknown adaptor fields")
-        if spec["compilation"]["adaptor_revision"] != ADAPTOR_REVISION:
+        config = spec["compilation"].get("config", {})
+        perf = config.get("subcommand") in {"agentx", "llm_perf"} and config.get("params", {}).get("kind") in {"agentx", "inference"}
+        revision = performance_adapter.adapter_digest() if perf else ADAPTOR_REVISION
+        if spec["compilation"]["adaptor_revision"] != revision:
             raise ValueError("Unpinned adaptor")
         if "skip_aisbench_warmup" in spec and (
             spec["skip_aisbench_warmup"] is not True
@@ -527,9 +552,54 @@ def scope_harbor_compose(folder, environment):
     environment["PATH"] = str(wrapper_dir) + os.pathsep + environment.get("PATH", "")
 
 
+def capture_tool_log(proc, log, credential, publish):
+    """Drain combined tool output while publishing progress on a two-second cadence."""
+    import selectors
+    import time
+
+    pending = b""
+    key = credential.encode()
+    due = time.monotonic()
+    with proc.stdout as stream, selectors.DefaultSelector() as selector:
+        selector.register(stream, selectors.EVENT_READ)
+        while True:
+            now = time.monotonic()
+            if now >= due:
+                publish()
+                due = now + 2
+            if not selector.select(max(0, due - now)):
+                if proc.poll() is not None:
+                    break
+                continue
+            chunk = os.read(stream.fileno(), 65536)
+            if not chunk:
+                break
+            data = pending + chunk
+            pieces = data.split(key) if key else [data]
+            if len(pieces) > 1:
+                log.write(b"[REDACTED]".join(pieces[:-1]) + b"[REDACTED]")
+            tail = pieces[-1]
+            # Keep only a suffix which could complete the credential on the next read.
+            i = tail.find(key[:1], max(0, len(tail) - len(key) + 1)) if key else -1
+            while i >= 0 and not key.startswith(tail[i:]):
+                i = tail.find(key[:1], i + 1)
+            cut = len(tail) if i < 0 else i
+            log.write(tail[:cut])
+            log.flush()
+            pending = tail[cut:]
+        if pending:
+            log.write(b"[REDACTED]")
+        while proc.poll() is None:
+            publish()
+            time.sleep(2)
+
+
 def execute(folder, spec):
     validate_spec(spec)
-    secret_path = folder / "credential.json"
+    private = folder
+    if folder.parent == Path("/var/lib/autoeval/artifacts"):
+        private = Path("/tmp") / ("autoeval-private-" + folder.name)
+    secret_path = private / "credential.json"
     key = json.loads(secret_path.read_text())["value"]
     try:
         if spec["kind"] == "planner_plan":
@@ -608,6 +678,10 @@ def execute(folder, spec):
                 }
             finally:
                 probe_module._run_level = original_level
+        config = spec["compilation"]["config"]
+        if config["subcommand"] in {"agentx", "llm_perf"} and config["params"].get("kind") in {"agentx", "inference"}:
+            verify_tool(spec)
+            return performance_adapter.execute(config["params"], folder, key)
         if installed_revision("autoeval-benchmark-adaptor") != ADAPTOR_REVISION:
             raise ValueError("Adaptor revision mismatch")
         verify_tool(spec)
@@ -619,7 +693,7 @@ def execute(folder, spec):
         output = folder / "output"
         output.mkdir(exist_ok=True)
         config["params"]["work_dir"] = str(output)
-        config_path = folder / "private-config.json"
+        config_path = private / "private-config.json"
         config_path.write_text(json.dumps(config))
         config_path.chmod(0o600)
         command = ["autoeval-adaptor", "--config", str(config_path)]
@@ -699,7 +773,11 @@ def execute(folder, spec):
 
         start = datetime.now(UTC).timestamp()
         with (folder / "tool.log").open("wb") as log:
-            proc = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, env=environment)
+            retained = private != folder
+            proc = subprocess.Popen(
+                command, stdout=subprocess.PIPE if retained else log,
+                stderr=subprocess.STDOUT, env=environment,
+            )
 
             def publish(final=False):
                 value = dict(progress, observed_at=datetime.now(UTC).isoformat())
@@ -722,12 +800,17 @@ def execute(folder, spec):
                 temporary.write_text(json.dumps(value))
                 temporary.replace(folder / "progress.json")
 
-            while proc.poll() is None:
-                publish()
-                time.sleep(2)
+            if retained:
+                capture_tool_log(proc, log, key, publish)
+            else:
+                while proc.poll() is None:
+                    publish()
+                    time.sleep(2)
             completed = subprocess.CompletedProcess(command, proc.returncode)
             publish(final=True)
-        diagnostic = (folder / "tool.log").read_bytes()[-12000:].decode("utf-8", errors="replace")
+        with (folder / "tool.log").open("rb") as stream:
+            stream.seek(max(0, stream.seek(0, os.SEEK_END) - 12000))
+            diagnostic = stream.read(12000).decode("utf-8", errors="replace")
         if key:
             diagnostic = diagnostic.replace(key, "[REDACTED]")
         result, size = read_unified_result(output, key)
@@ -753,7 +836,7 @@ def execute(folder, spec):
         }
     finally:
         secret_path.unlink(missing_ok=True)
-        (folder / "private-config.json").unlink(missing_ok=True)
+        (private / "private-config.json").unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

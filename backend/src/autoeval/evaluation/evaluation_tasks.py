@@ -28,7 +28,7 @@ from autoeval.infrastructure.responses import (
     TaskListEnvelope,
     envelope,
 )
-from autoeval.planning.schemas import PlanInput, ResourceRef, TaskInput
+from autoeval.planning.schemas import PerformanceTask, PlanInput, ResourceRef, TaskInput
 
 
 class TaskSelection(TaskInput):
@@ -51,7 +51,7 @@ class SubmitTask(ResourceRef):
 
     target_id: uuid.UUID
     tasks: list[TaskSelection] = Field(min_length=1, max_length=4)
-    dataset_concurrency: int = Field(default=1, ge=1)
+    dataset_concurrency: int = Field(default=1, ge=1, le=4)
 
     @model_validator(mode="after")
     def unique_selection(self):
@@ -85,6 +85,7 @@ class TaskListItem(BaseModel):
 
 router = APIRouter(prefix="/api/autoeval/v1/evaluation-tasks", tags=["evaluation tasks"])
 SCOPES = ["local-operator:evaluation", "local-operator:orchestration"]
+READ_SCOPES = [*SCOPES, "local-operator:unified-fixture"]
 
 
 class FollowUpConfirmation(BaseModel):
@@ -242,10 +243,10 @@ async def retry_case(
 
 @router.post("", status_code=202, response_model=Envelope[SubmittedRun])
 async def submit(
-    body: SubmitTask, request: Request, idempotency_key: str = Header(min_length=1, max_length=256)
+    body: SubmitTask | PerformanceTask, request: Request, idempotency_key: str = Header(min_length=1, max_length=256)
 ):
     # No Planner job/plan ID is accepted. Final parameters are validated and frozen normally.
-    inputs = PlanInput(**body.model_dump(), recommend=False)
+    inputs = body if isinstance(body, PerformanceTask) else PlanInput(**body.model_dump(), recommend=False)
     data = await submit_planned_run(
         request.app.state.sessions,
         request.app.state.settings,
@@ -269,7 +270,7 @@ async def list_tasks(
     if offset < 0 or not 1 <= limit <= 200:
         raise HTTPException(422, "Invalid pagination")
     body = RunSnapshot.canonical_body
-    conditions = [EvaluationRun.trigger_scope.in_(SCOPES)]
+    conditions = [EvaluationRun.trigger_scope.in_(READ_SCOPES if include_test else SCOPES)]
     if not include_test:
         conditions += [
             func.coalesce(body["execution_origin"].astext, "unverified") == "real",
@@ -345,6 +346,7 @@ async def list_tasks(
                         "resource_kind": s.canonical_body.get("resource_kind"),
                         "follow_up_enabled": (
                             s.schema_version == "planned-run.v1"
+                            and not s.canonical_body.get("inputs", {}).get("performance")
                             and bool(s.canonical_body.get("inputs", {}).get("tasks"))
                             and getattr(
                                 request.app.state.settings, "evaluation_follow_up_enabled", False
@@ -370,7 +372,7 @@ async def task_detail(run_id: uuid.UUID, request: Request):
     sessions = request.app.state.sessions
     async with sessions() as session:
         row = await session.get(EvaluationRun, run_id)
-        if not row or row.trigger_scope not in SCOPES:
+        if not row or row.trigger_scope not in READ_SCOPES:
             raise HTTPException(404, "Evaluation task not found")
         scope = row.trigger_scope
     data = await evaluation_run_detail(sessions, request.app.state.settings, run_id)
@@ -385,7 +387,10 @@ async def task_detail(run_id: uuid.UUID, request: Request):
         async with sessions() as session:
             frozen = await session.scalar(select(RunSnapshot).where(RunSnapshot.run_id == run_id))
             tasks = frozen.canonical_body.get("inputs", {}).get("tasks", [])
-            await project_follow_up_detail(session, run_id, data, tasks)
+            if frozen.canonical_body.get("task_type") == "performance":
+                data["follow_up_enabled"] = False
+            else:
+                await project_follow_up_detail(session, run_id, data, tasks)
             data["snapshot"]["dataset_configurations"] = [
                 {
                     **{
@@ -564,7 +569,7 @@ async def task_report(run_id: uuid.UUID, request: Request):
     sessions = request.app.state.sessions
     async with sessions() as session:
         row = await session.get(EvaluationRun, run_id)
-        if not row or row.trigger_scope not in SCOPES:
+        if not row or row.trigger_scope not in READ_SCOPES:
             raise HTTPException(404, "Evaluation task not found")
         formal = await session.scalar(
             select(EvaluationReport).where(

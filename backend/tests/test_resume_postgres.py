@@ -661,6 +661,17 @@ async def test_cancelled_scope_and_conflicting_confirmations(
                     assert result["case_index"][1:] == original_index[1:]
                     assert result["case_index"][0] != original_index[0]
                     assert latest["datasets"][1] == original_report["datasets"][1]
+                    prioritized = await client.get(
+                        f"/api/autoeval/v1/runs/{run_id}/case-executions",
+                        params={"dataset_key": "GPQA", "prioritize_retries": "true", "limit": 1},
+                    )
+                    assert prioritized.status_code == 200
+                    first = prioritized.json()["data"][0]
+                    if later_retry_failed or interrupted:
+                        assert first["state"] == "failed"
+                    else:
+                        assert first["tool_metadata"]["score"] == 0
+
                 assert list(submitted.values())[-2:] == [{"0": "q0"}, {"0": "q0"}]
                 replay = await client.post(
                     f"{base}/case-retry", json=body, headers={"Idempotency-Key": "first"}

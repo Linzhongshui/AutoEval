@@ -112,8 +112,8 @@ def test_unresolved_probe_is_restored_and_blocks_duplicate_start(probe_state):
             data = {}
         elif path == "/target-bindings":
             data = [{"id": "target", "remote_model": "TEST", "base_url": "https://fixture.invalid"}]
-        elif path == "/resources":
-            data = [{"id": "resource", "binding_key": "TEST resource"}]
+        elif path == "/ssh-resources":
+            data = [{"id": "resource", "binding_key": "TEST resource", "host": "fixture.invalid", "port": 22}]
         elif path == "/planning/options":
             data = {"compilations": [], "manifests": [], "curves": []}
         elif path in {"/planning/active-probe", "/planning/probes/old-probe"}:
@@ -138,8 +138,11 @@ def test_unresolved_probe_is_restored_and_blocks_duplicate_start(probe_state):
         context.route("**/api/autoeval/v1/**", api)
         page = context.new_page()
         page.goto(os.environ["AE_BROWSER_URL"].rstrip("/") + "/#console")
-        page.get_by_label("规划模型服务", exact=True).select_option("target")
-        page.get_by_label("规划执行资源", exact=True).select_option("resource")
+        page.get_by_label("规划模型服务", exact=True).click()
+        page.get_by_text("TEST", exact=True).click()
+        page.get_by_label("规划执行资源", exact=True).click()
+        page.get_by_role("checkbox", name="TEST resource").check()
+        page.get_by_role("button", name="完成选择").click()
         page.locator(".planning-throughput > summary").click()
         page.get_by_text("探测任务：old-probe", exact=True).wait_for()
         assert page.get_by_role("button", name="启动吞吐探测", exact=True).is_disabled()

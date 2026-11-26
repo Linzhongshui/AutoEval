@@ -42,6 +42,19 @@ def test_harbor_flattened_mapping_and_final_state():
     assert not freshness(row, datetime.now(UTC) + timedelta(days=1))["stale"]
 
 
+def test_harbor_directory_scan_remains_fresh_between_ssh_polls():
+    now = datetime.now(UTC)
+    stamp = now - timedelta(seconds=12)
+    row = normalize(
+        {"task_name": "case", "finish_count": 0, "total_count": 5},
+        {"task_name": "case"},
+        "harbor_result_files",
+        stamp.isoformat(),
+    )
+    assert row["finish_count"] == 0 and not row["stale"]
+    assert freshness(row, stamp + timedelta(seconds=46))["stale"]
+
+
 def test_foreign_task_is_rejected():
     with pytest.raises(ValueError):
         normalize(

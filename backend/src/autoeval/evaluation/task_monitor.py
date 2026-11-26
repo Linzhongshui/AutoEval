@@ -101,6 +101,12 @@ class MonitorSnapshot(Record, Base):
     __table_args__ = (UniqueConstraint("binding_id", "sha256"),)
 
 
+def observation_expired(source, stamp, now):
+    # SSH status and Harbor file scans together can exceed ten seconds per cycle.
+    max_age = 45 if source == "harbor_result_files" else 10
+    return (now - stamp).total_seconds() > max_age
+
+
 def normalize(task, identity, source, observed_at, *, snapshot_kind="live"):
     stamp = datetime.fromisoformat(observed_at)
     if stamp.utcoffset() is None:
@@ -111,6 +117,7 @@ def normalize(task, identity, source, observed_at, *, snapshot_kind="live"):
         "harbor_monitor",
         "aisbench_native_predictions",
         "executor_lifecycle",
+        "aisbench_performance",
         "harbor_result_files",
     } or snapshot_kind not in {
         "live",
@@ -166,7 +173,7 @@ def normalize(task, identity, source, observed_at, *, snapshot_kind="live"):
         else task.get("start_time"),
         "time_cost": task.get("time_cost"),
         "observed_at": observed_at,
-        "stale": snapshot_kind != "final" and (datetime.now(UTC) - stamp).total_seconds() > 10,
+        "stale": snapshot_kind != "final" and observation_expired(source, stamp, datetime.now(UTC)),
         "snapshot_kind": snapshot_kind,
         "collection_status": "available",
         "harbor": harbor if source == "harbor_monitor" else None,
@@ -225,7 +232,7 @@ def freshness(projection, now=None):
     result["stale"] = (
         result.get("snapshot_kind") != "final"
         and result.get("collection_status") != "waiting_tool"
-        and ((now or datetime.now(UTC)) - stamp).total_seconds() > 10
+        and observation_expired(result.get("source"), stamp, now or datetime.now(UTC))
     )
     return result
 

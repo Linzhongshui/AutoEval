@@ -13,6 +13,14 @@ def test_task_and_report_details(live_page):
     if not rows:
         pytest.skip("No archived local reports; no evaluation is created by this check")
     report = rows[0]
+    if report.get("task_type") == "performance":
+        page.goto(url + "/#run/" + report["run_id"])
+        page.get_by_role("link", name="查看性能指标和原生 CSV").click()
+        expect(page).to_have_url(url + "/#report/" + report["id"])
+        page.get_by_role("link", name="查看测评任务").click()
+        expect(page).to_have_url(url + "/#run/" + report["run_id"])
+        expect(page.get_by_role("heading", name="性能负载与执行记录")).to_be_visible()
+        return
     page.goto(url + "/#run/" + report["run_id"])
     expect(page.get_by_role("heading", name="任务总览", exact=True)).to_be_visible()
     expect(page.locator("body")).not_to_contain_text("Invalid Date")

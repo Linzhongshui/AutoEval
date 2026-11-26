@@ -402,6 +402,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/autoeval/v1/planning/compilations/{compilation_id}/copy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Copy Compilation */
+        post: operations["copy_compilation_api_autoeval_v1_planning_compilations__compilation_id__copy_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/autoeval/v1/planning/compilations/{compilation_id}/rename": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rename Compilation */
+        post: operations["rename_compilation_api_autoeval_v1_planning_compilations__compilation_id__rename_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/autoeval/v1/planning/options": {
         parameters: {
             query?: never;
@@ -889,6 +923,40 @@ export interface paths {
         };
         /** Task Budget */
         get: operations["task_budget_api_autoeval_v1_evaluation_tasks__run_id__budget_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/autoeval/v1/evaluation-tasks/{run_id}/executor-files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Attempts */
+        get: operations["attempts_api_autoeval_v1_evaluation_tasks__run_id__executor_files_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/autoeval/v1/evaluation-tasks/{run_id}/executor-files/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Files */
+        get: operations["files_api_autoeval_v1_evaluation_tasks__run_id__executor_files__job_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1606,6 +1674,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/autoeval/v1/reports/{report_id}/performance-csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Performance Csv */
+        get: operations["performance_csv_api_autoeval_v1_reports__report_id__performance_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/autoeval/v1/reports/{report_id}/review": {
         parameters: {
             query?: never;
@@ -1754,6 +1839,31 @@ export interface components {
             /** Accepted */
             accepted: boolean;
         };
+        /** AgentXPerformance */
+        AgentXPerformance: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "agentx";
+            /**
+             * Variant
+             * @enum {string}
+             */
+            variant: "256k" | "full";
+            /**
+             * Run Mode
+             * @default smoke
+             * @enum {string}
+             */
+            run_mode: "smoke" | "benchmark";
+            /** Duration */
+            duration: number;
+            /** Concurrency */
+            concurrency: number | number[];
+            /** Trace Limit */
+            trace_limit?: number | null;
+        };
         /** AppliedPlan */
         AppliedPlan: {
             /** Execution Plan Id */
@@ -1898,8 +2008,33 @@ export interface components {
              */
             acknowledge_unknown: true;
         };
+        /** CompilationCopy */
+        CompilationCopy: {
+            /** Name */
+            name: string;
+            /**
+             * Execution
+             * @enum {string}
+             */
+            execution: "local" | "docker";
+            /** Tool Root */
+            tool_root: string;
+            /** Directory */
+            directory: string;
+            /** Concurrency */
+            concurrency: number;
+        };
+        /** CompilationName */
+        CompilationName: {
+            /** Name */
+            name: string;
+        };
         /** CompilationOption */
         CompilationOption: {
+            /** Tool Revisions */
+            tool_revisions?: string[];
+            /** Display Name */
+            display_name?: string | null;
             /** Id */
             id: string;
             /** Dataset */
@@ -1963,6 +2098,8 @@ export interface components {
             task_path?: string | null;
             /** Tool Root */
             tool_root?: string | null;
+            /** Resource Ids */
+            resource_ids?: string[];
         };
         /** ConfigListItem */
         ConfigListItem: {
@@ -2293,6 +2430,13 @@ export interface components {
             /** Request Id */
             request_id: string;
         };
+        /** Envelope[Union[ExecutorDirectory, ExecutorPreview, ExecutorFileStatus]] */
+        Envelope_Union_ExecutorDirectory__ExecutorPreview__ExecutorFileStatus__: {
+            /** Data */
+            data: components["schemas"]["ExecutorDirectory"] | components["schemas"]["ExecutorPreview"] | components["schemas"]["ExecutorFileStatus"];
+            /** Request Id */
+            request_id: string;
+        };
         /** Envelope[Union[JobStatus, NoneType]] */
         Envelope_Union_JobStatus__NoneType__: {
             data: components["schemas"]["JobStatus"] | null;
@@ -2305,6 +2449,13 @@ export interface components {
             data: {
                 [key: string]: unknown;
             };
+            /** Request Id */
+            request_id: string;
+        };
+        /** Envelope[list[ExecutorAttempt]] */
+        Envelope_list_ExecutorAttempt__: {
+            /** Data */
+            data: components["schemas"]["ExecutorAttempt"][];
             /** Request Id */
             request_id: string;
         };
@@ -2323,6 +2474,74 @@ export interface components {
             blocking_reasons: string[];
             /** Gate Status */
             gate_status: string;
+        };
+        /** ExecutorAttempt */
+        ExecutorAttempt: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Dataset */
+            dataset: string;
+            /** Round */
+            round: number;
+        };
+        /** ExecutorDirectory */
+        ExecutorDirectory: {
+            /**
+             * State
+             * @constant
+             */
+            state: "directory";
+            /** Archived */
+            archived?: boolean | null;
+            /** Entries */
+            entries: components["schemas"]["ExecutorEntry"][];
+            /** More */
+            more: boolean;
+        };
+        /** ExecutorEntry */
+        ExecutorEntry: {
+            /**
+             * Metadata Only
+             * @default false
+             */
+            metadata_only: boolean;
+            /** Name */
+            name: string;
+            /** Directory */
+            directory: boolean;
+            /** Size */
+            size: number;
+            /** Mtime */
+            mtime: number;
+        };
+        /** ExecutorFileStatus */
+        ExecutorFileStatus: {
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "binary" | "pending" | "removed" | "missing_file" | "unverified" | "unavailable" | "wrong_storage" | "protected";
+            /** Size */
+            size?: number | null;
+        };
+        /** ExecutorPreview */
+        ExecutorPreview: {
+            /**
+             * State
+             * @constant
+             */
+            state: "text";
+            /** Content */
+            content: string;
+            /** Start */
+            start: number;
+            /** End */
+            end: number;
+            /** Size */
+            size: number;
         };
         /** ExplorationSubmitted */
         ExplorationSubmitted: {
@@ -2430,6 +2649,22 @@ export interface components {
             /** Id */
             id: string;
         };
+        /** InferencePerformance */
+        InferencePerformance: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "inference";
+            /** Input Tokens */
+            input_tokens: number;
+            /** Max Output Tokens */
+            max_output_tokens: number;
+            /** Concurrency */
+            concurrency: number;
+            /** Requests */
+            requests: number;
+        };
         /** JobAccepted */
         JobAccepted: {
             /** Id */
@@ -2532,6 +2767,11 @@ export interface components {
             /** Dataset */
             dataset: string;
         };
+        /** ModelConnectionTestInput */
+        ModelConnectionTestInput: {
+            /** Ssh Resource Id */
+            ssh_resource_id?: string | null;
+        };
         /** ModelCreate */
         ModelCreate: {
             /** Model Id */
@@ -2591,15 +2831,6 @@ export interface components {
             /** Request Id */
             request_id: string;
         };
-        /** PageEnvelope[ReportView] */
-        PageEnvelope_ReportView_: {
-            /** Data */
-            data: components["schemas"]["ReportView"][];
-            /** Next Offset */
-            next_offset: number | null;
-            /** Request Id */
-            request_id: string;
-        };
         /** PageEnvelope[RunListItem] */
         PageEnvelope_RunListItem_: {
             /** Data */
@@ -2625,6 +2856,31 @@ export interface components {
             adapter_input?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /** PerformanceTask */
+        PerformanceTask: {
+            /**
+             * Resource Id
+             * Format: uuid
+             */
+            resource_id: string;
+            /**
+             * Resource Kind
+             * @constant
+             */
+            resource_kind: "customer_ssh";
+            /**
+             * Target Id
+             * Format: uuid
+             */
+            target_id: string;
+            /** Performance */
+            performance: components["schemas"]["InferencePerformance"] | components["schemas"]["AgentXPerformance"];
+            /**
+             * Ignore Budget
+             * @default false
+             */
+            ignore_budget: boolean;
         };
         /** PlanInput */
         PlanInput: {
@@ -2783,6 +3039,8 @@ export interface components {
             /** Lite Manifest Id */
             lite_manifest_id?: string | null;
             tool: components["schemas"]["ToolContract"];
+            /** Compilation Id */
+            compilation_id?: string | null;
         };
         /** RegisterExecutor */
         RegisterExecutor: {
@@ -2791,8 +3049,32 @@ export interface components {
             /** Container Name */
             container_name: string;
         };
+        /** ReportFilters */
+        ReportFilters: {
+            /** Models */
+            models: string[];
+            /** Analysis Statuses */
+            analysis_statuses: string[];
+        };
+        /** ReportPage */
+        ReportPage: {
+            /** Data */
+            data: components["schemas"]["ReportView"][];
+            /** Next Offset */
+            next_offset: number | null;
+            /** Total */
+            total: number;
+            /** Request Id */
+            request_id: string;
+            filters: components["schemas"]["ReportFilters"];
+        };
         /** ReportView */
         ReportView: {
+            /**
+             * Task Type
+             * @enum {string}
+             */
+            task_type: "accuracy" | "performance" | "other";
             /** Dataset Concurrency */
             dataset_concurrency?: number | null;
             /** Dataset Results */
@@ -2928,6 +3210,8 @@ export interface components {
         };
         /** ServiceUpdate */
         ServiceUpdate: {
+            /** Service Kind */
+            service_kind?: ("local" | "official") | null;
             /** Service Name */
             service_name: string;
             /**
@@ -3029,6 +3313,8 @@ export interface components {
              * Format: uuid
              */
             model_version_id: string;
+            /** Service Kind */
+            service_kind?: ("local" | "official") | null;
             /** Base Url */
             base_url: string;
             /** Remote Model */
@@ -3939,6 +4225,76 @@ export interface operations {
             };
         };
     };
+    copy_compilation_api_autoeval_v1_planning_compilations__compilation_id__copy_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                compilation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompilationCopy"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_compilation_api_autoeval_v1_planning_compilations__compilation_id__rename_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                compilation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompilationName"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     options_api_autoeval_v1_planning_options_get: {
         parameters: {
             query?: {
@@ -4014,7 +4370,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PlanInput"];
+                "application/json": components["schemas"]["PlanInput"] | components["schemas"]["PerformanceTask"];
             };
         };
         responses: {
@@ -4751,7 +5107,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SubmitTask"];
+                "application/json": components["schemas"]["SubmitTask"] | components["schemas"]["PerformanceTask"];
             };
         };
         responses: {
@@ -4961,6 +5317,73 @@ export interface operations {
             };
         };
     };
+    attempts_api_autoeval_v1_evaluation_tasks__run_id__executor_files_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_list_ExecutorAttempt__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    files_api_autoeval_v1_evaluation_tasks__run_id__executor_files__job_id__get: {
+        parameters: {
+            query?: {
+                view?: "directory" | "outputs" | "archive" | "archive-directory";
+                path?: string;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_Union_ExecutorDirectory__ExecutorPreview__ExecutorFileStatus__"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     execution_spec_api_autoeval_v1_test_configs__config_id__execution_spec_get: {
         parameters: {
             query?: never;
@@ -5065,6 +5488,7 @@ export interface operations {
                 dataset_key?: string | null;
                 sample_id?: string | null;
                 state?: string | null;
+                prioritize_retries?: boolean;
                 offset?: number;
                 limit?: number;
                 evidence_version?: "current" | "original";
@@ -5168,6 +5592,7 @@ export interface operations {
                 limit?: number;
                 sample_id?: string | null;
                 state?: string | null;
+                prioritize_retries?: boolean;
                 dataset_key?: string | null;
             };
             header?: never;
@@ -5732,7 +6157,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ModelConnectionTestInput"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -6508,7 +6937,11 @@ export interface operations {
                 offset?: number;
                 limit?: number;
                 summary_only?: boolean;
+                model?: string | null;
+                analysis_status?: string | null;
+                query?: string | null;
                 review_status?: string | null;
+                task_type?: ("accuracy" | "performance" | "other") | null;
             };
             header?: never;
             path?: never;
@@ -6522,7 +6955,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PageEnvelope_ReportView_"];
+                    "application/json": components["schemas"]["ReportPage"];
                 };
             };
             /** @description Validation Error */
@@ -6554,6 +6987,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_ReportView_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    performance_csv_api_autoeval_v1_reports__report_id__performance_csv_get: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path: {
+                report_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

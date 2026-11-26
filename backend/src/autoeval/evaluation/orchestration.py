@@ -6,6 +6,7 @@ keeps Temporal concerns in the activity wrapper at the bottom of this file.
 
 import asyncio
 import hashlib
+import logging
 import uuid
 from contextlib import suppress
 from datetime import UTC, datetime
@@ -174,6 +175,9 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None, *, round_i
                 if item.get("assigned_resource_id")
                 else adapter
             )
+            storage = resource_for_task(frozen["resource"], child.task_id).get("debug_storage")
+            if storage:
+                adapters[child.id].debug_storage = storage
         target = await session.get(TargetBinding, inputs["target_id"])
         secret = FileSecretStore(settings.secret_store_path).get(target.credential_ref)
     while True:
@@ -277,8 +281,11 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None, *, round_i
 
                                 await publish(sessions, settings, run_id, child.id, progress)
                                 await update_child(sessions, child, summary={"progress": progress})
-                        except (OSError, ValueError, RuntimeError):
-                            pass  # Observation failure never resubmits the model task.
+                        except (OSError, ValueError, RuntimeError) as exc:
+                            logging.getLogger(__name__).warning(
+                                "Progress observation failed run=%s child=%s error_type=%s",
+                                run_id, child.id, type(exc).__name__,
+                            )
                 continue
             from autoeval.planning.planning_observations import publish_lifecycle
 
@@ -288,8 +295,11 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None, *, round_i
                     from autoeval.planning.planning_observations import publish
 
                     await publish(sessions, settings, run_id, child.id, await final_reader(job))
-                except (OSError, ValueError, RuntimeError):
-                    pass
+                except (OSError, ValueError, RuntimeError) as exc:
+                    logging.getLogger(__name__).warning(
+                        "Final progress observation failed run=%s child=%s error_type=%s",
+                        run_id, child.id, type(exc).__name__,
+                    )
             await publish_lifecycle(
                 sessions, settings, run_id, child, observation.state, final=True
             )
@@ -576,6 +586,14 @@ async def archive_terminal_child(
     round_id = getattr(child, "round_id", None)
     result = await adapter.collect(job)
     collected = result.get("result") or {}
+    config = child.payload.get("compilation", {}).get("config", {})
+    if config.get("subcommand") in {"agentx", "llm_perf"} and config.get("params", {}).get("kind") in {"agentx", "inference"}:
+        from autoeval.reporting.performance import archive_performance
+
+        return await keep_heartbeat(
+            heartbeat,
+            archive_performance(settings, adapter, job, child, run_id, collected, state, (secret, child_secret)),
+        )
     if state == "succeeded" and collected.get("unified_result") is None:
         raise ValueError("Successful job has no unified result")
     if collected.get("native_files") or collected.get("harbor_native_trials"):
@@ -601,11 +619,6 @@ async def archive_terminal_child(
         elif failures:
             collected["unified_result"] = failures
     if collected.get("unified_result") is not None:
-        from autoeval.planning.planning_observations import publish
-
-        reader = getattr(adapter, "progress", None)
-        if reader:
-            await publish(sessions, settings, run_id, child.id, await reader(job))
         unified = collected["unified_result"]
         async with sessions() as session, session.begin():
             await artifact(
@@ -802,6 +815,36 @@ async def finish(sessions, settings, run_id, frozen, children, cancelled):
                 and (children[0].summary or {}).get("scoring_status") == "succeeded"
                 else "partial",
             )
+        performance = frozen.get("task_type") == "performance"
+        if performance:
+            child = children[0]
+            summary = child.summary or {}
+            task = frozen["inputs"]["tasks"][0]
+            execution = {
+                "resource_id": task["assigned_resource_id"],
+                "aisbench_revision": task["tool"]["revision"],
+                "adapter_sha256": task["compilation"]["adaptor_revision"],
+                "image_id": task["execution_template"]["image_id"],
+                "context_tokens": task["compilation"]["config"]["params"]["context_tokens"],
+                "tokenizer_path": task["compilation"]["config"]["params"]["tokenizer_path"],
+            }
+            result.update(
+                schema_version="performance-report.v1",
+                snapshot_sha256=digest(frozen),
+                validity=summary.get("validity", "partial") if child.state == "succeeded" else "partial",
+                summary={
+                    **summary,
+                    "accuracy": None,
+                    "performance": {
+                        "parse_status": "missing",
+                        "metrics": [], "files": [], "csv_preview": [],
+                        **summary.get("performance", {}),
+                        "config": frozen["inputs"]["performance"],
+                        "execution": execution,
+                        "via_budget_gateway": bool((frozen.get("model_budget") or {}).get("budget_id")),
+                    },
+                },
+            )
         key = f"planned-reports/{run_id}/{digest(result)}.json"
         await asyncio.to_thread(write_manifest, settings, key, canonical_manifest(result))
         session.add(
@@ -809,7 +852,7 @@ async def finish(sessions, settings, run_id, frozen, children, cancelled):
                 kind="run_report", sha256=digest(result), object_key=key, payload=result
             )
         )
-        if single_gpqa:
+        if single_gpqa or performance:
             session.add(
                 EvaluationReport(
                     run_id=run_id,
@@ -829,7 +872,7 @@ async def finish(sessions, settings, run_id, frozen, children, cancelled):
             else "failed"
         )
         await advance_run(session, run, state, {"report_object_key": key})
-        if not single_gpqa:
+        if not single_gpqa and not performance:
             await session.flush()
             from autoeval.reporting.task_reports import publish_task_report
 

@@ -1737,6 +1737,15 @@ textarea { font: inherit; }
 .planning-card > label > input[type="number"] { max-width: 160px; }
 .planning-summary { position: sticky; top: 20px; max-height: calc(100vh - 40px); overflow-y: auto; }
 .planning-summary > h2 { margin: 0; }
+.planning-summary > .primary { font-weight: 600; }
+.planning-summary > .primary:disabled {
+  background: #f0f1f5;
+  border-color: var(--border);
+  color: #596278;
+  opacity: 1;
+  box-shadow: none;
+  text-decoration: none;
+}
 .planning-checklist { margin: 0; display: grid; gap: 14px; }
 .planning-checklist > div { display: grid; grid-template-columns: 80px minmax(0, 1fr); gap: 12px; }
 .planning-checklist dt { color: #606982; }
@@ -1894,8 +1903,10 @@ textarea { font: inherit; }
 .preflight-details dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 12px; }
 .preflight-details dt, .planning-execution-note { color: #606982; }
 .preflight-details dd, .planning-execution-note p { margin: 0; }
-.planning-execution-note { font-size: 13px; line-height: 1.6; }
-.planning-execution-note summary { width: fit-content; color: #4930d8; cursor: pointer; }
+.planning-execution-note { display: grid; gap: 6px; font-size: 14px; line-height: 1.6; }
+.planning-execution-note summary { width: fit-content; color: var(--primary); font-weight: 600; cursor: pointer; }
+.planning-execution-note summary:hover { text-decoration: underline; }
+.planning-execution-note details[open] > p { margin-top: 6px; }
 .planning-blocker .link { display: block; margin-top: 4px; }
 .preflight-status { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 6px; font-size: 12px; line-height: 1.5; font-weight: 550; white-space: nowrap; }
 .preflight-status.checking { color: #5138dc; background: #eeeaff; }

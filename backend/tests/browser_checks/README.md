@@ -23,6 +23,7 @@ uv run pytest -q tests/browser_checks
 
 | Check | Data | Coverage |
 | --- | --- | --- |
+| 外观设置 | 模拟读取 | 三种菜单布局、窄屏回退、自定义色对比度、键盘操作、刷新恢复和存储异常。单独运行 `tests/browser_checks/test_appearance.py` |
 | Preflight | Mock JavaScript fixture | Failed resource blocks submission, explicit confirmation, changed selection invalidates |
 | Report charts | Mock JavaScript fixture | Matched baseline, genuine zero, missing baseline, partial coverage, unavailable evidence |
 | Report analysis | Mock JavaScript fixture | Independent start route, all Demo state labels, and no start action for non-real reports |

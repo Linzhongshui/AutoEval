@@ -15,7 +15,11 @@ export function ManagementDrawer({ title, children, onDismiss, open: controlledO
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = previous; };
   }, [open]);
-  const close = () => { setOpen(false); onDismiss?.(); };
+  const close = () => {
+    dialog.current?.close();
+    setOpen(false);
+    onDismiss?.();
+  };
   return <>
     {!hideTrigger && <button type="button" className="link" onClick={() => setOpen(true)}>{title}</button>}
     {open && createPortal(

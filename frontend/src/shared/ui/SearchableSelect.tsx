@@ -1,3 +1,4 @@
+import { ChevronDown } from "lucide-react";
 import { Children, isValidElement, useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type SelectHTMLAttributes } from "react";
 function text(node: ReactNode): string {
   return Children.toArray(node).map((child) => isValidElement<{ children?: ReactNode }>(child) ? text(child.props.children) : String(child)).join("");
@@ -37,7 +38,7 @@ export function SearchableSelect({ children, value, defaultValue, onChange, disa
     setOpen(next);
     if (!next) { setQuery(""); setCount(20); navigating.current = false; }
   }}>
-    <summary aria-disabled={disabled} onClick={(event) => { if (disabled) event.preventDefault(); }}>{label ? text(label.props.children) : "请选择"}<span aria-hidden="true">⌄</span></summary>
+    <summary aria-disabled={disabled} onClick={(event) => { if (disabled) event.preventDefault(); }}><span>{label ? text(label.props.children) : "请选择"}</span><ChevronDown size={16} aria-hidden="true" /></summary>
     {!disabled && <div className="searchable-select-panel"><input ref={search} aria-label={`${props["aria-label"] || "选项"}搜索`} placeholder="输入名称或标识搜索" value={query} onChange={(event) => { setQuery(event.target.value); setCount(20); }} onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); close(); } }} />
       <select {...props} ref={select} value={selected} size={Math.min(8, Math.max(2, filtered.length))} onKeyDown={onSelectKeyDown} onChange={(event) => {
         setLocal(event.target.value); onChange?.(event);

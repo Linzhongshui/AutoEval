@@ -8,6 +8,12 @@
   font-weight: 400;
   line-height: 1.55;
   --primary: #5138ff;
+  --accent: #5138ff;
+  --on-accent: white;
+  --accent-soft: color-mix(in srgb, var(--primary) 9%, white);
+  --accent-hover: color-mix(in srgb, var(--primary) 5%, white);
+  --accent-border: color-mix(in srgb, var(--primary) 35%, white);
+  --data-purple: #5138ff;
   --border: #e0e3ef;
   --muted: #737a94;
 }

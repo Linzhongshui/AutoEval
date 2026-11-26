@@ -13,3 +13,15 @@
 .input-editor > details, .input-detail > details { padding: 10px 2px; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
 .input-editor details label { margin-top: 12px; }
 .input-parameters > .spread { margin-bottom: 14px; }
+
+.ssh-directories { grid-column: 1 / -1; container-type: inline-size; }
+.ssh-directories header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 0 0 8px; }
+.ssh-directories h4, .ssh-directories p { margin: 0; }
+.ssh-directories header span { color: var(--muted); font-size: 12px; }
+.ssh-directory-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 8px 16px; align-items: center; padding: 10px 0; border-top: 1px solid var(--border); }
+.ssh-directory-label label { overflow-wrap: anywhere; font-weight: 600; }
+.ssh-directory-label small { color: var(--muted); }
+.ssh-directory-label .needs-path, .ssh-directories p { color: #805017; }
+.ssh-directory-row input { font-family: ui-monospace, monospace; }
+.ssh-directories p { font-size: 13px; }
+@container (max-width: 420px) { .ssh-directory-row { grid-template-columns: minmax(0,1fr); } }

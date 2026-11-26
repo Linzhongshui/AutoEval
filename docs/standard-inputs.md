@@ -141,3 +141,9 @@ uv run pytest tests/browser_checks/test_browser_standard_inputs.py -q
 
 ## 标准输入列表筛选
 GET /standard-inputs 支持 revision（默认 latest，可传 all 或完整提交号）、source_model、dataset，组合条件在数据库分页前应用。latest 指非测试输入中最近导入记录所属的完整提交号，不按 Tag 名称排序，也不向旧版本回退补齐缺失模型。GET /standard-inputs/filters 返回已导入提交、模型及基准选项。前端切换筛选回到第一页；标准目录聚合调用显式传 revision=all，保留历史兼容。
+
+## SSH 资源与源码目录
+
+在「补全启动参数与模型映射」中选择 SSH 资源后，逐行核对 AISBench 源码目录。标准锁定目录优先，其次使用该资源在相同运行方式和测评方式下唯一的已保存路径。Docker 缺少历史路径时预填 R13 镜像的 `/benchmark`，自定义镜像可手动调整。默认值只用于配置，实际路径仍需在环境预检中验证。
+
+一份快照保存一个源码目录和所选资源 ID。多个资源的目录不同时，请按目录分别保存配置。

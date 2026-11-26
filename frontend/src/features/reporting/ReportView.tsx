@@ -158,6 +158,14 @@ export function ReportView({ id, go }: { id: string; go: (path: string) => void 
   }
 
   const summary = { ...report.summary, accuracy: report.evidence_status === "verified" ? report.summary.accuracy : null };
+  const scopes = report.dataset_results?.length
+    ? report.dataset_results.map(dataset => dataset.summary.subset_scope)
+    : [summary.subset_scope];
+  const scopeLabel = scopes.every(scope => scope === "full") ? "全量"
+    : scopes.every(scope => scope === "lite") ? "Lite"
+    : scopes.every(scope => scope === "full" || scope === "lite") ? "全量与 Lite"
+    : "未知";
+
   const baseline = report.baseline_comparison;
   const comparability = report.dataset_results ? "各数据集分别对照标准库参考成绩，不计算综合分" : report.evidence_status !== "verified" ? "原始证据不可用，无法确认可比性" : baseline.status === "matched" ? "比较条件一致" : baseline.status === "missing" ? "未配置匹配基准" : "清单、工具版本或执行参数不一致";
   const coverage =
@@ -224,7 +232,7 @@ export function ReportView({ id, go }: { id: string; go: (path: string) => void 
           <span>模型 <b>{report.remote_model}</b></span>
           <span>生成时间 <b>{new Date(report.created_at).toLocaleString("zh-CN")}</b></span>
           <span>运行方式 <b>串行 · 探索</b></span>
-          <span>范围 <b>Lite</b></span>
+          <span>范围 <b>{scopeLabel}</b></span>
           <span>发布门禁 <b>不适用</b></span><span>分析状态 <b>{analysisLabels[report.analysis_status] || "待确认"}</b></span>
         </div>
         <div className="report-summary-stats table-wrap">
@@ -241,7 +249,10 @@ export function ReportView({ id, go }: { id: string; go: (path: string) => void 
           </div>
         )}
         <div className="notice">
-          当前清单 {summary.expected_samples} 个样本 / 数据集 {summary.dataset_samples} 个样本；本报告不代表全量成绩。执行完成不代表报告有效，成绩须结合证据完整性判断。
+          当前清单 {summary.expected_samples} 个样本{summary.dataset_samples != null ? ` / 数据集 ${summary.dataset_samples} 个样本` : ""}。
+          {scopeLabel === "Lite" && "本报告不代表全量成绩。"}
+          {scopeLabel === "全量与 Lite" && "Lite 数据集的结果仅覆盖所选清单。"}
+          执行完成不代表报告有效，成绩须结合证据完整性判断。
         </div>
         <div className="report-quick-links">
           <a className="report-quick-link" href={`#run/${report.run_id}`}>
@@ -268,7 +279,7 @@ export function ReportView({ id, go }: { id: string; go: (path: string) => void 
         {report.dataset_results && <ManagementDrawer title="各数据集 Case 与恢复证据"><CaseHistory initialRun={report.run_id} datasets={report.dataset_results.map(d => d.dataset_key)} /></ManagementDrawer>}
         {!report.dataset_results && <button onClick={() => setDatasetOpen(true)}>查看数据集结果与样本</button>}
         {view === "智能分析" && <section className="report-analysis-view">
-          <p className="muted">{report.evidence_status !== "verified" ? "原始证据不可用，当前无法确认有效成绩或生成可信比较结论。" : "本次为所选 Lite 清单的探索结果，不代表全量成绩，不适用正式发布门禁。"}</p>
+          <p className="muted">{report.evidence_status !== "verified" ? "原始证据不可用，当前无法确认有效成绩或生成可信比较结论。" : "分析基于本次测评清单，不适用正式发布门禁。"}</p>
           <AnalysisPanel reportId={report.id} status={report.analysis_status} executionOrigin={report.execution_origin} onStatus={(state) => setReport((current) => current ? { ...current, analysis_status: state } : current)} />
         </section>}
       </section>}
@@ -278,7 +289,7 @@ export function ReportView({ id, go }: { id: string; go: (path: string) => void 
           <div>
             <h2>{report.dataset_key || "GPQA"}</h2>
             <p className="muted">
-              科学问答 · Lite · 有效样本 {summary.successful_samples} / {summary.expected_samples}
+              科学问答 · {scopeLabel} · 有效样本 {summary.successful_samples} / {summary.expected_samples}
             </p>
           </div>
           <span className={`coverage ${coverage}`}>{validityLabels[report.validity]}</span>

@@ -9,7 +9,8 @@ from typing import Literal
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, model_validator
-from sqlalchemy import func, select
+from sqlalchemy import case, cast, func, literal, select
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import SQLAlchemyError
 
 from autoeval.catalog.datasets import canonical_manifest, read_manifest, write_manifest
@@ -151,6 +152,7 @@ async def history(
     dataset_key: str | None = None,
     sample_id: str | None = None,
     state: str | None = None,
+    prioritize_retries: bool = False,
     offset: int = 0,
     limit: int = 50,
     evidence_version: Literal["current", "original"] = "current",
@@ -173,11 +175,25 @@ async def history(
             total = await session.scalar(
                 select(func.count()).select_from(CaseExecutionRecord).where(*filters)
             )
+            priority = (
+                (
+                    case(
+                        (CaseExecutionRecord.state == "failed", 0),
+                        (
+                            CaseExecutionRecord.tool_metadata["score"] == cast(literal("0"), JSONB),
+                            1,
+                        ),
+                        else_=2,
+                    ),
+                )
+                if prioritize_retries
+                else ()
+            )
             rows = (
                 await session.scalars(
                     select(CaseExecutionRecord)
                     .where(*filters)
-                    .order_by(CaseExecutionRecord.created_at, CaseExecutionRecord.id)
+                    .order_by(*priority, CaseExecutionRecord.created_at, CaseExecutionRecord.id)
                     .offset(offset)
                     .limit(limit + 1)
                 )
@@ -296,6 +312,7 @@ async def recovered_cases(
     limit: int = 50,
     sample_id: str | None = None,
     state: str | None = None,
+    prioritize_retries: bool = False,
     dataset_key: str | None = None,
 ):
     from autoeval.evaluation.models import ResultArchiveRevision
@@ -327,6 +344,10 @@ async def recovered_cases(
             and (not dataset_key or c["dataset_key"] == dataset_key)
             and (not state or ("succeeded" if c["status"] == "success" else "failed") == state)
         ]
+        if prioritize_retries:
+            selected.sort(
+                key=lambda c: 0 if c["status"] != "success" else 1 if c["score"] == 0 else 2
+            )
         page_cases = selected[offset : offset + limit]
         originals = list(
             await session.scalars(

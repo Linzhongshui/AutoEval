@@ -209,6 +209,7 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                     payload={
                         "execution_ready": True,
                         "planner_ready": False,
+                        "debug_storage": {"store": "fixture"},
                         "supported_datasets": ["GPQA", "MMMU-Pro"],
                         "cpu_cores": 16,
                         "mem_mb": 65536,
@@ -223,6 +224,7 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
             ) as c:
                 body = submission()
                 body["target_id"] = target_id
+                body["dataset_concurrency"] = 2
 
                 async def send(key, value):
                     return await c.post(
@@ -240,7 +242,8 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                 assert (await send("same-intent", changed)).status_code == 409
                 single = submission(("GPQA",))
                 single["target_id"] = target_id
-                assert (await send("single", single)).status_code == 202
+                another = await send("single", single)
+                assert another.status_code == 202
                 async with app.state.sessions() as session:
                     assert (
                         await session.scalar(select(func.count()).select_from(EvaluationRun)) == 2
@@ -254,6 +257,13 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                     assert frozen.canonical_body["estimate"] is None
                 detail = (await c.get(f"/api/autoeval/v1/evaluation-tasks/{rid}")).json()["data"]
                 assert len(detail["datasets"]) == 2
+                files = f"/api/autoeval/v1/evaluation-tasks/{rid}/executor-files"
+                jobs = (await c.get(files)).json()["data"]
+                assert {job["id"] for job in jobs} == {row["id"] for row in detail["datasets"]}
+                other_run = another.json()["data"]["run_id"]
+                other_files = f"/api/autoeval/v1/evaluation-tasks/{other_run}/executor-files"
+                assert (await c.get(f"{other_files}/{jobs[0]['id']}")).status_code == 404
+                assert detail["snapshot"]["dataset_concurrency"] == 2
                 first = (await c.get("/api/autoeval/v1/evaluation-tasks?limit=1")).json()
                 assert first["statistics"]["total"] == 2 and first["next_offset"] == 1
                 second = (await c.get("/api/autoeval/v1/evaluation-tasks?limit=1&offset=1")).json()

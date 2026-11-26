@@ -69,6 +69,8 @@ export async function apiPost<T>(path: string, payload?: unknown, key?: string, 
 
 export interface BackendCapabilities {
   workspace_mode: "single";
+  executor_files_enabled?: boolean;
+  data_workbench_enabled?: boolean;
   subject: string;
   evaluation_enabled: boolean;
   analysis_enabled: boolean;

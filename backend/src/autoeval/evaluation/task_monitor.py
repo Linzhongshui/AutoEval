@@ -1,5 +1,6 @@
 """Versioned local/Harbor monitor projection, independent from scoring."""
 
+import asyncio
 import hashlib
 import uuid
 from datetime import UTC, datetime
@@ -100,6 +101,12 @@ class MonitorSnapshot(Record, Base):
     __table_args__ = (UniqueConstraint("binding_id", "sha256"),)
 
 
+def observation_expired(source, stamp, now):
+    # SSH status and Harbor file scans together can exceed ten seconds per cycle.
+    max_age = 45 if source == "harbor_result_files" else 10
+    return (now - stamp).total_seconds() > max_age
+
+
 def normalize(task, identity, source, observed_at, *, snapshot_kind="live"):
     stamp = datetime.fromisoformat(observed_at)
     if stamp.utcoffset() is None:
@@ -165,7 +172,7 @@ def normalize(task, identity, source, observed_at, *, snapshot_kind="live"):
         else task.get("start_time"),
         "time_cost": task.get("time_cost"),
         "observed_at": observed_at,
-        "stale": snapshot_kind != "final" and (datetime.now(UTC) - stamp).total_seconds() > 10,
+        "stale": snapshot_kind != "final" and observation_expired(source, stamp, datetime.now(UTC)),
         "snapshot_kind": snapshot_kind,
         "collection_status": "available",
         "harbor": harbor if source == "harbor_monitor" else None,
@@ -224,7 +231,7 @@ def freshness(projection, now=None):
     result["stale"] = (
         result.get("snapshot_kind") != "final"
         and result.get("collection_status") != "waiting_tool"
-        and ((now or datetime.now(UTC)) - stamp).total_seconds() > 10
+        and observation_expired(result.get("source"), stamp, now or datetime.now(UTC))
     )
     return result
 
@@ -374,15 +381,21 @@ async def latest(run_id: uuid.UUID, request: Request):
 
 
 @router.get("/{run_id}/monitor/snapshots")
-async def snapshots(run_id: uuid.UUID, request: Request, offset: int = 0, limit: int = 20):
+async def snapshots(
+    run_id: uuid.UUID,
+    request: Request,
+    offset: int = 0,
+    limit: int = 20,
+    include_summary: bool = False,
+):
     if offset < 0 or not 1 <= limit <= 100:
         raise HTTPException(422, "Invalid pagination")
     async with request.app.state.sessions() as session:
         if await session.get(EvaluationRun, run_id) is None:
             raise HTTPException(404, "Run not found")
         rows = (
-            await session.scalars(
-                select(MonitorSnapshot)
+            await session.execute(
+                select(MonitorSnapshot, MonitorBinding.identity["dataset"].astext)
                 .join(MonitorBinding)
                 .where(MonitorBinding.run_id == run_id)
                 .order_by(MonitorSnapshot.created_at, MonitorSnapshot.id)
@@ -390,25 +403,49 @@ async def snapshots(run_id: uuid.UUID, request: Request, offset: int = 0, limit:
                 .limit(limit + 1)
             )
         ).all()
-        return {
-            "data": [
-                {
-                    "id": str(r.id),
-                    "kind": r.kind,
-                    "sha256": r.sha256,
-                    "created_at": r.created_at.isoformat(),
-                }
-                for r in rows[:limit]
-            ],
-            "next_offset": offset + limit if len(rows) > limit else None,
-            "request_id": request.state.request_id,
+    page = rows[:limit]
+    data = [
+        {
+            "id": str(row.id),
+            "kind": row.kind,
+            "dataset": dataset,
+            "sha256": row.sha256,
+            "created_at": row.created_at.isoformat(),
         }
+        for row, dataset in page
+    ]
+    if include_summary:
+        slots = asyncio.Semaphore(4)
+
+        async def add_summary(row, item):
+            async with slots:
+                try:
+                    manifest = await asyncio.to_thread(
+                        read_manifest, request.app.state.settings, row
+                    )
+                except Exception:  # noqa: BLE001 - evidence failures are isolated per row
+                    item["summary_status"] = "unavailable"
+                    return
+            projection = manifest.get("projection", manifest) if isinstance(manifest, dict) else {}
+            if isinstance(projection, dict):
+                for field in ("progress_description", "progress_text"):
+                    value = projection.get(field)
+                    if isinstance(value, str) and value.strip():
+                        item["summary"] = value.strip()[:240]
+                        break
+
+        await asyncio.gather(
+            *(add_summary(row, item) for (row, _), item in zip(page, data, strict=True))
+        )
+    return {
+        "data": data,
+        "next_offset": offset + limit if len(rows) > limit else None,
+        "request_id": request.state.request_id,
+    }
 
 
 @router.get("/{run_id}/monitor/snapshots/{snapshot_id}")
 async def evidence(run_id: uuid.UUID, snapshot_id: uuid.UUID, request: Request):
-    import asyncio
-
     async with request.app.state.sessions() as session:
         row = await session.scalar(
             select(MonitorSnapshot)

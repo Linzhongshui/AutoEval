@@ -45,6 +45,11 @@ def test_preflight_reports_tool_versions_paths_and_dataset_blockers(tmp_path, mo
     assert checked["data_path"] == str(tmp_path)
     assert checked["tool_revision"] == "a" * 40
     assert checked["blocking_reasons"] == []
+    assert checked["warnings"] == []
+
+    first_use = inspect_dataset(task, networks=None, validated=set())
+    assert first_use["blocking_reasons"] == []
+    assert first_use["warnings"] == ["dataset_not_validated"]
 
     blocked = inspect_dataset(
         {
@@ -58,10 +63,33 @@ def test_preflight_reports_tool_versions_paths_and_dataset_blockers(tmp_path, mo
         networks=None,
         validated=set(),
     )
+    assert blocked["warnings"] == ["dataset_not_validated"]
     assert blocked["blocking_reasons"] == [
-        "dataset_not_validated",
         "dataset_path_missing",
         "harbor_network_unavailable",
+    ]
+
+
+@pytest.mark.parametrize("networks", [1, None])
+def test_harbor_preflight_reports_invalid_selection_before_acceptance(tmp_path, monkeypatch, networks):
+    monkeypatch.setattr("autoeval_runtime.planning_runtime.verify_tool", lambda task: "a" * 40)
+    monkeypatch.setattr("autoeval_runtime.planning_runtime.check_tool_environment", lambda config: True)
+    monkeypatch.setattr("autoeval_runtime.planning_runtime.check_task_selection", lambda config: False)
+    task = {
+        "task_id": "deepswe",
+        "dataset": "DeepSWE",
+        "tool": {"revision": "a" * 40},
+        "compilation": {
+            "config": {"subcommand": "harbor_agent", "params": {"path": str(tmp_path)}},
+        },
+    }
+
+    checked = inspect_dataset(task, networks=networks, validated=set())
+
+    assert checked["warnings"] == ["dataset_not_validated"]
+    assert checked["blocking_reasons"] == [
+        "task_selection_preflight_failed",
+        *([] if networks else ["harbor_network_unavailable"]),
     ]
 
 

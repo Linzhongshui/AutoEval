@@ -97,6 +97,7 @@ async def evaluation_run_detail(sessions, settings, run_id):
             if row is None or row.trigger_scope not in {
                 "local-operator:evaluation",
                 "local-operator:orchestration",
+                "local-operator:unified-fixture",
             }:
                 raise HTTPException(404, "Evaluation run not found")
             events = (
@@ -146,6 +147,9 @@ async def evaluation_run_detail(sessions, settings, run_id):
                             "execution_origin",
                         )
                     },
+                    "dataset_concurrency": (snapshot.canonical_body.get("inputs") or {}).get(
+                        "dataset_concurrency", 1
+                    ),
                     # Planned runs freeze per-dataset samples instead of a top-level list.
                     "sample_count": len(snapshot.canonical_body.get("samples", []))
                     if snapshot.canonical_body.get("samples") is not None

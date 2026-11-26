@@ -23,7 +23,7 @@ services:
       autoeval.role: executor
     working_dir: /work
     profiles: ["executor"]
-    volumes: ["executor-work:/work"]
+    volumes: ["executor-work:/work", "executor-artifacts:/var/lib/autoeval/artifacts"]
   postgres:
     image: postgres:16.6
     environment:
@@ -99,5 +99,6 @@ services:
     profiles: ["workers"]
 volumes:
   executor-work:
+  executor-artifacts:
   database:
   temporal:

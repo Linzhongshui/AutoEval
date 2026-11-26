@@ -12,6 +12,8 @@ import stat
 import uuid
 from pathlib import Path, PurePosixPath
 
+from autoeval.planning.debug_storage import ROOT as ARTIFACT_ROOT
+from autoeval.planning.debug_storage import storage_preflight, verify_store
 from autoeval.resources import ResourceBinding
 from autoeval.resources.docker_executor import DockerExecutor
 from autoeval.resources.models import SSHResourceBinding
@@ -56,11 +58,10 @@ def runtime_files():
 
 async def read_container_progress(adapter, job):
     key = str(uuid.UUID(job.submission_key))
-    root = (
-        await adapter.job_root(key)
-        if isinstance(adapter, PlanningRemoteContainer)
-        else "/work/autoeval-jobs"
-    )
+    if isinstance(adapter, PlanningRemoteContainer):
+        root = await adapter.job_root(key)
+    else:
+        root = ARTIFACT_ROOT if getattr(adapter, "debug_storage", None) else "/work/autoeval-jobs"
     script = "import pathlib,sys,json;p=pathlib.Path(sys.argv[1]);assert not p.is_symlink();print(p.read_text() if p.is_file() else '{}')"
     raw = await asyncio.to_thread(
         adapter.command,
@@ -99,7 +100,16 @@ print(json.dumps({'job_id':root.name,'source':'harbor_result_files','finish_coun
     return value
 
 
-class PlanningRemoteContainer(DockerExecutor):
+class ArtifactExecutor(DockerExecutor):
+    debug_storage = None
+
+    async def submit(self, spec, submission_key):
+        if self.debug_storage:
+            await asyncio.to_thread(verify_store, self, self.debug_storage)
+        return await super().submit(spec, submission_key)
+
+
+class PlanningRemoteContainer(ArtifactExecutor):
     """Docker lifecycle runs over pinned SSH; no host Planner execution or SFTP ambiguity."""
 
     def __init__(self, connection, container_id, image_id, runtime_root=None):
@@ -175,6 +185,8 @@ class PlanningRemoteContainer(DockerExecutor):
             raise ValueError("Runtime readback mismatch")
 
     async def job_root(self, submission_key):
+        if getattr(self, "debug_storage", None):
+            return ARTIFACT_ROOT
         key = str(uuid.UUID(submission_key))
         runtime_root = str(PurePosixPath(self.remote_dir).parent)
         script = """import json, pathlib, re, sys
@@ -298,7 +310,7 @@ print(json.dumps(found))
     async def preflight(self, tasks=None):
         await self.validate({"kind": "framework_smoke", "duration_seconds": 0})
         await self.install_runtime()
-        return json.loads(
+        snapshot = json.loads(
             await asyncio.to_thread(
                 self.command,
                 [
@@ -312,9 +324,10 @@ print(json.dumps(found))
                 json.dumps(tasks).encode(),
             )
         )
+        return await storage_preflight(self, snapshot) if tasks else snapshot
 
 
-class PlanningDocker(DockerExecutor):
+class PlanningDocker(ArtifactExecutor):
     def __init__(self, executable, container_id, image_id):
         super().__init__(executable, container_id, image_id)
         self.remote_dir = (
@@ -325,6 +338,14 @@ class PlanningDocker(DockerExecutor):
     def command(self, arguments, payload=None):
         import subprocess
 
+        if self.debug_storage and arguments[0] == "exec":
+            index = arguments.index(self.container_id) + 1
+            arguments = [
+                *arguments[:index],
+                "env",
+                f"AE_JOB_ROOT={ARTIFACT_ROOT}",
+                *arguments[index:],
+            ]
         # Structured results are bounded independently from the diagnostic transport.
         result = subprocess.run(
             [self.executable, *arguments],
@@ -365,7 +386,7 @@ class PlanningDocker(DockerExecutor):
     async def preflight(self, tasks=None):
         await self.validate({"kind": "framework_smoke", "duration_seconds": 0})
         await self.install_runtime()
-        return json.loads(
+        snapshot = json.loads(
             await asyncio.to_thread(
                 self.command,
                 [
@@ -379,6 +400,7 @@ class PlanningDocker(DockerExecutor):
                 json.dumps(tasks).encode(),
             )
         )
+        return await storage_preflight(self, snapshot) if tasks else snapshot
 
 
 class PlanningSSH(SSHExecutor):

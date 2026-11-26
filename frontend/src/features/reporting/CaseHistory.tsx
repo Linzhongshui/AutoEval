@@ -1,3 +1,4 @@
+import type { components } from "../../shared/types/api";
 import { TableWrap } from "../../shared/ui/TableWrap";
 import { PageNumbers } from "../../shared/ui/PageNumbers";
 import { createPortal } from "react-dom";
@@ -45,12 +46,14 @@ const STATUS: Record<string, { label: string; tone: string }> = {
 };
 const caseScore = (metadata?: ToolMetadata | null) => typeof metadata?.score === "number" && Number.isFinite(metadata.score) ? String(metadata.score) : "未提供评分";
 
-export function CaseHistory({ initialRun = "", datasets = [], onRetry }: {
+export function CaseHistory({ initialRun = "", datasets = [], selectedDataset, showPending, onRetry }: {
   initialRun?: string;
   datasets?: string[];
+  selectedDataset?: string;
+  showPending?: boolean;
   onRetry?: (datasetKey: string, sampleId: string) => void;
 }) {
-  const [dataset, setDataset] = useState("");
+  const [dataset, setDataset] = useState(selectedDataset ?? "");
   const [revision, setRevision] = useState("");
   const [revisions, setRevisions] = useState<{id: string; dataset_key: string; created_at: string}[]>([]);
   useEffect(() => {
@@ -60,6 +63,16 @@ export function CaseHistory({ initialRun = "", datasets = [], onRetry }: {
     apiGet<{id: string; dataset_key: string; created_at: string}[]>(`/runs/${initialRun}/result-revisions`, c.signal).then(setRevisions).catch(() => {});
     return () => c.abort();
   }, [initialRun]);
+  const [pending, setPending] = useState<components["schemas"]["FollowUpPreview"]["samples"]>([]);
+  const [pendingError, setPendingError] = useState(false);
+  useEffect(() => {
+    if (!showPending) return;
+    const controller = new AbortController();
+    apiGet<components["schemas"]["FollowUpPreview"]>(`/evaluation-tasks/${encodeURIComponent(initialRun)}/resume-preview`, controller.signal)
+      .then(preview => setPending(preview.samples.filter(row => !row.has_attempts && row.category === "remaining")))
+      .catch(() => { if (!controller.signal.aborted) setPendingError(true); });
+    return () => controller.abort();
+  }, [initialRun, showPending]);
   const evidenceDialog = useRef<HTMLDialogElement>(null);
   const [run, setRun] = useState(initialRun);
   const [stateFilter, setStateFilter] = useState("");
@@ -88,6 +101,7 @@ export function CaseHistory({ initialRun = "", datasets = [], onRetry }: {
     setRows([]); setNext(null); setTotal(null); setSelected(null); setEvidence(null); setMessage("正在查询历史…");
     const parts = [`limit=${query.size}`, `offset=${query.offset}`];
     parts.push(`evidence_version=${revision === "original" ? "original" : "current"}`);
+    if (selectedDataset !== undefined) parts.push("prioritize_retries=true");
     if (dataset) parts.push(`dataset_key=${encodeURIComponent(dataset)}`);
     if (query.sample) parts.push(`sample_id=${encodeURIComponent(query.sample)}`);
     if (query.state) parts.push(`state=${encodeURIComponent(query.state)}`);
@@ -106,7 +120,7 @@ export function CaseHistory({ initialRun = "", datasets = [], onRetry }: {
         if (!controller.signal.aborted) setMessage(error instanceof Error ? error.message : "历史查询失败");
       });
     return () => controller.abort();
-  }, [query, dataset, revision]);
+  }, [query, dataset, revision, selectedDataset]);
 
   const applyState = (value: string) => {
     setStateFilter(value);
@@ -129,10 +143,19 @@ export function CaseHistory({ initialRun = "", datasets = [], onRetry }: {
         if (!controller.signal.aborted) setEvidence({ message: error instanceof Error ? error.message : "证据读取失败" });
       });
   };
+  const pendingRows = pending.filter(row => (!dataset || row.dataset_key === dataset)
+    && (!query?.sample || row.sample_id === query.sample));
   const detail = evidence && typeof evidence === "object" ? (evidence as Record<string, unknown>) : null;
   const meta = selected?.tool_metadata ?? null;
   const page = query ? Math.floor(query.offset / query.size) + 1 : 1;
-  const pages = total !== null ? Math.max(1, Math.ceil(total / (query?.size ?? pageSize))) : null;
+  const visiblePending = showPending && !query?.state && !revision ? pendingRows : [];
+  const combinedTotal = total === null ? null : total + visiblePending.length;
+  const pendingPage = query && total !== null
+    ? visiblePending.slice(Math.max(0, query.offset - total), Math.max(0, query.offset + query.size - total))
+    : [];
+  const nextPage = query && combinedTotal !== null && query.offset + query.size < combinedTotal
+    ? query.offset + query.size : next;
+  const pages = combinedTotal !== null ? Math.max(1, Math.ceil(combinedTotal / (query?.size ?? pageSize))) : null;
 
   const body = (
     <>
@@ -158,11 +181,11 @@ export function CaseHistory({ initialRun = "", datasets = [], onRetry }: {
         {!initialRun && <button type="button" disabled={!run.trim()} onClick={() => setQuery({ run: run.trim(), sample: sample.trim(), state: stateFilter, offset: 0, size: pageSize })}>查询case历史</button>}
         {initialRun && <button type="button" onClick={() => setQuery({ run: initialRun, sample: sample.trim(), state: stateFilter, offset: 0, size: pageSize })}>筛选</button>}
       </div>
-      <p className="case-history-message muted" role="status">{message}<span>执行状态与评分分别记录，缺少评分不补零。</span></p>
-      {rows.length > 0 && (
+      <p className="case-history-message muted" role="status">{pendingPage.length ? `已加载 ${rows.length} 条执行记录 · ${pendingPage.length} 个待执行样本` : message}<span>执行状态与评分分别记录，缺少评分不补零。</span></p>
+      {(rows.length > 0 || pendingPage.length > 0) && (
         <TableWrap data-testid="case-attempts">
           <table className="case-attempt-table">
-            <thead><tr><th>数据集 / 样本</th><th>尝试</th><th>执行状态</th><th>得分</th><th>创建时间</th><th>耗时</th><th>Token（入 / 出）</th><th>证据与轨迹</th></tr></thead>
+            <thead><tr><th>数据集 / 样本</th><th>尝试</th><th>执行状态</th><th>得分</th><th>创建时间</th><th>耗时</th><th>Token（入 / 出）</th><th>证据与轨迹</th>{onRetry && <th>重试</th>}</tr></thead>
             <tbody>{rows.map((row) => {
               const status = STATUS[row.state] ?? { label: "待确认", tone: "pending" };
               return (
@@ -180,24 +203,32 @@ export function CaseHistory({ initialRun = "", datasets = [], onRetry }: {
                   <td className="case-evidence-cell">
                     <div className="case-evidence-actions">
                       <button className="case-evidence-button" type="button" disabled={!row.evidence_available} aria-label={`查看第${row.attempt_no}次证据`} onClick={() => openEvidence(row)}><FileCheck2 size={14} aria-hidden="true" />查看证据</button>
-                      {onRetry && <button type="button" onClick={() => onRetry(row.dataset_key, row.sample_id)}>重试此 Case</button>}
                       {row.trace_url && <a className="case-trace-button" href={row.trace_url} target="_blank" rel="noopener noreferrer" title="在新标签页查看本次执行的 Agent 轨迹">查看 Trace<ArrowUpRight size={14} aria-hidden="true" /></a>}
                     </div>
                     <small className="case-evidence-note">{row.trace_url ? row.trace_content_mode === "full" ? "正文轨迹已导入" : "轨迹已导入" : {pending: "Trace 等待导入", failed: "Trace 导入失败", missing: "缺少轨迹", disabled: "Langfuse 未配置", unsupported: "暂不支持 Trace"}[row.trace_status ?? "unsupported"]}<span aria-hidden="true"> · </span>{row.evidence_available ? "证据已校验" : "证据尚未归档"}</small>
                   </td>
+                  {onRetry && <td><button type="button" onClick={() => onRetry(row.dataset_key, row.sample_id)}>重试此 Case</button></td>}
                 </tr>
               );
-            })}</tbody>
+            })}
+            {pendingPage.map(row => <tr key={JSON.stringify([row.dataset_key, row.sample_id])}>
+              <td><b>{row.dataset_key}</b><small>{row.sample_id}</small></td>
+              <td>—</td>
+              <td><span className="case-status pending">待执行</span></td>
+              <td>—</td><td>—</td><td>—</td><td>—</td><td>—</td>
+              {onRetry && <td><button type="button" onClick={() => onRetry(row.dataset_key, row.sample_id)}>重试此 Case</button></td>}
+            </tr>)}</tbody>
           </table>
         </TableWrap>
       )}
+      {pendingError && <p role="status">待执行样本读取失败。</p>}
       {query && (
         <div className="pagination" aria-label="Case 列表分页">
-          <span>{total !== null ? `共 ${total} 条 · 第 ${page} / ${pages} 页` : `第 ${page} 页`}</span>
+          <span>{combinedTotal !== null ? `共 ${combinedTotal} 条 · 第 ${page} / ${pages} 页` : `第 ${page} 页`}</span>
           <label className="pagination-page-size"><span>每页</span><select aria-label="每页条数" value={pageSize} onChange={(event) => changeSize(Number(event.target.value))}>{[20, 50, 100].map((size) => <option key={size} value={size}>{size} 条</option>)}</select></label>
           <button disabled={query.offset === 0} onClick={() => setQuery({ ...query, offset: Math.max(0, query.offset - query.size) })}>上一页</button>
-          <PageNumbers current={page} total={pages ?? (next !== null ? page + 1 : page)} onChange={(value) => setQuery({ ...query, offset: (value - 1) * query.size })} />
-          <button disabled={next === null} onClick={() => { if (next !== null) setQuery({ ...query, offset: next }); }}>下一页</button>
+          <PageNumbers current={page} total={pages ?? (nextPage !== null ? page + 1 : page)} onChange={(value) => setQuery({ ...query, offset: (value - 1) * query.size })} />
+          <button disabled={nextPage === null} onClick={() => { if (nextPage !== null) setQuery({ ...query, offset: nextPage }); }}>下一页</button>
         </div>
       )}
       {evidence !== null && createPortal(

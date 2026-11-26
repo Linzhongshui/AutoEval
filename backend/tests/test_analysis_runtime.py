@@ -103,6 +103,8 @@ async def test_log_reader_uses_exact_owned_job_and_rejects_path_input():
     calls = []
 
     def command(args):
+        if "found = []" in args[4]:
+            return "[]"
         calls.append(args)
         return json.dumps({"content": "fixture log", "truncated": False})
 

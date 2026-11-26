@@ -32,7 +32,7 @@ python -m pip install 'git+https://github.com/SJTUyh/AutoEval-Benchmark-Adaptor@
 
 执行端通过发行包的 direct_url.json 核对提交号，不能用同名任意版本替代。还需 Git、对应 AISBench/Harbor 依赖及真实数据；Profile 固定工具提交、评分文件路径和校验和。
 
-执行资源必须完成各数据集真实小样本验收后，由环境配置声明 `AE_VALIDATED_DATASETS=GPQA,MMMU-Pro,DeepSWE`；默认没有已验收数据集，不开放真实执行。该声明不能代替验收记录。Harbor 另需 `AE_HARBOR_NETWORK_CAPACITY` 指定配置的 Docker 地址池容量；缺失时不开放 DeepSWE。`AE_MAX_PROBE_CONCURRENCY` 默认 8，上限由资源预检返回。
+资源通过工具身份、数据目录及适用的 Harbor 环境与任务选择检查后，用户可以按所选清单提交，也可以先选 Lite 试跑。运维可用 `AE_VALIDATED_DATASETS` 声明已有小样本验收记录的数据集。缺少声明时，资源预检在对应数据集的 `warnings` 中返回 `dataset_not_validated`，控制台展示提示。预检本身不会调用模型。Harbor 仍需通过 `AE_HARBOR_NETWORK_CAPACITY` 所配置的网络容量检查。`AE_MAX_PROBE_CONCURRENCY` 默认 8，上限由资源预检返回。
 
 预检尊重 Linux cgroup CPU、内存上限，记录可用磁盘、节点启动身份和可用网段，并按所选目标服务、编译配置、Profile 和样本清单绑定快照。返回 Planner/Adaptor 实际与预期提交、各数据集工具提交、数据路径及分项阻塞原因；工具提交、评分文件、数据目录或 Harbor 网段不满足时，相应数据集不可执行。新资源预检会产生新快照，输入或资源变化后旧预检不能用于采纳；采纳和提交要求 5 分钟内的成功预检。
 
@@ -71,7 +71,7 @@ python -m pip install 'git+https://github.com/SJTUyh/AutoEval-Benchmark-Adaptor@
 
 规划提交的测评同时出现在任务管理接口 `GET /api/autoeval/v1/runs` 与 `GET /api/autoeval/v1/runs/{id}` 中，详情返回冻结快照的样本数、运行状态、事件与报告入口；编排视图的 `/planning/runs` 保持不变。
 
-PlanInput：target_id、resource_id、resource_kind（docker_local/customer_ssh）、可选 throughput_profile_id、tasks（task_id/compilation_id/manifest_id/dataset）、dataset_concurrency、recommend、runs、seed。模拟默认 100 次、吞吐抖动 0.10、种子 20261111。数据集范围及 attempts 来自编译配置与冻结清单。
+PlanInput：target_id、resource_id、resource_kind（docker_local/customer_ssh）、可选 throughput_profile_id、tasks（task_id/compilation_id/manifest_id/dataset）、dataset_concurrency（1–4，同时运行的数据集上限）、recommend、runs、seed。模拟默认 100 次、吞吐抖动 0.10、种子 20261111。数据集范围及 attempts 来自编译配置与冻结清单。
 
 ## 证据、恢复与口径
 

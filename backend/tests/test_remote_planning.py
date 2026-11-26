@@ -102,3 +102,28 @@ def test_probe_reports_real_level_boundaries_without_network(tmp_path, monkeypat
     assert result["progress"]["job_id"] == tmp_path.name
     assert probe._run_level is original
     assert not (tmp_path / "credential.json").exists()
+
+
+def test_operator_aisbench_acceptance_can_disable_warmup(tmp_path):
+    from autoeval_runtime.planning_runtime import ADAPTOR_REVISION, aisbench_without_warmup
+
+    spec = {
+        "kind": "adaptor",
+        "compilation": {
+            "adaptor_revision": ADAPTOR_REVISION,
+            "config": {"subcommand": "llm_accuracy"},
+        },
+        "tool": {},
+        "credential": "test",
+        "skip_aisbench_warmup": True,
+    }
+    validate_spec(spec)
+    spec["compilation"]["config"]["subcommand"] = "harbor_agent"
+    with pytest.raises(ValueError, match="requires AISBench"):
+        validate_spec(spec)
+    wrapper = tmp_path / "aisbench-python-no-warmup"
+    assert aisbench_without_warmup(tmp_path, "/path with spaces/python3") == str(wrapper)
+    content = wrapper.read_text(encoding="utf-8")
+    assert "'/path with spaces/python3'" in content
+    assert "ais_bench.benchmark.cli.main" in content
+    assert "--num-warmups 0" in content

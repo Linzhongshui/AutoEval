@@ -6,6 +6,7 @@ keeps Temporal concerns in the activity wrapper at the bottom of this file.
 
 import asyncio
 import hashlib
+import logging
 import uuid
 from contextlib import suppress
 from datetime import UTC, datetime
@@ -143,6 +144,9 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None, *, round_i
                 if adapter is None:
                     adapter = await transport(session, settings, inputs)
                 adapters[item["task_id"]] = adapter
+            storage = resource_for_task(frozen["resource"], item["task_id"]).get("debug_storage")
+            if storage:
+                adapters[item["task_id"]].debug_storage = storage
         target = await session.get(TargetBinding, inputs["target_id"])
         secret = FileSecretStore(settings.secret_store_path).get(target.credential_ref)
     while True:
@@ -222,8 +226,11 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None, *, round_i
 
                                 await publish(sessions, settings, run_id, child.id, progress)
                                 await update_child(sessions, child, summary={"progress": progress})
-                        except (OSError, ValueError, RuntimeError):
-                            pass  # Observation failure never resubmits the model task.
+                        except (OSError, ValueError, RuntimeError) as exc:
+                            logging.getLogger(__name__).warning(
+                                "Progress observation failed run=%s child=%s error_type=%s",
+                                run_id, child.id, type(exc).__name__,
+                            )
                 continue
             from autoeval.planning.planning_observations import publish_lifecycle
 
@@ -233,8 +240,11 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None, *, round_i
                     from autoeval.planning.planning_observations import publish
 
                     await publish(sessions, settings, run_id, child.id, await final_reader(job))
-                except (OSError, ValueError, RuntimeError):
-                    pass
+                except (OSError, ValueError, RuntimeError) as exc:
+                    logging.getLogger(__name__).warning(
+                        "Final progress observation failed run=%s child=%s error_type=%s",
+                        run_id, child.id, type(exc).__name__,
+                    )
             await publish_lifecycle(
                 sessions, settings, run_id, child, observation.state, final=True
             )
@@ -370,6 +380,8 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None, *, round_i
                         "tool_exit_code": collected["tool_exit_code"],
                         "diagnostic": collected.get("diagnostic"),
                     }
+                elif collected.get("diagnostic") and summary["validity"] != "complete":
+                    summary = {**summary, "tool_exit_code": 0, "diagnostic": collected["diagnostic"]}
                 if state == "succeeded" and summary["validity"] != "complete":
                     state = "failed"
             if state == "cancelled" and observation.reason == "cancelled_before_launch":

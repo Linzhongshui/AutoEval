@@ -15,6 +15,12 @@ from pathlib import Path
 ROOT = Path(os.environ.get("AE_JOB_ROOT", "/work/autoeval-jobs"))
 
 
+def private_dir(folder):
+    if folder.parent == Path("/var/lib/autoeval/artifacts"):
+        return Path("/tmp") / ("autoeval-private-" + folder.name)
+    return folder
+
+
 def atomic_json(path, value):
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(value), encoding="utf-8")
@@ -143,7 +149,9 @@ def child(folder):
             )
             try:
                 if not result_path.exists() and spec.get("kind") == "adaptor":
-                    credential = json.loads((folder / "credential.json").read_text())["value"]
+                    credential = json.loads((private_dir(folder) / "credential.json").read_text())[
+                        "value"
+                    ]
                     if not credential:
                         raise ValueError("Credential unavailable for result validation")
                     output = folder / "output"
@@ -181,8 +189,8 @@ def child(folder):
             except (OSError, ValueError, KeyError, TypeError):
                 # Preserve cancellation even when the tool has not finished writing output.
                 pass
-            (folder / "credential.json").unlink(missing_ok=True)
-            (folder / "private-config.json").unlink(missing_ok=True)
+            (private_dir(folder) / "credential.json").unlink(missing_ok=True)
+            (private_dir(folder) / "private-config.json").unlink(missing_ok=True)
             atomic_json(folder / "exit.json", {"state": "cancelled", "cleanup_pending": harbor})
             raise SystemExit(0)
 
@@ -344,7 +352,19 @@ def main():
                 (folder / "spec_hash").write_text(digest)
                 folder.chmod(0o700)
                 if credential is not None:
-                    secret_path = folder / "credential.json"
+                    secret_path = private_dir(folder) / "credential.json"
+                    if secret_path.parent != folder:
+                        secret_path.parent.mkdir(mode=0o700)
+                        (ROOT / (".submitted-" + key)).touch(mode=0o600, exist_ok=True)
+                        raw = credential.encode()
+                        atomic_json(
+                            folder / ".redaction.json",
+                            {
+                                "length": len(raw),
+                                "prefix": hashlib.sha256(raw[:32]).hexdigest(),
+                                "digest": hashlib.sha256(raw).hexdigest(),
+                            },
+                        )
                     write_credential(secret_path, credential)
                 atomic_json(folder / "spec.json", spec)
                 with (folder / "output.log").open("ab") as log:
@@ -414,7 +434,20 @@ def main():
                 atomic_json(cleanup_path, {"state": "cleaning", "observed_state": observed_state})
             else:
                 observed_state = cleanup["observed_state"]
+            retained = private_dir(folder) != folder
+            if retained and private_dir(folder).exists():
+                for name in ("credential.json", "private-config.json"):
+                    (private_dir(folder) / name).unlink(missing_ok=True)
+                private_dir(folder).rmdir()
             for path in folder.iterdir():
+                if retained and path.name in {
+                    "tool.log",
+                    "output.log",
+                    "result.json",
+                    "progress.json",
+                    ".redaction.json",
+                }:
+                    continue
                 if path.name not in {".lock", "cleanup.json"}:
                     if path.is_dir():
                         # Artifacts remain in the owned job directory; no recursive deletion.

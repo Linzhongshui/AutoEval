@@ -20,7 +20,7 @@ type Options = {
   manifests: { id: string; dataset: string; scope: string; sample_count: number; sha256?: string }[];
   curves: { id: string; target_id: string; resource_id: string; resource_kind: string; measured_at: string }[];
 };
-type DatasetCheck = { task_id: string; dataset: string; data_path: string | null; tool_revision: string | null; expected_tool_revision: string; blocking_reasons: string[] };
+type DatasetCheck = { task_id: string; dataset: string; data_path: string | null; tool_revision: string | null; expected_tool_revision: string; blocking_reasons: string[]; warnings?: string[] };
 const preflightReasons: Record<string, string> = {
   dataset_not_validated: "该资源尚未完成此数据集的小样本验收",
   dataset_path_unavailable: "执行容器无法访问数据目录",
@@ -33,6 +33,23 @@ const preflightReasons: Record<string, string> = {
 const describePreflight = (reasons: string[]) =>
   reasons.map(reason => preflightReasons[reason] ?? reason).join("；");
 type Job = { id: string; state: string; created_at?: string; updated_at?: string; result?: { progress?: { stage: string; current_concurrency?: number | null; completed_levels: number; total_levels: number; observed_at?: string } | null; report?: Report; throughput_profile_id?: string; reason?: string; dispatch_blocked?: boolean; remote_check?: { state: string; checked_at: string }; execution_ready?: boolean; supported_datasets?: string[]; blocking_reasons?: string[]; dataset_checks?: DatasetCheck[]; tool_versions?: Record<string, { expected: string; actual: string | null }> } };
+function DatasetSelect({ label, value, disabled, placeholder, options, onChange }: {
+  label: string;
+  value: string;
+  disabled: boolean;
+  placeholder: string;
+  options: { id: string; label: string }[];
+  onChange: (value: string) => void;
+}) {
+  const selected = options.find(option => option.id === value)?.label ?? placeholder;
+  return <select aria-label={label} value={value} disabled={disabled}
+    onChange={event => onChange(event.target.value)}>
+    <button type="button">{selected}</button>
+    <option value="">{placeholder}</option>
+    {options.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+  </select>;
+}
+
 const datasets = ["GPQA", "MMMU-Pro", "DeepSWE", "AutomationBench"];
 function StrategyChoice({ label, parallel, disabled = false, onChange }: { label: string; parallel: boolean; disabled?: boolean; onChange: (parallel: boolean) => void }) {
   return <div className="strategy-choices" role="group" aria-label={label}>
@@ -54,7 +71,7 @@ export function TaskPlanning() {
   const [selection, setSelection] = useState<Record<string, { compilation: string; manifest: string }>>({});
   const [enabled, setEnabled] = useState<string[]>([]);
   const [curve, setCurve] = useState("");
-  const [parallel, setParallel] = useState(1);
+  const [requestedParallel, setParallel] = useState(2);
   const [job, setJob] = useState<Job | null>(null);
   const [adviceJob, setAdviceJob] = useState<Job | null>(null);
   const [probeLookup, setProbeLookup] = useState(false);
@@ -110,6 +127,9 @@ export function TaskPlanning() {
     setOptions(collected);
   };
   useEffect(() => { void refresh().catch(() => setMessage("测评选项加载失败，请重试。")); }, []);
+  const maxParallel = Math.max(1, Math.min(enabled.length, 4));
+  const parallel = Math.min(requestedParallel, maxParallel);
+  const allParallel = parallel > 1 && parallel === enabled.length;
   const payload = { target_id: target, resource_id: resource, resource_kind: resourceKind,
     resource_ids: resourceIds,
     throughput_profile_id: curve || null, dataset_concurrency: parallel, recommend: false,
@@ -117,7 +137,7 @@ export function TaskPlanning() {
       task_id: d.replaceAll("-", "_"), dataset: d, concurrency: concurrency[d] ?? null, compilation_id: selection[d].compilation, manifest_id: selection[d].manifest,
     })) };
   const fingerprint = JSON.stringify(payload);
-  useEffect(() => { setParallel(v => Math.min(v, Math.max(1, enabled.length))); }, [enabled.length]);
+
   const preflightFingerprint = JSON.stringify({ target_id: target, resource_id: resource, resource_kind: resourceKind, resource_ids: resourceIds, tasks: payload.tasks });
   useEffect(() => {
     generation.current++; if (job) setStaleEstimate(true); setJob(null); setAdviceJob(null);
@@ -182,15 +202,27 @@ export function TaskPlanning() {
     setEnabled(rows => active ? [...new Set([...rows, dataset])] : rows.filter(row => row !== dataset));
     if (!active) { setSelection(rows => ({ ...rows, [dataset]: { compilation: "", manifest: "" } })); return; }
     const candidates = options.compilations.filter(c => c.target_id === target && c.input_ready && c.dataset === dataset && (!Array.isArray(c.runtime_config?.resource_ids) || (c.runtime_config.resource_ids as string[]).some(id => resources.rows.some(r => r.id === id))));
-    const chosen = candidates.length === 1 ? candidates[0] : undefined;
-    const full = options.manifests.filter(m => m.dataset === dataset && m.scope === "full");
+    const chosen = candidates[0];
+    const allowed = chosen?.runtime_config?.manifest_ids;
+    const full = options.manifests.filter(m => m.dataset === dataset && m.scope === "full" && (!Array.isArray(allowed) || allowed.includes(m.id)));
     setSelection(rows => ({ ...rows, [dataset]: { compilation: chosen?.id || "", manifest: full.length === 1 ? full[0].id : "" } }));
     const bound = chosen?.runtime_config?.resource_ids;
     if (Array.isArray(bound)) {
       const matching = bound.filter((id): id is string => typeof id === "string" && resources.rows.some(r => r.id === id));
-      if (matching.length) { setResourceIds(ids => [...new Set([...ids, ...matching])]); if (!resource) setResource(matching[0]); }
+      if (matching.length) { setResourceIds(ids => [...new Set([...ids, ...matching])]); setResource(current => current || matching[0]); }
     }
   };
+  const allDatasetsEnabled = datasets.every(dataset => enabled.includes(dataset));
+  const toggleAllDatasets = () => {
+    for (const dataset of datasets) {
+      if (enabled.includes(dataset) === allDatasetsEnabled) {
+        autoFillDataset(dataset, !allDatasetsEnabled);
+      }
+    }
+  };
+  const selectAllButton = <button type="button" className="link dataset-select-all" onClick={toggleAllDatasets}>
+    {allDatasetsEnabled ? "取消全选" : "全选"}
+  </button>;
   useEffect(() => {
     if (!target || !enabled.length) return;
     let changed = false;
@@ -199,7 +231,7 @@ export function TaskPlanning() {
     for (const dataset of enabled) {
       const candidates = options.compilations.filter(c => c.target_id === target && c.input_ready && c.dataset === dataset && (!Array.isArray(c.runtime_config?.resource_ids) || (c.runtime_config.resource_ids as string[]).some(id => resources.rows.some(r => r.id === id))));
       const current = candidates.find(c => c.id === selection[dataset]?.compilation);
-      const chosen = current || (candidates.length === 1 ? candidates[0] : undefined);
+      const chosen = current ?? candidates[0];
       if (!chosen) continue;
       const allowed = chosen.runtime_config?.manifest_ids;
       const manifests = options.manifests.filter(m => m.dataset === dataset && (!Array.isArray(allowed) || allowed.includes(m.id)));
@@ -260,17 +292,44 @@ export function TaskPlanning() {
     {preflight?.state === "completed" && preflight.result && <div className="notice">
       <p>Planner：{preflight.result.tool_versions?.planner.actual?.slice(0, 12) || "未安装或版本未知"}；Adaptor：{preflight.result.tool_versions?.adaptor.actual?.slice(0, 12) || "未安装或版本未知"}</p>
       {!!preflight.result.blocking_reasons?.length && <p>阻塞原因：{describePreflight(preflight.result.blocking_reasons)}</p>}
+      {preflight.result.dataset_checks?.filter(check => check.warnings?.includes("dataset_not_validated")).map(check =>
+        <p key={check.task_id}>{check.dataset} 尚无小样本验收记录。首次试跑可选，这一项不影响提交。</p>
+      )}
       {preflight.result.dataset_checks?.map(check => <p key={check.task_id}>{check.dataset} · 数据路径：{check.data_path || "未配置"} · 工具版本：{check.tool_revision?.slice(0, 12) || `校验未通过（要求 ${check.expected_tool_revision.slice(0, 12)}）`}{check.blocking_reasons.length ? ` · ${describePreflight(check.blocking_reasons)}` : " · 就绪"}</p>)}
     </div>}
     <h2>2. 数据集与样本范围</h2>
-    <p className="muted">勾选后自动填充唯一匹配的执行配置、全量清单及绑定资源；存在多个候选或缺少全量清单时，请手动确认。不会自动启动环境检查或测评。</p><TableWrap><table className="planning-table"><thead><tr><th>启用</th><th>数据集</th><th>执行配置</th><th>样本范围</th><th>状态</th></tr></thead><tbody>{datasets.map(d => {
+    <p className="muted">勾选后默认选择第一项可用执行配置，并填入绑定资源和唯一的全量清单。可手动更改配置和样本范围。</p>
+    <div className="dataset-select-all-mobile">{selectAllButton}</div>
+    <TableWrap><table className="planning-table"><thead><tr><th scope="col">{selectAllButton}</th><th>数据集</th><th>执行配置</th><th>样本范围</th><th>状态</th></tr></thead><tbody>{datasets.map(d => {
       const active = enabled.includes(d);
       const chosenConfig = options.compilations.find(c => c.id === selection[d]?.compilation);
       const allowed = chosenConfig?.runtime_config?.resource_ids;
+      const allowedManifests = chosenConfig?.runtime_config?.manifest_ids;
       const assignedId = resourceIds.find(id => !Array.isArray(allowed) || allowed.includes(id));
       const assignedName = resources.rows.find(r => r.id === assignedId)?.binding_key;
       const configs = options.compilations.filter(c => c.target_id === target && c.input_ready && c.dataset === d && (!Array.isArray(c.runtime_config?.resource_ids) || resources.rows.some(r => (c.runtime_config!.resource_ids as string[]).includes(r.id))));
-      return <tr key={d}><td><input type="checkbox" aria-label={`启用 ${d}`} checked={active} onChange={e => { autoFillDataset(d, e.target.checked); }} /></td><td>{d}</td><td data-label="执行配置"><select disabled={!active || !target} aria-label={`${d} 执行配置`} value={selection[d]?.compilation || ""} onChange={e => setSelection(rows => ({ ...rows, [d]: { ...rows[d], compilation: e.target.value } }))}><option value="">{!target ? "先选择模型服务" : !configs.length ? "暂无可用配置" : "请选择执行配置"}</option>{configs.map(c => <option key={c.id} value={c.id}>{c.label?.split(" / ").pop() || c.sha256.slice(0, 12)}</option>)}</select>{active && chosenConfig && assignedName && <small className="muted">自动分配：{assignedName}</small>}</td><td data-label="样本范围"><select disabled={!active || !selection[d]?.compilation} aria-label={`${d} 样本范围`} value={selection[d]?.manifest || ""} onChange={e => setSelection(rows => ({ ...rows, [d]: { ...rows[d], manifest: e.target.value } }))}><option value="">请选择已绑定清单</option>{options.manifests.filter(m => m.dataset === d).map(m => <option key={m.id} value={m.id}>{m.scope === "full" ? "全量" : "Lite"} · {m.sample_count} 个样本 · {m.id.slice(0, 8)}</option>)}</select></td><td><span className="planning-row-state">{!active ? "未启用" : !configs.length ? "需配置" : selection[d]?.compilation && selection[d]?.manifest ? "已配置" : "待补全"}</span></td></tr>;
+      const manifests = options.manifests.filter(m => m.dataset === d &&
+        (!Array.isArray(allowedManifests) || allowedManifests.includes(m.id)));
+      return <tr key={d}>
+        <td><input type="checkbox" aria-label={`启用 ${d}`} checked={active}
+          onChange={event => autoFillDataset(d, event.target.checked)} /></td>
+        <td>{d}</td>
+        <td data-label="执行配置">
+          <DatasetSelect label={`${d} 执行配置`} disabled={!active || !target}
+            value={selection[d]?.compilation || ""}
+            placeholder={!target ? "先选择模型服务" : !configs.length ? "暂无可用配置" : "请选择执行配置"}
+            options={configs.map(c => ({ id: c.id, label: c.label?.split(" / ").pop() || c.sha256.slice(0, 12) }))}
+            onChange={compilation => setSelection(rows => ({ ...rows, [d]: { ...rows[d], compilation } }))} />
+          {active && chosenConfig && assignedName && <small className="muted">自动分配：{assignedName}</small>}
+        </td>
+        <td data-label="样本范围">
+          <DatasetSelect label={`${d} 样本范围`} disabled={!active || !selection[d]?.compilation}
+            value={selection[d]?.manifest || ""} placeholder="请选择已绑定清单"
+            options={manifests.map(m => ({ id: m.id, label: `${m.scope === "full" ? "全量" : "Lite"} · ${m.sample_count} 个样本 · ${m.id.slice(0, 8)}` }))}
+            onChange={manifest => setSelection(rows => ({ ...rows, [d]: { ...rows[d], manifest } }))} />
+        </td>
+        <td><span className="planning-row-state">{!active ? "未启用" : !configs.length ? "需配置" : selection[d]?.compilation && selection[d]?.manifest ? "已配置" : "待补全"}</span></td>
+      </tr>;
     })}</tbody></table></TableWrap>
     {enabled.map(dataset => {
       const bound = options.compilations.filter(c => c.target_id === target && c.input_ready && c.dataset === dataset);
@@ -286,13 +345,30 @@ export function TaskPlanning() {
     <h2>3. 执行策略</h2>
     <div className="execution-strategy">
       <section className="strategy-card strategy-datasets" aria-label="数据集执行设置">
-        <div className="strategy-card-heading"><h3>数据集之间</h3><span>{enabled.length} 个数据集</span></div>
+        <div className="strategy-card-heading"><h3>数据集之间</h3><span>已选 {enabled.length} 个数据集</span></div>
         <div className="strategy-controls">
-          <div><span className="strategy-field-label">执行方式</span><StrategyChoice label="数据集执行策略" parallel={parallel > 1} disabled={enabled.length < 2} onChange={value => setParallel(value ? Math.max(2, Math.min(enabled.length, 3)) : 1)} /></div>
-          <label>同时运行的数据集数<input aria-label="数据集同时运行数" type="number" min={1} max={Math.max(1, enabled.length)} value={parallel} disabled={parallel <= 1} onChange={e => setParallel(Math.max(1, Math.min(enabled.length || 1, Number(e.target.value))))} /></label>
+          <div><span className="strategy-field-label">执行方式</span><StrategyChoice label="数据集执行策略" parallel={parallel > 1} disabled={enabled.length < 2} onChange={value => setParallel(value ? Math.min(2, maxParallel) : 1)} /></div>
+          <label>同时运行的数据集上限
+            <select aria-label="数据集同时运行数" value={parallel} disabled={parallel === 1} onChange={e => setParallel(Number(e.target.value))}>
+              {parallel === 1 ? <option value={1}>1 个</option> : Array.from({ length: maxParallel - 1 }, (_, index) => index + 2).map(count =>
+                <option key={count} value={count}>{count} 个</option>
+              )}
+            </select>
+          </label>
         </div>
-        <p className="strategy-help">{enabled.length < 2 ? "当前仅一个数据集，无需数据集并行；样本仍可单独选择并行。" : parallel > 1 ? "多个数据集共享执行资源，同时运行数量仍需通过资源预检。" : "按下方顺序逐个执行，前一个结束后开始下一个。"}</p>
-        <div className="strategy-order"><span className="strategy-field-label">执行顺序</span>{enabled.length ? <ol>{enabled.map((d, i) => <li key={d}><span><small>{i + 1}</small>{d}</span>{enabled.length > 1 && <button type="button" className="link" disabled={i === 0} aria-label={`${d} 前移`} onClick={() => setEnabled(v => { const next = [...v]; [next[i - 1], next[i]] = [next[i], next[i - 1]]; return next; })}>前移</button>}</li>)}</ol> : <p className="muted">请先选择数据集</p>}</div>
+        <p className="strategy-help">{enabled.length === 0 ? "请先选择数据集。" : enabled.length === 1 ? "当前选择了一个数据集，可单独设置样本并行。" : parallel > 1 ? "实际同时运行数量取决于可用资源。" : "按下方顺序逐个执行。"}</p>
+        {enabled.length > 1 && <div className="strategy-order">
+          <span className="strategy-field-label">{allParallel ? "并行运行计划" : parallel > 1 ? "启动优先级" : "执行顺序"}</span>
+          {allParallel ? <ul aria-label="并行数据集">{enabled.map(dataset => <li key={dataset}>{dataset}</li>)}</ul> :
+            <ol>{enabled.map((dataset, index) => <li key={dataset}>
+              <span><small>{index + 1}</small>{dataset}</span>
+              <button type="button" className="link" disabled={index === 0} aria-label={`${dataset} 前移`} onClick={() => setEnabled(order => {
+                const next = [...order];
+                [next[index - 1], next[index]] = [next[index], next[index - 1]];
+                return next;
+              })}>前移</button>
+            </li>)}</ol>}
+        </div>}
       </section>
       {payload.tasks.map(t => <section className={`strategy-card${payload.tasks.length === 1 ? " strategy-sample-single" : ""}`} key={t.dataset} aria-label={`${t.dataset} 样本执行设置`}>
         <div className="strategy-card-heading"><h3>{t.dataset} 样本</h3><span>数据集内部</span></div>
@@ -334,6 +410,8 @@ export function TaskPlanning() {
       <div><dt>模型服务</dt><dd>{targets.rows.find(t => t.id === target)?.remote_model || "待选择"}</dd></div>
       <div><dt>执行资源</dt><dd>{resources.rows.filter(r => resourceIds.includes(r.id)).map(r => r.binding_key).join("、") || "待选择"}</dd></div>
       <div><dt>测评范围</dt><dd>{enabled.length} 个数据集 · {sampleCount} 个样本</dd></div>
+      <div><dt>数据集并行</dt><dd>{enabled.length ? `最多 ${parallel} 个` : "待选择"}</dd></div>
+      {payload.tasks.length > 0 && <div><dt>样本并行</dt><dd>{payload.tasks.map(({ dataset }) => `${dataset} ${currentConcurrency(dataset)}`).join(" · ")}</dd></div>}
       <div><dt>环境检查</dt><dd><span className={`preflight-status ${preflight ? preflightTone : "idle"}`}>{preflightLabel}</span></dd></div>
     </dl>
     <div className="planning-duration" role="status"><span>预计总耗时</span><div className="estimate-status-line"><strong>{estimating || (job && ["pending", "running"].includes(job.state)) ? "正在估算…" : report ? duration(report.estimate.total_duration_sec) : "暂无可靠估算"}</strong>{(estimating || (job && ["pending", "running"].includes(job.state))) && <EstimateElapsed />}</div><small>{report ? "不含排队及报告分析耗时" : !curve ? "未提供吞吐曲线；可直接按当前配置发起测评" : "吞吐曲线就绪后自动估算当前参数；可手动获取优化建议"}</small></div>

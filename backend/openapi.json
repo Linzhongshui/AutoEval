@@ -2725,7 +2725,8 @@
               "enum": [
                 "directory",
                 "outputs",
-                "archive"
+                "archive",
+                "archive-directory"
               ],
               "type": "string",
               "default": "directory",

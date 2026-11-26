@@ -4839,7 +4839,7 @@ export interface operations {
     files_api_autoeval_v1_evaluation_tasks__run_id__executor_files__job_id__get: {
         parameters: {
             query?: {
-                view?: "directory" | "outputs" | "archive";
+                view?: "directory" | "outputs" | "archive" | "archive-directory";
                 path?: string;
                 offset?: number;
             };

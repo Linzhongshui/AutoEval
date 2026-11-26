@@ -21,7 +21,34 @@ def trial_files(trials):
                 yield f"{trial['trial_name']}/{path}", content
 
 
-async def archived_files(session, settings, run_id, job, path, offset):
+def archive_directory(files, path, offset):
+    prefix = path + "/" if path else ""
+    entries = {}
+    for filename, (content, timestamp) in files.items():
+        if not filename.startswith(prefix):
+            continue
+        name, separator, _ = filename[len(prefix) :].partition("/")
+        if separator and name in entries:
+            entries[name]["mtime"] = max(entries[name]["mtime"], timestamp)
+            continue
+        entries[name] = {
+            "name": name,
+            "directory": bool(separator),
+            "size": 0 if separator else len(content.encode()),
+            "mtime": timestamp,
+        }
+    if path and not entries:
+        return {"state": "missing_file"}
+    children = sorted(entries.values(), key=lambda entry: (not entry["directory"], entry["name"]))
+    return {
+        "state": "directory",
+        "archived": True,
+        "entries": children[offset : offset + 100],
+        "more": offset + 100 < len(children),
+    }
+
+
+async def archived_files(session, settings, run_id, job, path, offset, *, directory=False):
     collection_key = f"round-shard:{job.id}" if isinstance(job, ExecutionShard) else job.task_id
     collection = await session.scalar(
         select(UnifiedCollection).where(
@@ -61,6 +88,8 @@ async def archived_files(session, settings, run_id, job, path, offset):
             )
     except (BotoCoreError, ClientError, ValueError, KeyError, TypeError, OSError):
         return {"state": "unavailable"}
+    if directory:
+        return archive_directory(files, path, offset) if files else None
     if path:
         if path not in files:
             return {"state": "missing_file"}

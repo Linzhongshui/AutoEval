@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 
-from autoeval.evaluation.archived_executor_files import archived_files
+from autoeval.evaluation.archived_executor_files import archive_directory, archived_files
 from autoeval.evaluation.models import DatasetExecution, ExecutionShard
 
 
@@ -42,6 +42,13 @@ async def test_browse_only_verified_native_outputs_for_the_selected_job(monkeypa
     query = session.scalar.await_args.args[0].compile().params.values()
     assert run in query
     assert (job.task_id if model is DatasetExecution else f"round-shard:{job.id}") in query
+    root = await archived_files(session, None, run, job, "", 0, directory=True)
+    assert [(e["name"], e["directory"]) for e in root["entries"]] == [("trial1", True)]
+    children = await archived_files(session, None, run, job, "trial1", 0, directory=True)
+    assert [(e["name"], e["directory"]) for e in children["entries"]] == [
+        ("agent", True),
+        ("result.json", False),
+    ]
     preview = await archived_files(session, None, run, job, "trial1/agent/trajectory.json", 0)
     assert preview["state"] == "text" and "private-test" not in preview["content"]
     missing = await archived_files(session, None, run, job, "../../config.json", 0)
@@ -58,3 +65,14 @@ async def test_browse_only_verified_native_outputs_for_the_selected_job(monkeypa
 
     monkeypatch.setattr("autoeval.evaluation.archived_executor_files.read_manifest", damaged)
     assert await archived_files(session, None, run, job, "", 0) == {"state": "unavailable"}
+
+
+def test_archive_directory_paginates_immediate_children():
+    files = {f"trial/agent/{i:03}.json": ("测", 10) for i in range(101)}
+    files["trial-other/agent/extra.json"] = ("{}", 11)
+    first = archive_directory(files, "trial/agent", 0)
+    assert len(first["entries"]) == 100 and first["more"]
+    last = archive_directory(files, "trial/agent", 100)
+    assert not last["more"]
+    assert last["entries"] == [{"name": "100.json", "size": 3, "directory": False, "mtime": 10}]
+    assert archive_directory(files, "trial/../trial-other", 0) == {"state": "missing_file"}

@@ -114,7 +114,7 @@ async def files(
     run_id: uuid.UUID,
     job_id: uuid.UUID,
     request: Request,
-    view: Literal["directory", "outputs", "archive"] = "directory",
+    view: Literal["directory", "outputs", "archive", "archive-directory"] = "directory",
     path: str = Query("", max_length=2048),
     offset: int = Query(0, ge=0),
 ):
@@ -141,13 +141,21 @@ async def files(
             ):
                 raise HTTPException(404, "Job not found in task")
             resource = frozen
-            if view == "archive":
+            if view in {"archive", "archive-directory"}:
                 return envelope({"state": "missing_file"}, request)
             binding = frozen["resource"]["debug_storage"]
         else:
-            if view == "archive":
+            if view in {"archive", "archive-directory"}:
                 return envelope(
-                    await archived_files(session, settings, run_id, job, path, offset)
+                    await archived_files(
+                        session,
+                        settings,
+                        run_id,
+                        job,
+                        path,
+                        offset,
+                        directory=view == "archive-directory",
+                    )
                     or {"state": "missing_file"},
                     request,
                 )
@@ -155,12 +163,13 @@ async def files(
                 "debug_storage"
             )
             if not binding:
-                if view == "outputs":
-                    archived = await archived_files(session, settings, run_id, job, path, offset)
-                    if archived:
-                        return envelope(archived, request)
-                    if job.state in {"pending", "queued", "preparing", "running"}:
-                        return envelope({"state": "pending"}, request)
+                archived = await archived_files(
+                    session, settings, run_id, job, path, offset, directory=view == "directory"
+                )
+                if archived:
+                    return envelope(archived, request)
+                if job.state in {"pending", "queued", "preparing", "submitting", "running"}:
+                    return envelope({"state": "pending"}, request)
                 return envelope({"state": "unverified"}, request)
             inputs = frozen["inputs"]
             task = next(t for t in inputs["tasks"] if t["task_id"] == job.task_id)
@@ -190,15 +199,18 @@ async def files(
                     )
         except STORAGE_ERRORS:
             result = {"state": "unavailable"}
-        if (
-            job is not None
-            and view == "outputs"
-            and (
-                result["state"] in {"removed", "pending", "unavailable", "wrong_storage"}
-                or (result["state"] == "directory" and not result["entries"] and not offset)
+        if job is not None and (
+            result["state"] in {"removed", "pending", "unavailable", "wrong_storage"}
+            or (
+                view == "outputs"
+                and result["state"] == "directory"
+                and not result["entries"]
+                and not offset
             )
         ):
-            archived = await archived_files(session, settings, run_id, job, path, offset)
+            archived = await archived_files(
+                session, settings, run_id, job, path, offset, directory=view == "directory"
+            )
             if archived:
                 result = archived
     if result["state"] == "forbidden":

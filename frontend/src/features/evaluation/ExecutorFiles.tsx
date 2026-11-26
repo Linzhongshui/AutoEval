@@ -49,6 +49,7 @@ function PreviewContent({ base, path, archived, revision }: { base: string; path
 function Browser({ base }: { base: string }) {
   const [outputs, setOutputs] = useState(true);
   const [directory, setDirectory] = useState("");
+  const [archiveDirectory, setArchiveDirectory] = useState(false);
   const [offset, setOffset] = useState(0);
   const [revision, refresh] = useState(0);
   const [previewRevision, refreshPreview] = useState(0);
@@ -59,7 +60,7 @@ function Browser({ base }: { base: string }) {
   const trigger = useRef<HTMLButtonElement>(null);
   const previewOpen = Boolean(selected);
   const selectedPath = selected && [directory, selected.name].filter(Boolean).join("/");
-  const query = new URLSearchParams({ path: directory, offset: String(offset), view: outputs ? "outputs" : "directory" });
+  const query = new URLSearchParams({ path: directory, offset: String(offset), view: outputs ? "outputs" : archiveDirectory ? "archive-directory" : "directory" });
   const result = useFileResult(base, query.toString(), revision);
   const metadata = result?.state === "directory" ? result.entries.find(entry => entry.name === selected?.name) : undefined;
 
@@ -87,9 +88,10 @@ function Browser({ base }: { base: string }) {
     trigger.current?.focus({ preventScroll: true });
   }
 
-  function navigate(next: string, page = 0) {
+  function navigate(next: string, page = 0, archived = result?.state === "directory" && result.archived === true) {
     select(undefined);
     setDirectory(next);
+    setArchiveDirectory(archived);
     setOffset(page);
     if (list.current) list.current.scrollTop = 0;
   }
@@ -97,8 +99,8 @@ function Browser({ base }: { base: string }) {
   return <>
     <div className="executor-file-controls">
       <div role="group" aria-label="文件列表视图" className="executor-file-modes">
-        <button aria-pressed={outputs} onClick={() => { if (!outputs) { setOutputs(true); navigate(""); } }}>全部原始输出文件</button>
-        <button aria-pressed={!outputs} onClick={() => { if (outputs) { setOutputs(false); navigate(""); } }}>作业目录</button>
+        <button aria-pressed={outputs} onClick={() => { if (!outputs) { setOutputs(true); navigate("", 0, false); } }}>全部原始输出文件</button>
+        <button aria-pressed={!outputs} onClick={() => { if (outputs) { setOutputs(false); navigate("", 0, false); } }}>作业目录</button>
       </div>
       <button className="executor-icon-button" aria-label="刷新文件" title="刷新文件" onClick={() => refresh(v => v + 1)}><RefreshCw size={16} /></button>
     </div>
@@ -111,8 +113,8 @@ function Browser({ base }: { base: string }) {
         <div className="executor-file-list" ref={list}>
           {!result ? <p role="status">正在读取执行器…</p> : result.state !== "directory" ? <p role="status">{messages[result.state] || "无法读取目录"}</p>
             : !result.entries.length ? <p>尚未生成文件</p> : <table>
-              {result.archived && <caption>当前显示此作业已归档的原始输出文件</caption>}
-              <thead><tr><th>{result.archived ? "归档文件路径" : outputs ? "文件路径（相对作业目录）" : "名称"}</th><th>大小</th><th>{result.archived ? "归档时间" : "修改时间"}</th></tr></thead>
+              {result.archived && <caption>{outputs ? "当前显示此作业已归档的原始输出文件" : "归档目录 · 仅包含此作业已归档的输出"}</caption>}
+              <thead><tr><th>{outputs ? (result.archived ? "归档文件路径" : "文件路径（相对作业目录）") : "名称"}</th><th>大小</th><th>{result.archived ? "归档时间" : "修改时间"}</th></tr></thead>
               <tbody>{result.entries.map(entry => <tr key={entry.name} className={selected?.name === entry.name ? "selected-file" : undefined}>
                 <td>{entry.metadata_only ? <span>{entry.name} · 仅元信息</span>
                   : <button className="link" aria-pressed={entry.directory ? undefined : selected?.name === entry.name}

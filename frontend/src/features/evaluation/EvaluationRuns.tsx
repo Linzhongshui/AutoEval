@@ -38,7 +38,7 @@ function DatasetEnvironment({ environment }: { environment: NonNullable<DatasetR
 
 export function EvaluationRuns({ runId = "", initialTarget = "", allowSubmit = false, debugEnabled = false }: { debugEnabled?: boolean; runId?: string; initialTarget?: string; allowSubmit?: boolean }) {
   const [caseDataset, setCaseDataset] = useState<{ runId: string; dataset: string }>();
-  const [followUp, setFollowUp] = useState<{ runId: string; target?: CaseTarget }>();
+  const [followUp, setFollowUp] = useState<{ runId: string; target?: CaseTarget; cases?: CaseTarget[] }>();
   const configs = useOptions<Config>("/test-configs", allowSubmit);
   const targets = useOptions<Target>("/target-bindings", allowSubmit);
   const docker = useOptions<Resource>("/resources", allowSubmit);
@@ -243,7 +243,8 @@ export function EvaluationRuns({ runId = "", initialTarget = "", allowSubmit = f
             {detail.datasets?.some(d => d.summary?.recovery_report_id) && <p className="notice">本任务已从同次执行的原始产物恢复评分与归档；原失败历史保留，未重新调用模型。正式成绩见关联报告。</p>}
             <section id="case-detail" data-testid="case-detail">
               {detail.follow_up_enabled && <ExecutionRounds key={detail.id} runId={detail.id} state={detail.state} />}
-              <CaseHistory key={`${detail.id}:${terminal(detail.state)}:${caseDataset?.runId === detail.id ? caseDataset.dataset : ""}`} initialRun={detail.id} selectedDataset={caseDataset?.runId === detail.id ? caseDataset.dataset : detail.datasets?.[0]?.dataset} showPending={detail.follow_up_enabled && (detail.state === "failed" || detail.state === "cancelled")} datasets={detail.datasets?.map(d => d.dataset) ?? []}
+              <CaseHistory key={`${detail.id}:${terminal(detail.state)}`} initialRun={detail.id} selectedDataset={caseDataset?.runId === detail.id ? caseDataset.dataset : detail.datasets?.[0]?.dataset} showPending={detail.follow_up_enabled && (detail.state === "failed" || detail.state === "cancelled")} datasets={detail.datasets?.map(d => d.dataset) ?? []}
+                onBatchRetry={detail.follow_up_enabled && terminal(detail.state) ? cases => setFollowUp({ runId: detail.id, cases }) : undefined}
                 onRetry={detail.follow_up_enabled && terminal(detail.state) ? (dataset_key, sample_id) => setFollowUp({
                   runId: detail.id, target: { dataset_key, sample_id },
                 }) : undefined} />
@@ -254,7 +255,7 @@ export function EvaluationRuns({ runId = "", initialTarget = "", allowSubmit = f
         </article>
       )}
       {followUp && <FollowUpConfirmation
-        key={JSON.stringify([followUp.runId, followUp.target])} {...followUp}
+        key={JSON.stringify([followUp.runId, followUp.target, followUp.cases])} {...followUp}
         onClose={() => setFollowUp(undefined)} onAccepted={() => {
           const acceptedRun = followUp.runId;
           setFollowUp(undefined);

@@ -98,6 +98,10 @@ async def preview_scope(session, settings, run, operation, target):
     if environments_pending or any(not released for released in leases.values()):
         blockers.append("cleanup_pending")
     manual_retry = operation == "case_retry" and bool(target)
+    cases = target.get("cases", [target]) if target else []
+    requested = {(case["dataset_key"], case["sample_id"]) for case in cases}
+    requested_datasets = {dataset for dataset, _ in requested}
+    template_hashes = {}
     warnings = []
     shards = []
     rows = []
@@ -105,7 +109,7 @@ async def preview_scope(session, settings, run, operation, target):
         selected = set()
         for sample in task["samples"]:
             identity = (task["dataset"], sample["sample_id"])
-            if target and identity != (target["dataset_key"], target["sample_id"]):
+            if requested and identity not in requested:
                 continue
             job, job_sample = latest_jobs.get(identity, (None, {}))
             same_sample = job_sample.get("sha256") == sample["sha256"]
@@ -162,7 +166,7 @@ async def preview_scope(session, settings, run, operation, target):
             elif manual_retry or decision.category != "reusable":
                 selected.add(identity[1])
         if task.get("execution_template") and (
-            selected or (target and target["dataset_key"] == task["dataset"])
+            selected or task["dataset"] in requested_datasets
         ):
             try:
                 current = execution_template(settings, task["assigned_resource_id"], task)
@@ -171,11 +175,12 @@ async def preview_scope(session, settings, run, operation, target):
             if current != task["execution_template"]:
                 if manual_retry and current and selected:
                     task = {**task, "execution_template": current}
+                    template_hashes[task.get("task_id", task["dataset"])] = digest(current)
                     warnings.append("using_current_template")
                 elif "resource_changed" not in blockers:
                     blockers.append("resource_changed")
         shards.extend(remaining_payloads(task, selected))
-    if target and not rows:
+    if requested and {(row["dataset_key"], row["sample_id"]) for row in rows} != requested:
         raise HTTPException(404, "Sample not in frozen selection")
     if shards and not blockers:
         target_blocker = await follow_up_target_blocker(session, settings, snapshot.canonical_body)
@@ -196,9 +201,12 @@ async def preview_scope(session, settings, run, operation, target):
         "sample_count": sum(len(shard["samples"]) for shard in shards),
     }
     if warnings:
-        selection["warnings"] = warnings
-    if "using_current_template" in warnings:
-        selection["execution_template_sha256"] = digest(shards[0]["execution_template"])
+        selection["warnings"] = list(dict.fromkeys(warnings))
+    if template_hashes:
+        if "cases" in target:
+            selection["execution_template_hashes"] = template_hashes
+        else:
+            selection["execution_template_sha256"] = next(iter(template_hashes.values()))
     return ConfirmedScope(
         snapshot.sha256, digest({"snapshot": snapshot.sha256, **selection}), selection, shards
     )

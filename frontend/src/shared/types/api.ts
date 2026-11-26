@@ -743,6 +743,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/autoeval/v1/evaluation-tasks/{run_id}/batch-case-retry-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Batch Case Preview */
+        post: operations["batch_case_preview_api_autoeval_v1_evaluation_tasks__run_id__batch_case_retry_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/autoeval/v1/evaluation-tasks/{run_id}/batch-case-retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Batch Retry Cases */
+        post: operations["batch_retry_cases_api_autoeval_v1_evaluation_tasks__run_id__batch_case_retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/autoeval/v1/evaluation-tasks/{run_id}/resume": {
         parameters: {
             query?: never;
@@ -1846,6 +1880,46 @@ export interface components {
             /** Input Sha256 */
             input_sha256: string;
         };
+        /** BatchCaseAccepted */
+        BatchCaseAccepted: {
+            /** Run Id */
+            run_id: string;
+            /** Round */
+            round: number;
+            target: components["schemas"]["BatchCaseSelection"];
+        };
+        /** BatchCaseConfirmation */
+        BatchCaseConfirmation: {
+            /** Cases */
+            cases: components["schemas"]["CaseTarget"][];
+            /** Source Round */
+            source_round: number;
+            /** Scope Sha256 */
+            scope_sha256: string;
+        };
+        /** BatchCasePreview */
+        BatchCasePreview: {
+            /** Source Round */
+            source_round: number;
+            /** Operation */
+            operation: string;
+            target: components["schemas"]["BatchCaseSelection"];
+            /** Samples */
+            samples: components["schemas"]["FollowUpSample"][];
+            /** Blockers */
+            blockers: string[];
+            /** Warnings */
+            warnings?: string[];
+            /** Sample Count */
+            sample_count: number;
+            /** Scope Sha256 */
+            scope_sha256: string;
+        };
+        /** BatchCaseSelection */
+        BatchCaseSelection: {
+            /** Cases */
+            cases: components["schemas"]["CaseTarget"][];
+        };
         /** Bundle */
         Bundle: {
             /**
@@ -1903,10 +1977,17 @@ export interface components {
         };
         /** CaseRetryConfirmation */
         CaseRetryConfirmation: {
+            /** Dataset Key */
+            dataset_key: string;
+            /** Sample Id */
+            sample_id: string;
             /** Source Round */
             source_round: number;
             /** Scope Sha256 */
             scope_sha256: string;
+        };
+        /** CaseTarget */
+        CaseTarget: {
             /** Dataset Key */
             dataset_key: string;
             /** Sample Id */
@@ -2262,6 +2343,18 @@ export interface components {
         /** Envelope[AppliedPlan] */
         Envelope_AppliedPlan_: {
             data: components["schemas"]["AppliedPlan"];
+            /** Request Id */
+            request_id: string;
+        };
+        /** Envelope[BatchCaseAccepted] */
+        Envelope_BatchCaseAccepted_: {
+            data: components["schemas"]["BatchCaseAccepted"];
+            /** Request Id */
+            request_id: string;
+        };
+        /** Envelope[BatchCasePreview] */
+        Envelope_BatchCasePreview_: {
+            data: components["schemas"]["BatchCasePreview"];
             /** Request Id */
             request_id: string;
         };
@@ -4808,6 +4901,78 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_FollowUpPreview_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    batch_case_preview_api_autoeval_v1_evaluation_tasks__run_id__batch_case_retry_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchCaseSelection"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_BatchCasePreview_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    batch_retry_cases_api_autoeval_v1_evaluation_tasks__run_id__batch_case_retry_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "idempotency-key": string;
+            };
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchCaseConfirmation"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_BatchCaseAccepted_"];
                 };
             };
             /** @description Validation Error */

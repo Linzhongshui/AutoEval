@@ -94,9 +94,31 @@ class FollowUpConfirmation(BaseModel):
     scope_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
-class CaseRetryConfirmation(FollowUpConfirmation):
+class CaseTarget(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     dataset_key: str = Field(min_length=1, max_length=128)
     sample_id: str = Field(min_length=1, max_length=256)
+
+
+class CaseRetryConfirmation(FollowUpConfirmation, CaseTarget):
+    pass
+
+
+class BatchCaseSelection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    cases: list[CaseTarget] = Field(min_length=1)
+
+    def canonical_target(self):
+        identities = sorted({(case.dataset_key, case.sample_id) for case in self.cases})
+        return {
+            "cases": [
+                {"dataset_key": dataset, "sample_id": sample} for dataset, sample in identities
+            ]
+        }
+
+
+class BatchCaseConfirmation(FollowUpConfirmation, BatchCaseSelection):
+    pass
 
 
 class FollowUpSample(BaseModel):
@@ -126,6 +148,14 @@ class FollowUpAccepted(BaseModel):
     target: dict[str, str]
 
 
+class BatchCasePreview(FollowUpPreview):
+    target: BatchCaseSelection
+
+
+class BatchCaseAccepted(FollowUpAccepted):
+    target: BatchCaseSelection
+
+
 async def follow_up_preview(run_id, request, operation, target):
     async with request.app.state.sessions() as session:
         run = await session.get(EvaluationRun, run_id)
@@ -147,6 +177,21 @@ async def case_retry_preview(
 ):
     target = {"dataset_key": dataset_key, "sample_id": sample_id}
     return await follow_up_preview(run_id, request, "case_retry", target)
+
+
+@router.post("/{run_id}/batch-case-retry-preview", response_model=Envelope[BatchCasePreview])
+async def batch_case_preview(run_id: uuid.UUID, request: Request, body: BatchCaseSelection):
+    return await follow_up_preview(run_id, request, "case_retry", body.canonical_target())
+
+
+@router.post("/{run_id}/batch-case-retry", status_code=202, response_model=Envelope[BatchCaseAccepted])
+async def batch_retry_cases(
+    run_id: uuid.UUID, request: Request, body: BatchCaseConfirmation,
+    idempotency_key: str = Header(min_length=1, max_length=256),
+):
+    return await confirm_follow_up(
+        run_id, request, body, idempotency_key, "case_retry", body.canonical_target()
+    )
 
 
 async def confirm_follow_up(run_id, request, body, key, operation, target):

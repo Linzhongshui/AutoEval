@@ -92,6 +92,8 @@ async def create_run(session, settings, body, execution_plan_id, key):
                     409, "Platform owns dataset parallelism; configure max_num_workers=1"
                 )
     for item in inputs["tasks"]:
+        if not item.get("execution_template") and not resource_for_task(fresh.payload, item["task_id"]).get("debug_storage"):
+            raise HTTPException(409, "请重新预检执行器的持久挂载 /var/lib/autoeval/artifacts")
         if item["dataset"] not in fresh.payload["supported_datasets"] or not fits(
             demand_for(item), {}, resource_for_task(fresh.payload, item["task_id"])
         ):

@@ -1,7 +1,8 @@
-import { version } from "../../package.json";
 import { apiGetPage } from "../shared/api";
 import { BackendConnection } from "../shared/ui/BackendConnection";
 import { ManagementDrawer } from "../shared/ui/ManagementDrawer";
+import { AppearanceSettings } from "./AppearanceSettings";
+import { version } from "../../package.json";
 import { DataWorkbench, PublishedLeaderboard } from "../features/reporting/DataWorkbench";
 import { DatasetManifests } from "../features/catalog/DatasetManifests";
 import { ExecutionBindings } from "../features/catalog/ExecutionBindings";
@@ -50,6 +51,7 @@ export function App() {
   const [initialTarget, setInitialTarget] = useState("");
   const [page, setPage] = useState(location.hash.slice(1) || "console");
   const [profiles, setProfiles] = useProfiles(page === "config" || page.startsWith("config/"));
+  const [executorFilesEnabled, setExecutorFilesEnabled] = useState(false);
   const [workbenchEnabled, setWorkbenchEnabled] = useState(false);
   const [candidateScoresOpen, setCandidateScoresOpen] = useState(false);
   useEffect(() => { if (page !== "leaderboard") setCandidateScoresOpen(false); }, [page]);
@@ -121,29 +123,30 @@ export function App() {
     "data-workbench": "评审报告成绩、维护榜单数据及导入官方来源。",
   };
 
+  const activeMenu = consolePage ? "console" : evaluationPage || page.startsWith("planned-run/") ? "tasks"
+    : page.startsWith("report/") ? "reports"
+    : page.startsWith("config/") ? "config"
+    : page;
+
   return (
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">
           <img className="brand-logo" src="/brand/autoeval-logo.svg" alt="AutoEval" />
+          <img className="brand-icon" src="/brand/autoeval-icon.svg" alt="AutoEval" />
         </div>
         <div className="workspace">工作空间：本地单工作空间</div>
-        <nav>
+        <nav aria-label="主菜单">
           {menus.filter(menu => menu.id !== "data-workbench" || workbenchEnabled).map((menu) => (
             <a
               key={menu.id}
+              aria-label={menu.label}
               href={`#${menu.id}`}
-              className={
-                page === menu.id || (consolePage && menu.id === "console") ||
-                ((evaluationPage || page.startsWith("planned-run/")) && menu.id === "tasks") ||
-                (page.startsWith("report/") && menu.id === "reports") ||
-                (page.startsWith("config/") && menu.id === "config")
-                  ? "selected"
-                  : ""
-              }
+              aria-current={activeMenu === menu.id ? "page" : undefined}
+              className={activeMenu === menu.id ? "selected" : ""}
             >
               <menu.icon size={22} />
-              {menu.label}
+              <span className="menu-label">{menu.label}</span>
             </a>
           ))}
         </nav>
@@ -152,7 +155,7 @@ export function App() {
         </div>
       </aside>
       <main className="main">
-        <BackendConnection onWorkbenchEnabled={setWorkbenchEnabled} />
+        <BackendConnection onExecutorFilesEnabled={setExecutorFilesEnabled} onWorkbenchEnabled={setWorkbenchEnabled} />
         <div className="breadcrumb">
           {page.startsWith("report/") ? (
             <button onClick={() => go("reports")}>报告管理</button>
@@ -164,6 +167,7 @@ export function App() {
           <ChevronRight size={14} />
           <span>{title}</span>
           <Badge>单工作空间</Badge>
+          <AppearanceSettings />
         </div>
         <header className="page-heading">
           <div>
@@ -197,6 +201,7 @@ export function App() {
         {evaluationPage && (
           <div className="stack evaluation-tasks">
             <EvaluationRuns
+              debugEnabled={executorFilesEnabled}
               runId={page.startsWith("run/") ? page.slice(4) : undefined}
               initialTarget={
                 page.startsWith("evaluate?")

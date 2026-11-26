@@ -339,6 +339,11 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                         headers={"Idempotency-Key": "new-legacy"},
                     )
                     assert blocked.status_code == 422 and "evaluation-tasks" in blocked.text
+                files = f"/api/autoeval/v1/evaluation-tasks/{rid}/executor-files"
+                jobs = (await c.get(files)).json()["data"]
+                assert {job["id"] for job in jobs} == {row["id"] for row in detail["datasets"]}
+                other_files = f"/api/autoeval/v1/evaluation-tasks/{second_run}/executor-files"
+                assert (await c.get(f"{other_files}/{jobs[0]['id']}")).status_code == 404
                 assert detail["snapshot"]["dataset_concurrency"] == 2
                 first = (await c.get("/api/autoeval/v1/evaluation-tasks?limit=1")).json()
                 assert first["statistics"]["total"] == 2 and first["next_offset"] == 1

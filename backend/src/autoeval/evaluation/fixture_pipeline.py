@@ -106,8 +106,17 @@ async def submit(
                 "top_p": 1,
             },
             "tool": {"revision": env["aisbench_revision"]},
-            "dataset_key": "GPQA",
+            "dataset_key": "validation-dataset",
         }
+        if local := env.get("local_output"):
+            frozen.update(
+                {
+                    "resource_kind": "docker_local",
+                    "resource_id": str(uuid.UUID(local["resource_id"])),
+                    "fixture_source_job": str(uuid.UUID(local["job_id"])),
+                    "resource": {"debug_storage": local["storage"]},
+                }
+            )
         session.add(
             RunSnapshot(
                 run_id=run.id,
@@ -173,6 +182,26 @@ def fetch_remote(settings, frozen, run_id):
         return raw
 
 
+async def fetch_local(sessions, settings, frozen):
+    from autoeval.planning.debug_storage import browse_store
+    from autoeval.planning.planning_transport import transport
+
+    async with sessions() as session:
+        adapter = await transport(session, settings, frozen)
+    preview = await asyncio.to_thread(
+        browse_store,
+        adapter,
+        frozen["resource"]["debug_storage"],
+        {"job": frozen["fixture_source_job"], "path": "output/unified_result.json"},
+    )
+    if preview.get("state") != "text" or preview["start"] or preview["end"] != preview["size"]:
+        raise ValueError("Complete fixed output is required")
+    raw = preview["content"].encode()
+    if hashlib.sha256(raw).hexdigest() != frozen["fixture_environment"]["source_sha256"]:
+        raise ValueError("Local fixture checksum changed")
+    return raw
+
+
 async def phase(sessions, identifier, state, event):
     async with sessions() as session, session.begin():
         run = await session.scalar(
@@ -217,8 +246,13 @@ async def execute_unified_fixture(run_id: str):
             return {"state": "cancelled"}
         if not await phase(sessions, identifier, "running", "fixture_collecting"):
             return {"state": "cancelled"}
-        raw = await asyncio.to_thread(fetch_remote, settings, frozen, run_id)
-        if not await phase(sessions, identifier, "aggregating", "fixture_remote_collected"):
+        local = bool(frozen.get("fixture_source_job"))
+        if local:
+            raw = await fetch_local(sessions, settings, frozen)
+        else:
+            raw = await asyncio.to_thread(fetch_remote, settings, frozen, run_id)
+        event = "fixture_local_collected" if local else "fixture_remote_collected"
+        if not await phase(sessions, identifier, "aggregating", event):
             return {"state": "cancelled"}
         key = f"unified-staging/{run_id}/{hashlib.sha256(raw).hexdigest()}.json"
         await asyncio.to_thread(write_manifest, settings, key, raw)
@@ -239,7 +273,7 @@ async def execute_unified_fixture(run_id: str):
                         sha256=artifact_sha,
                         manifest={
                             "files": [{"key": key, "sha256": artifact_sha, "size": len(raw)}],
-                            "remote_staging_cleaned": True,
+                            "remote_staging_cleaned": not local,
                         },
                     )
                 )
@@ -254,7 +288,10 @@ async def execute_unified_fixture(run_id: str):
                         run_id=identifier,
                         state="cleaned",
                         attempt_count=1,
-                        verified_proofs={"remote_staging_removed": True, "source_preserved": True},
+                        verified_proofs={
+                            "remote_staging_removed": not local,
+                            "source_preserved": True,
+                        },
                     )
                 )
         result = await archive_output(
@@ -298,7 +335,9 @@ async def execute_unified_fixture(run_id: str):
                 run.state = "cancelled"
                 return {"state": "cancelled"}
             old = await session.scalar(
-                select(EvaluationReport).where(EvaluationReport.run_id == identifier, EvaluationReport.is_current)
+                select(EvaluationReport).where(
+                    EvaluationReport.run_id == identifier, EvaluationReport.is_current
+                )
             )
             if not old:
                 old = EvaluationReport(
@@ -324,7 +363,7 @@ async def execute_unified_fixture(run_id: str):
                     type="fixture_completed",
                     body={
                         "report_id": str(old.id),
-                        "remote_staging_cleaned": True,
+                        "remote_staging_cleaned": not local,
                         "execution_origin": "simulation",
                     },
                 )

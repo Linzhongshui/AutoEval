@@ -24,6 +24,8 @@ AutoEval 面向单团队、单工作空间。你可以在控制台为一个模�
 
 ## 快速启动
 
+在页面面包屑右侧打开「外观设置」，可选择预设主题色、输入六位十六进制颜色，或切换左侧文字栏、左侧图标栏和顶部横栏。选择保存在当前浏览器。宽度不超过 600 像素时使用横向文字菜单，回到桌面宽度后恢复所选布局。
+
 ### 打开本地页面并检查依赖
 
 准备 Node.js 22+、Python 3.12、uv、Docker / Docker Compose，以及可访问的 PostgreSQL、Temporal 和持久化 S3。首次从 `backend/.env.example` 建立 `backend/.env`，填写本地连接参数。已有配置请保留。开发 Compose 中的 Moto 用于协议测试，真实测评证据使用持久化存储。[后端配置](backend/README.md) · [存储启动与恢复](docs/development-recovery.md)

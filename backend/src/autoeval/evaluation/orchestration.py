@@ -6,6 +6,7 @@ keeps Temporal concerns in the activity wrapper at the bottom of this file.
 
 import asyncio
 import hashlib
+import logging
 import uuid
 from contextlib import suppress
 from datetime import UTC, datetime
@@ -174,6 +175,9 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None, *, round_i
                 if item.get("assigned_resource_id")
                 else adapter
             )
+            storage = resource_for_task(frozen["resource"], child.task_id).get("debug_storage")
+            if storage:
+                adapters[child.id].debug_storage = storage
         target = await session.get(TargetBinding, inputs["target_id"])
         secret = FileSecretStore(settings.secret_store_path).get(target.credential_ref)
     while True:
@@ -277,8 +281,11 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None, *, round_i
 
                                 await publish(sessions, settings, run_id, child.id, progress)
                                 await update_child(sessions, child, summary={"progress": progress})
-                        except (OSError, ValueError, RuntimeError):
-                            pass  # Observation failure never resubmits the model task.
+                        except (OSError, ValueError, RuntimeError) as exc:
+                            logging.getLogger(__name__).warning(
+                                "Progress observation failed run=%s child=%s error_type=%s",
+                                run_id, child.id, type(exc).__name__,
+                            )
                 continue
             from autoeval.planning.planning_observations import publish_lifecycle
 
@@ -288,8 +295,11 @@ async def execute(sessions, settings, run_id, heartbeat=lambda: None, *, round_i
                     from autoeval.planning.planning_observations import publish
 
                     await publish(sessions, settings, run_id, child.id, await final_reader(job))
-                except (OSError, ValueError, RuntimeError):
-                    pass
+                except (OSError, ValueError, RuntimeError) as exc:
+                    logging.getLogger(__name__).warning(
+                        "Final progress observation failed run=%s child=%s error_type=%s",
+                        run_id, child.id, type(exc).__name__,
+                    )
             await publish_lifecycle(
                 sessions, settings, run_id, child, observation.state, final=True
             )

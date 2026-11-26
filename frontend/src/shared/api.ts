@@ -89,6 +89,8 @@ export async function apiPostBlob(
 
 export interface BackendCapabilities {
   workspace_mode: "single";
+  executor_files_enabled?: boolean;
+  data_workbench_enabled?: boolean;
   subject: string;
   evaluation_enabled: boolean;
   analysis_enabled: boolean;

@@ -552,9 +552,54 @@ def scope_harbor_compose(folder, environment):
     environment["PATH"] = str(wrapper_dir) + os.pathsep + environment.get("PATH", "")
 
 
+def capture_tool_log(proc, log, credential, publish):
+    """Drain combined tool output while publishing progress on a two-second cadence."""
+    import selectors
+    import time
+
+    pending = b""
+    key = credential.encode()
+    due = time.monotonic()
+    with proc.stdout as stream, selectors.DefaultSelector() as selector:
+        selector.register(stream, selectors.EVENT_READ)
+        while True:
+            now = time.monotonic()
+            if now >= due:
+                publish()
+                due = now + 2
+            if not selector.select(max(0, due - now)):
+                if proc.poll() is not None:
+                    break
+                continue
+            chunk = os.read(stream.fileno(), 65536)
+            if not chunk:
+                break
+            data = pending + chunk
+            pieces = data.split(key) if key else [data]
+            if len(pieces) > 1:
+                log.write(b"[REDACTED]".join(pieces[:-1]) + b"[REDACTED]")
+            tail = pieces[-1]
+            # Keep only a suffix which could complete the credential on the next read.
+            i = tail.find(key[:1], max(0, len(tail) - len(key) + 1)) if key else -1
+            while i >= 0 and not key.startswith(tail[i:]):
+                i = tail.find(key[:1], i + 1)
+            cut = len(tail) if i < 0 else i
+            log.write(tail[:cut])
+            log.flush()
+            pending = tail[cut:]
+        if pending:
+            log.write(b"[REDACTED]")
+        while proc.poll() is None:
+            publish()
+            time.sleep(2)
+
+
 def execute(folder, spec):
     validate_spec(spec)
-    secret_path = folder / "credential.json"
+    private = folder
+    if folder.parent == Path("/var/lib/autoeval/artifacts"):
+        private = Path("/tmp") / ("autoeval-private-" + folder.name)
+    secret_path = private / "credential.json"
     key = json.loads(secret_path.read_text())["value"]
     try:
         if spec["kind"] == "planner_plan":
@@ -648,7 +693,7 @@ def execute(folder, spec):
         output = folder / "output"
         output.mkdir(exist_ok=True)
         config["params"]["work_dir"] = str(output)
-        config_path = folder / "private-config.json"
+        config_path = private / "private-config.json"
         config_path.write_text(json.dumps(config))
         config_path.chmod(0o600)
         command = ["autoeval-adaptor", "--config", str(config_path)]
@@ -728,7 +773,11 @@ def execute(folder, spec):
 
         start = datetime.now(UTC).timestamp()
         with (folder / "tool.log").open("wb") as log:
-            proc = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, env=environment)
+            retained = private != folder
+            proc = subprocess.Popen(
+                command, stdout=subprocess.PIPE if retained else log,
+                stderr=subprocess.STDOUT, env=environment,
+            )
 
             def publish(final=False):
                 value = dict(progress, observed_at=datetime.now(UTC).isoformat())
@@ -751,12 +800,17 @@ def execute(folder, spec):
                 temporary.write_text(json.dumps(value))
                 temporary.replace(folder / "progress.json")
 
-            while proc.poll() is None:
-                publish()
-                time.sleep(2)
+            if retained:
+                capture_tool_log(proc, log, key, publish)
+            else:
+                while proc.poll() is None:
+                    publish()
+                    time.sleep(2)
             completed = subprocess.CompletedProcess(command, proc.returncode)
             publish(final=True)
-        diagnostic = (folder / "tool.log").read_bytes()[-12000:].decode("utf-8", errors="replace")
+        with (folder / "tool.log").open("rb") as stream:
+            stream.seek(max(0, stream.seek(0, os.SEEK_END) - 12000))
+            diagnostic = stream.read(12000).decode("utf-8", errors="replace")
         if key:
             diagnostic = diagnostic.replace(key, "[REDACTED]")
         result, size = read_unified_result(output, key)
@@ -782,7 +836,7 @@ def execute(folder, spec):
         }
     finally:
         secret_path.unlink(missing_ok=True)
-        (folder / "private-config.json").unlink(missing_ok=True)
+        (private / "private-config.json").unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

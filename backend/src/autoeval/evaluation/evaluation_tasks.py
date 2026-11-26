@@ -85,6 +85,7 @@ class TaskListItem(BaseModel):
 
 router = APIRouter(prefix="/api/autoeval/v1/evaluation-tasks", tags=["evaluation tasks"])
 SCOPES = ["local-operator:evaluation", "local-operator:orchestration"]
+READ_SCOPES = [*SCOPES, "local-operator:unified-fixture"]
 
 
 class FollowUpConfirmation(BaseModel):
@@ -224,7 +225,7 @@ async def list_tasks(
     if offset < 0 or not 1 <= limit <= 200:
         raise HTTPException(422, "Invalid pagination")
     body = RunSnapshot.canonical_body
-    conditions = [EvaluationRun.trigger_scope.in_(SCOPES)]
+    conditions = [EvaluationRun.trigger_scope.in_(READ_SCOPES if include_test else SCOPES)]
     if not include_test:
         conditions += [
             func.coalesce(body["execution_origin"].astext, "unverified") == "real",
@@ -326,7 +327,7 @@ async def task_detail(run_id: uuid.UUID, request: Request):
     sessions = request.app.state.sessions
     async with sessions() as session:
         row = await session.get(EvaluationRun, run_id)
-        if not row or row.trigger_scope not in SCOPES:
+        if not row or row.trigger_scope not in READ_SCOPES:
             raise HTTPException(404, "Evaluation task not found")
         scope = row.trigger_scope
     data = await evaluation_run_detail(sessions, request.app.state.settings, run_id)
@@ -523,7 +524,7 @@ async def task_report(run_id: uuid.UUID, request: Request):
     sessions = request.app.state.sessions
     async with sessions() as session:
         row = await session.get(EvaluationRun, run_id)
-        if not row or row.trigger_scope not in SCOPES:
+        if not row or row.trigger_scope not in READ_SCOPES:
             raise HTTPException(404, "Evaluation task not found")
         formal = await session.scalar(
             select(EvaluationReport).where(

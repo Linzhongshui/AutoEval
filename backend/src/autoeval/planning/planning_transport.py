@@ -850,8 +850,10 @@ def execution_template(settings, resource_id, task):
     from autoeval.evaluation.tool_dispatch import tool_for
 
     family = tool_for(task).name
-    entry = executor_templates(settings, resource_id).get(family)
-    if not entry or entry.get("revision") != task["tool"]["revision"]:
+    entries = executor_templates(settings, resource_id)
+    revision = task["tool"]["revision"]
+    entry = entries.get(f"{family}@{revision}", entries.get(family))
+    if not entry or entry.get("revision") != revision:
         return None
     if family == "harbor" and entry.get("private_docker") is not True:
         return None
@@ -882,6 +884,12 @@ def execution_template(settings, resource_id, task):
         template["rootless_docker_helper"] = helper
         if entry.get("shared_trial_workdir") is True:
             template["shared_trial_workdir"] = True
+            # The shared workdir runs under a numeric UID without a passwd entry.
+            template["environment"].update(
+                USER="autoeval", LOGNAME="autoeval", BFCL_PROJECT_ROOT="/tmp/autoeval-bfcl"
+            )
+        if entry.get("offline_case_images") is True:
+            template["offline_case_images"] = True
     return template
 
 

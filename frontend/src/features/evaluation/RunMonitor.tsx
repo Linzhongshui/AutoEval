@@ -114,11 +114,25 @@ function useRunMonitor(runId: string, terminal: boolean) {
   return { value, loading, error };
 }
 
-export function RunProgress({ runId, terminal, stage, state, createdAt, events = [], showSampleProgress = true }: {
-  runId: string; terminal: boolean; stage: string; state: string; createdAt?: string; events?: ProgressEvent[]; showSampleProgress?: boolean;
+function groupAttempts(items: NonNullable<Monitor["datasets"]>) {
+  const groups = new Map<string, NonNullable<Monitor["datasets"]>>();
+  for (const item of items) {
+    const name = item.dataset || item.task_name || `执行记录 ${item.attempt ?? groups.size + 1}`;
+    const group = groups.get(name);
+    if (group) group.push(item);
+    else groups.set(name, [item]);
+  }
+  return Array.from(groups, ([name, records]) => {
+    records.sort((a, b) => (b.attempt ?? 0) - (a.attempt ?? 0));
+    return { name, records, latest: records[0] };
+  });
+}
+
+export function RunProgress({ runId, terminal, stage, state, createdAt, events = [], performanceTask = false, showSampleProgress = true }: {
+  runId: string; terminal: boolean; stage: string; state: string; createdAt?: string; events?: ProgressEvent[]; showSampleProgress?: boolean; performanceTask?: boolean;
 }) {
   const { value, loading, error } = useRunMonitor(runId, terminal);
-  const datasets = value?.datasets ?? [];
+  const datasets = groupAttempts(value?.datasets ?? []);
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
     const tick = () => { if (!document.hidden) setNow(Date.now()); };
@@ -149,11 +163,23 @@ export function RunProgress({ runId, terminal, stage, state, createdAt, events =
       </li>)}
     </ol>
     {!terminal && <p className="task-wait-hint">{state === "accepted" || state === "queued" ? "提交已接收，正在等待执行资源" : state === "preparing" ? "正在校验环境并启动工具，阶段变化会自动更新" : state === "aggregating" ? "正在收集结果、校验证据并生成报告" : state === "cancelling" ? "正在确认远程作业停止，资源仍保留占用" : "工具正在执行；样本计数返回后自动显示完成比例"}</p>}
-    {datasets.length > 0 && (!showSampleProgress || datasets.length > 1) ? datasets.map(item => <section className="card stack" key={item.dataset || item.task_name || item.attempt}>
-      <h4>{item.dataset || item.task_name} · {STATUS_LABEL[item.tool_status || ""] || item.tool_status || "等待中"}</h4>
-      <MonitorProgress value={item} error={Boolean(error)} terminal={item.snapshot_kind === "final"} />
-      <p className="muted">{item.source === "executor_lifecycle" ? "远程作业状态采集；不是工具原生样本进度" : item.source} · {item.observed_at || "等待采集"}{item.stale ? " · 数据已过期" : ""}</p>
-    </section>) : showSampleProgress
+    {performanceTask ? <p className="muted">性能作业按执行阶段记录进展。</p> : datasets.length > 0 && (!showSampleProgress || (value?.datasets?.length ?? 0) > 1) ? <div className="dataset-monitor-list" aria-label="数据集最新执行进度">
+        {datasets.map(({ name, records, latest }) => <details key={name}>
+          <summary>
+            <span className="dataset-monitor-name">{name}</span>
+            <span className="dataset-monitor-state">{STATUS_LABEL[latest.tool_status || ""] || latest.tool_status || "等待中"}{latest.stale && " · 已过期"}</span>
+            <MonitorProgress value={latest} error={Boolean(error)} terminal={latest.snapshot_kind === "final"} />
+          </summary>
+          <ol className="dataset-monitor-history" aria-label={`${name} 监控记录`}>
+            {records.map((item, index) => <li key={item.attempt ?? index}>
+              <b>{index === 0 ? "最新记录" : "历史记录"} · {STATUS_LABEL[item.tool_status || ""] || item.tool_status || "等待中"}</b>
+              <MonitorProgress value={item} terminal={item.snapshot_kind === "final"} />
+              <small>{stamp(item.observed_at)} · {item.source || "来源未知"} · {KIND_LABEL[item.snapshot_kind || "live"] || item.snapshot_kind}{item.stale && " · 数据已过期"}</small>
+            </li>)}
+          </ol>
+        </details>)}
+        <small className="muted">进度按各数据集最新记录展示。展开数据集可查看采集时间和历史记录。</small>
+      </div> : showSampleProgress
       ? <MonitorProgress value={value} error={Boolean(error)} terminal={terminal} />
       : <p className="muted">暂无分数据集样本进度。</p>}
     <small className="muted">{endEvent === originalEnd && originalEnd
@@ -226,9 +252,9 @@ export function MonitorSnapshots({ runId, terminal }: { runId: string; terminal:
   }, [runId, selected]);
 
   const collected = value && (value.collection_status !== "not_collected" || value.log);
-  const datasets = value?.datasets ?? [];
-  const multi = datasets.length > 1;
-  const finalCount = datasets.filter(item => item.snapshot_kind === "final").length;
+  const datasets = groupAttempts(value?.datasets ?? []);
+  const multi = (value?.datasets?.length ?? 0) > 1;
+  const finalCount = datasets.filter(({ latest }) => latest.snapshot_kind === "final").length;
   const allFinal = multi && finalCount === datasets.length;
   const kind = multi ? allFinal ? "final" : "live" : value?.snapshot_kind || "live";
   const headerKind = multi ? allFinal ? "全部数据集终态已归档" : finalCount ? "部分数据集已结束" : "数据集执行中" : KIND_LABEL[kind] || kind;

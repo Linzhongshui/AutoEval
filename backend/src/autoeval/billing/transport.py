@@ -67,17 +67,15 @@ def execution_route(settings, run_id, target_id, dataset, section="evaluation", 
 def route_compilation(compilation, route):
     result = copy.deepcopy(compilation)
     params = result["config"]["params"]
-    if result["config"]["subcommand"] == "llm_accuracy":
-        # AISBench appends v1/chat/completions to this URL itself.
-        params["url"] = route["base_url"].removesuffix("/v1")
-    else:
+    field = "url" if result["config"]["subcommand"] in {"llm_accuracy", "llm_perf", "agentx"} else "api_base"
+    if field == "api_base":
         upstream = urlsplit(params.get("api_base") or "").hostname
         gateway = urlsplit(route["base_url"]).hostname
         hosts = [host for host in params.get("extra_allowed_hosts", []) if host.lower() != upstream]
         if gateway and gateway not in {host.lower() for host in hosts}:
             hosts.append(gateway)
         params["extra_allowed_hosts"] = hosts
-        params["api_base"] = route["base_url"]
+    params[field] = route["base_url"].removesuffix("/v1") if result["config"]["subcommand"] == "llm_accuracy" else route["base_url"]
     if any(key in params for key in ("host_ip", "host_port", "model_overrides")):
         raise ValueError("Alternate model routing must be removed for budgeted execution")
     return result

@@ -44,6 +44,7 @@ def test_preflight_reports_tool_versions_paths_and_dataset_blockers(tmp_path, mo
     checked = inspect_dataset(task, networks=None, validated={"GPQA"})
     assert checked["data_path"] == str(tmp_path)
     assert checked["tool_revision"] == "a" * 40
+    assert checked["warnings"] == []
     assert checked["blocking_reasons"] == []
     assert checked["warnings"] == []
 

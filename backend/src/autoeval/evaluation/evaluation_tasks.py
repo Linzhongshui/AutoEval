@@ -1,6 +1,7 @@
 """One public task contract; workflow and historical snapshot formats stay private."""
 
 import uuid
+from typing import Literal
 
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, Header, HTTPException, Request
@@ -27,7 +28,7 @@ from autoeval.infrastructure.responses import (
     TaskListEnvelope,
     envelope,
 )
-from autoeval.planning.schemas import PlanInput, ResourceRef, TaskInput
+from autoeval.planning.schemas import PerformanceTask, PlanInput, ResourceRef, TaskInput
 
 
 class TaskSelection(TaskInput):
@@ -35,6 +36,7 @@ class TaskSelection(TaskInput):
 
 
 class SubmitTask(ResourceRef):
+    resource_kind: Literal["customer_ssh"]
     resource_ids: list[uuid.UUID] = Field(default_factory=list, max_length=16)
     ignore_budget: bool = Field(default=False, strict=True)
 
@@ -113,6 +115,7 @@ class FollowUpPreview(BaseModel):
     target: dict[str, str]
     samples: list[FollowUpSample]
     blockers: list[str]
+    warnings: list[str] = Field(default_factory=list)
     sample_count: int
     scope_sha256: str
 
@@ -195,10 +198,10 @@ async def retry_case(
 
 @router.post("", status_code=202, response_model=Envelope[SubmittedRun])
 async def submit(
-    body: SubmitTask, request: Request, idempotency_key: str = Header(min_length=1, max_length=256)
+    body: SubmitTask | PerformanceTask, request: Request, idempotency_key: str = Header(min_length=1, max_length=256)
 ):
     # No Planner job/plan ID is accepted. Final parameters are validated and frozen normally.
-    inputs = PlanInput(**body.model_dump(), recommend=False)
+    inputs = body if isinstance(body, PerformanceTask) else PlanInput(**body.model_dump(), recommend=False)
     data = await submit_planned_run(
         request.app.state.sessions,
         request.app.state.settings,
@@ -298,6 +301,7 @@ async def list_tasks(
                         "resource_kind": s.canonical_body.get("resource_kind"),
                         "follow_up_enabled": (
                             s.schema_version == "planned-run.v1"
+                            and not s.canonical_body.get("inputs", {}).get("performance")
                             and bool(s.canonical_body.get("inputs", {}).get("tasks"))
                             and getattr(
                                 request.app.state.settings, "evaluation_follow_up_enabled", False
@@ -338,7 +342,10 @@ async def task_detail(run_id: uuid.UUID, request: Request):
         async with sessions() as session:
             frozen = await session.scalar(select(RunSnapshot).where(RunSnapshot.run_id == run_id))
             tasks = frozen.canonical_body.get("inputs", {}).get("tasks", [])
-            await project_follow_up_detail(session, run_id, data, tasks)
+            if frozen.canonical_body.get("task_type") == "performance":
+                data["follow_up_enabled"] = False
+            else:
+                await project_follow_up_detail(session, run_id, data, tasks)
             data["snapshot"]["dataset_configurations"] = [
                 {
                     **{

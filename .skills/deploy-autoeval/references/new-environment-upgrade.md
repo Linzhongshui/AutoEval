@@ -136,4 +136,3 @@ pier run -p "$TASKS/abs-module-cache-flags" --env docker \
 ## 5. 需要从 AutoEval 页面提交时
 
 在[跨环境测评资源手册](evaluation-bootstrap.md)执行基础数据导入与对象回读，重新绑定本环境的模型服务、SSH x86 执行资源、DeepSWE Lite 任务目录与 AISBench/Harbor 工具模板，然后重新编译输入。确认相应 Worker 预检通过，再从任务页面选择一个 Lite 样本并提交一次。按同一 run ID 核对分发、Temporal、S3、Case 与报告页。原生 Pier 的 job/trial 与控制台的 run/report 分别登记；这版平台没有将独立 Pier 成绩自动导入正式报告的适配。交付记录应注明采用哪条路径、实际架构、镜像 ID、迁移 revision、模型、样本及未验项。
-

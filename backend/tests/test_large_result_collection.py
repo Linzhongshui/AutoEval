@@ -53,7 +53,7 @@ async def test_remote_collect_is_bounded_and_shell_quoted(oversize):
     removed = []
     commands = []
     sftp = SimpleNamespace(
-        lstat=lambda p: SimpleNamespace(st_mode=stat.S_IFREG),
+        lstat=lambda p: SimpleNamespace(st_mode=stat.S_IFREG, st_size=len(raw)),
         open=lambda p, mode: io.BytesIO(raw),
         remove=removed.append,
     )

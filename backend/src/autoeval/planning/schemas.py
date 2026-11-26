@@ -1,7 +1,7 @@
 """Request schemas shared by planning and evaluation routes."""
 
 import uuid
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
@@ -48,6 +48,7 @@ class TaskInput(Strict):
 
 
 class PlanInput(ResourceRef):
+    resource_kind: Literal["customer_ssh"]
     resource_ids: list[uuid.UUID] = Field(default_factory=list, max_length=16)
     ignore_budget: bool = Field(default=False, strict=True)
 
@@ -77,6 +78,40 @@ class PlanInput(ResourceRef):
         ) != len(self.tasks):
             raise ValueError("Duplicate task or dataset")
         return self
+
+
+class InferencePerformance(Strict):
+    kind: Literal["inference"]
+    input_tokens: int = Field(ge=1, le=1048576)
+    max_output_tokens: int = Field(ge=1, le=1048576)
+    concurrency: int = Field(ge=1, le=256)
+    requests: int = Field(ge=1, le=100000)
+
+
+class AgentXPerformance(Strict):
+    kind: Literal["agentx"]
+    variant: Literal["256k", "full"]
+    run_mode: Literal["smoke", "benchmark"] = "smoke"
+    duration: int = Field(ge=1, le=86400)
+    concurrency: Annotated[int, Field(ge=1, le=256)] | Annotated[
+        list[Annotated[int, Field(ge=1, le=256)]], Field(min_length=1, max_length=256)
+    ]
+    trace_limit: int | None = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def formal_scope(self):
+        if isinstance(self.concurrency, list) and len(set(self.concurrency)) != len(self.concurrency):
+            raise ValueError("会话并发档位不能重复")
+        if self.run_mode == "benchmark" and (self.duration < 900 or self.trace_limit is not None):
+            raise ValueError("benchmark 需要至少 900 秒，trace 数量上限仅适用于 smoke")
+        return self
+
+
+class PerformanceTask(ResourceRef):
+    resource_kind: Literal["customer_ssh"]
+    target_id: uuid.UUID
+    performance: InferencePerformance | AgentXPerformance = Field(discriminator="kind")
+    ignore_budget: bool = Field(default=False, strict=True)
 
 
 class CurveInput(ResourceRef):

@@ -76,20 +76,6 @@ def test_compile_full_inputs_without_activating_execution(index):
     assert result["adaptor_revision"] == "955089ab32ef696c231d628f5ad0d9da28f430c4"
 
 
-@pytest.mark.parametrize(
-    "hosts,expected",
-    [([], ["model.internal"]), (["proxy"], ["proxy", "model.internal"]),
-     (["MODEL.INTERNAL"], ["MODEL.INTERNAL"])],
-)
-def test_harbor_compilation_allows_model_hostname(hosts, expected):
-    entry = next(row for row in discover(bundle()) if row["benchmark"] == "DeepSWE")
-    endpoint = target()
-    endpoint.base_url = "https://model.internal:8443/v1"
-    body = CompileInput(adjustments={"params": {"extra_allowed_hosts": hosts}})
-    result = compile_config(entry, body, endpoint)
-    assert result["config"]["params"]["extra_allowed_hosts"] == expected
-
-
 def test_compile_freezes_allowed_ssh_resources():
     entry = discover(bundle())[0]
     first, second = uuid.uuid4(), uuid.uuid4()
@@ -105,6 +91,20 @@ def test_compile_freezes_allowed_ssh_resources():
     )[:32]
     legacy = compile_config(entry, legacy_body)
     assert legacy["config"]["params"]["work_dir"] == f"/work/autoeval/inputs/{legacy_hash}"
+
+
+@pytest.mark.parametrize(
+    "hosts,expected",
+    [([], ["model.internal"]), (["proxy"], ["proxy", "model.internal"]),
+     (["MODEL.INTERNAL"], ["MODEL.INTERNAL"])],
+)
+def test_harbor_compilation_allows_model_hostname(hosts, expected):
+    entry = next(row for row in discover(bundle()) if row["benchmark"] == "DeepSWE")
+    endpoint = target()
+    endpoint.base_url = "https://model.internal:8443/v1"
+    body = CompileInput(adjustments={"params": {"extra_allowed_hosts": hosts}})
+    result = compile_config(entry, body, endpoint)
+    assert result["config"]["params"]["extra_allowed_hosts"] == expected
 
 
 @pytest.mark.parametrize("index", range(6))

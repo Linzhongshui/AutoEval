@@ -9,7 +9,8 @@ import { ExecutionBindings } from "../features/catalog/ExecutionBindings";
 import { StandardInputs } from "../features/catalog/StandardInputs";
 import { Configurations } from "../features/catalog/Configurations";
 import { useProfiles } from "../features/catalog/useProfiles";
-import { TaskPlanning } from "../features/planning/TaskPlanning";
+import { SSHResources } from "../features/resources/SSHResources";
+import { EvaluationConsoleTabs } from "../features/planning/EvaluationConsoleTabs";
 import { EvaluationRuns } from "../features/evaluation/EvaluationRuns";
 import { RealReports } from "../features/reporting/RealReports";
 import { RealLeaderboard } from "../features/reporting/RealLeaderboard";
@@ -47,12 +48,17 @@ const menus = [
 ];
 
 export function App() {
+  const [initialTarget, setInitialTarget] = useState("");
   const [page, setPage] = useState(location.hash.slice(1) || "console");
   const [profiles, setProfiles] = useProfiles(page === "config" || page.startsWith("config/"));
   const [executorFilesEnabled, setExecutorFilesEnabled] = useState(false);
   const [workbenchEnabled, setWorkbenchEnabled] = useState(false);
   const [candidateScoresOpen, setCandidateScoresOpen] = useState(false);
   useEffect(() => { if (page !== "leaderboard") setCandidateScoresOpen(false); }, [page]);
+  const [poolReturn, setPoolReturn] = useState<string | null>(() => history.state?.consoleReturn ?? null);
+  const consolePage = page === "console" || page === "console/performance";
+  const [poolRevision, setPoolRevision] = useState(0);
+  const poolPage = page === "config/ssh-pool" || page === "config/ssh-pool/add";
   const [toast, setToast] = useState("");
   const evaluationPage = page === "tasks" || page.startsWith("run/") || page.startsWith("evaluate?");
   const go = (path: string) => {
@@ -61,11 +67,28 @@ export function App() {
     window.scrollTo(0, 0);
   };
 
+  const openPool = (path: string, origin: string | null) => {
+    setPoolReturn(origin);
+    go(path);
+    history.replaceState({ ...history.state, consoleReturn: origin }, "");
+  };
+
   useEffect(() => {
-    const onHashChange = () => {
+    const onHashChange = (event?: HashChangeEvent) => {
       const hash = location.hash.slice(1) || "console";
+      if (hash === "config/ssh-pool" || hash === "config/ssh-pool/add") {
+        setPoolReturn(history.state?.consoleReturn ?? null);
+      } else if (event?.oldURL.split("#")[1]?.startsWith("config/ssh-pool")
+        && (hash === "console" || hash === "console/performance")) {
+        setPoolRevision(value => value + 1);
+      }
       if (hash.startsWith("planned-run/")) { location.replace(`#run/${hash.slice(12)}`); return; }
-      if (hash.startsWith("evaluate?")) { location.replace("#console"); return; }
+      if (hash.startsWith("evaluate?")) {
+        setInitialTarget(new URLSearchParams(hash.slice(9)).get("target") || "");
+        location.replace("#console");
+        return;
+      }
+      if (hash !== "console") setInitialTarget("");
       setPage(hash);
     };
     onHashChange();
@@ -78,18 +101,21 @@ export function App() {
     return () => clearTimeout(timer);
   }, [toast]);
 
-  const title = page.startsWith("run/") || page.startsWith("planned-run/")
+  const title = poolPage ? (page.endsWith("/add") ? "添加 SSH 节点" : "SSH 资源池") : page.startsWith("run/") || page.startsWith("planned-run/")
     ? "测评任务详情"
     : page.startsWith("evaluate?")
       ? "新建探索测评"
       : page.startsWith("report/")
-        ? "测评报告"
-        : page.startsWith("config/")
-          ? "配置维护"
-          : menus.find((menu) => menu.id === page)?.label || "控制台";
+          ? "测评报告"
+          : page.startsWith("config/")
+            ? "配置维护"
+            : menus.find((menu) => menu.id === page)?.label || "控制台";
   const descriptions: Record<string, string> = {
     home: "从一次测评开始，让模型能力与执行证据清晰可见。",
+    "console/performance": "选择模型服务与 SSH 节点，运行普通推理或 AgentX 轨迹回放。",
     console: "选择模型、数据集与执行资源，按当前参数发起测评；可选获取耗时估算和参数建议。",
+    "config/ssh-pool": "维护测评使用的 SSH 节点，检查节点连接。",
+    "config/ssh-pool/add": "登记节点连接信息与凭据。",
     config: "按模型与数据集分别维护测试参数、清单和执行绑定。",
     tasks: "追踪每一次测评，定位每一个问题。",
     reports: "查看测评报告，追溯历史结果。",
@@ -97,7 +123,7 @@ export function App() {
     "data-workbench": "评审报告成绩、维护榜单数据及导入官方来源。",
   };
 
-  const activeMenu = evaluationPage || page.startsWith("planned-run/") ? "tasks"
+  const activeMenu = consolePage ? "console" : evaluationPage || page.startsWith("planned-run/") ? "tasks"
     : page.startsWith("report/") ? "reports"
     : page.startsWith("config/") ? "config"
     : page;
@@ -151,13 +177,25 @@ export function App() {
         </header>
 
         {page === "home" && <Overview go={go} />}
-        {page === "console" && <TaskPlanning />}
+        {(consolePage || (poolPage && poolReturn)) && <div hidden={!consolePage}>
+          <EvaluationConsoleTabs initialTarget={initialTarget} page={consolePage ? page : poolReturn!} go={go} poolRevision={poolRevision} onManagePool={(add) => {
+            openPool(add ? "config/ssh-pool/add" : "config/ssh-pool", page);
+          }} />
+        </div>}
+        {poolPage && <SSHResources
+          adding={page.endsWith("/add")}
+          onAdd={() => openPool("config/ssh-pool/add", poolReturn)}
+          onCancel={() => openPool("config/ssh-pool", poolReturn)}
+          onSaved={() => poolReturn ? go(poolReturn) : openPool("config/ssh-pool", null)}
+          onBack={poolReturn ? () => go(poolReturn) : undefined}
+        />}
         {page === "config" && <div className="management-toolbar">
+          <button onClick={() => openPool("config/ssh-pool", null)}>SSH 资源池</button>
           <ManagementDrawer title="管理样本清单"><DatasetManifests /></ManagementDrawer>
           <ManagementDrawer title="执行规则与绑定"><ExecutionBindings /></ManagementDrawer>
           {import.meta.env.DEV && <ManagementDrawer title="标准仓输入与版本"><StandardInputs /></ManagementDrawer>}
         </div>}
-        {(page === "config" || page.startsWith("config/")) && (
+        {(page === "config" || (page.startsWith("config/") && !poolPage)) && (
           <Configurations profiles={profiles} setProfiles={setProfiles} go={go} notify={setToast} />
         )}
         {evaluationPage && (
@@ -181,6 +219,7 @@ export function App() {
             open={(id) => go(`report/${id}`)}
           />
         )}
+
         {page === "leaderboard" && (<div className="stack"><PublishedLeaderboard /><details onToggle={(event) => setCandidateScoresOpen(event.currentTarget.open)}><summary>平台运行报告候选成绩（未人工评审）</summary>{candidateScoresOpen && <RealLeaderboard open={(id) => go(`report/${id}`)} />}</details></div>)}
         {workbenchEnabled && page === "data-workbench" && <DataWorkbench />}
 

@@ -26,6 +26,12 @@ async def resolve_inputs(session, settings, body):
     from autoeval.catalog.registry import Asset, AssetVersion
 
     target = await target_data(session, body.target_id)
+    from autoeval.planning.schemas import PerformanceTask
+
+    if isinstance(body, PerformanceTask):
+        from autoeval.evaluation.performance import performance_inputs
+
+        return performance_inputs(settings, body, target)
     tasks = []
     for spec in body.tasks:
         if spec.compilation_id in getattr(settings, "archived_compilation_ids", []):
@@ -47,7 +53,9 @@ async def resolve_inputs(session, settings, body):
         resource_ids = compiled.get("runtime_config", {}).get("resource_ids")
         from autoeval.evaluation.resource_allocation import allocate_resource
 
-        assigned_resource = allocate_resource(body.resource_ids or [body.resource_id], resource_ids)
+        candidates = body.resource_ids or [body.resource_id]
+        if resource_ids is not None:
+            allocate_resource(candidates, resource_ids)
         if (
             not compiled.get("input_ready")
             or compiled.get("adaptor_revision") != "955089ab32ef696c231d628f5ad0d9da28f430c4"
@@ -77,6 +85,19 @@ async def resolve_inputs(session, settings, body):
             config["subcommand"] == "harbor_agent"
         ):
             raise HTTPException(422, "Dataset tool family mismatch")
+        from autoeval.planning.planning_transport import select_execution_template
+
+        assignment = select_execution_template(
+            settings, candidates, resource_ids, {"compilation": compiled, "tool": profile.contract}
+        )
+        if assignment is None:
+            raise HTTPException(
+                422,
+                f"所选 SSH 节点缺少 {spec.dataset} 的执行模板"
+                f"（{profile.contract['family']} / {profile.contract['revision'][:12]}）。"
+                "请配置节点的工具版本、镜像和数据挂载。模板匹配后，平台会自动创建独立容器。",
+            )
+        assigned_resource, template = assignment
         full = await session.get(DatasetManifest, profile.full_manifest_id)
         source = await asyncio.to_thread(read_manifest, settings, full)
         samples = [
@@ -117,7 +138,9 @@ async def resolve_inputs(session, settings, body):
             params["dataset_test_range"] = (
                 f"[{chosen[0]['tool_case_id']}:{int(chosen[-1]['tool_case_id']) + 1}]"
             )
-        field = "batch_size" if config["subcommand"] == "llm_accuracy" else "n_concurrent_trials"
+        from autoeval.evaluation.tool_dispatch import tool_for
+
+        field = tool_for({"compilation": compiled}).concurrency_field
         attempts = (
             int(params.get("n_attempts", 1))
             if spec.dataset in {"DeepSWE", "AutomationBench"}
@@ -129,7 +152,9 @@ async def resolve_inputs(session, settings, body):
         tasks.append(
             {
                 **spec.model_dump(mode="json"),
-                **({"assigned_resource_id": assigned_resource, "assigned_resource_kind": body.resource_kind} if body.resource_ids else {}),
+                "assigned_resource_id": assigned_resource,
+                "assigned_resource_kind": body.resource_kind,
+                "execution_template": template,
                 "compilation": compiled,
                 "compilation_sha256": compilation.sha256,
                 "standard_baseline_source": {
@@ -157,18 +182,20 @@ async def resolve_inputs(session, settings, body):
     }
 
 
+def preflight_task_identity(task):
+    # The registered compilation hash precedes runtime concurrency overrides.
+    return {
+        key: task.get(key)
+        for key in (
+            "task_id", "dataset", "compilation_id", "compilation_sha256",
+            "manifest_id", "manifest_sha256", "profile_sha256", "tool",
+            "assigned_resource_id", "assigned_resource_kind", "execution_template",
+        )
+    }
+
+
 def selection_identity(inputs):
     return sorted(
-        (
-            {
-                **{
-                    key: task[key]
-                    for key in ("task_id", "dataset", "compilation_id", "manifest_id")
-                },
-                "profile_sha256": task.get("profile_sha256"),
-                "concurrency": task.get("concurrency"),
-            }
-            for task in inputs.get("tasks", [])
-        ),
+        (preflight_task_identity(task) for task in inputs.get("tasks", [])),
         key=lambda task: task["task_id"],
     )

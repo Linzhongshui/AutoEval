@@ -128,8 +128,7 @@ def test_monitor_progress_unknown_zero_and_completed(browser_page):
 
 def test_case_list_refreshes_when_running_task_completes(browser_page):
     page, url, _ = browser_page
-    page.add_init_script(path=FIXTURE)
-    page.add_init_script("window.savedCases=window.cases;window.cases=[];window.detail.report=null")
+    page.add_init_script(FIXTURE.read_text(encoding="utf-8") + "\nwindow.savedCases=window.cases;window.cases=[];window.detail.report=null")
     page.goto(url + "/#run/fixture-run")
     expect(page.get_by_role("status").filter(has_text="该运行暂无 case 执行记录。")).to_be_visible()
     page.evaluate("window.cases=window.savedCases;window.detail.state='completed'")

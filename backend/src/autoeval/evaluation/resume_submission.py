@@ -147,7 +147,15 @@ async def submit_follow_up(
                 run_id=run_id,
                 kind="START_RUN",
                 dedup_key=f"evaluation-round:{successor.id}",
-                payload={"workflow_kind": "evaluation_follow_up", "round_id": str(successor.id)},
+                payload={
+                    "workflow_kind": "evaluation_follow_up",
+                    "round_id": str(successor.id),
+                    **(
+                        {"workflow_queue": "autoeval.dataset-containers.v1"}
+                        if any(shard.get("execution_template") for shard in scope.shards)
+                        else {}
+                    ),
+                },
             )
         )
 

@@ -133,14 +133,6 @@ def child(folder):
         raise SystemExit(0)
 
     if spec.get("kind") != "framework_smoke":
-        from planning_runtime import (
-            attach_harbor_evidence,
-            collect_terminal_harbor_trials,
-            controlled_failure_reason,
-            execute,
-            read_unified_result,
-            restore_accuracy_indices,
-        )
 
         def cancel_controlled(signum, frame):
             result_path = folder / "result.json"
@@ -149,6 +141,13 @@ def child(folder):
             )
             try:
                 if not result_path.exists() and spec.get("kind") == "adaptor":
+                    from planning_runtime import (
+                        attach_harbor_evidence,
+                        collect_terminal_harbor_trials,
+                        read_unified_result,
+                        restore_accuracy_indices,
+                    )
+
                     credential = json.loads((private_dir(folder) / "credential.json").read_text())[
                         "value"
                     ]
@@ -186,7 +185,7 @@ def child(folder):
                             pass
                     if captured:
                         atomic_json(result_path, captured)
-            except (OSError, ValueError, KeyError, TypeError):
+            except (ImportError, OSError, ValueError, KeyError, TypeError):
                 # Preserve cancellation even when the tool has not finished writing output.
                 pass
             (private_dir(folder) / "credential.json").unlink(missing_ok=True)
@@ -196,9 +195,19 @@ def child(folder):
 
         signal.signal(signal.SIGTERM, cancel_controlled)
         try:
+            from planning_runtime import controlled_failure_reason, execute
+        except ImportError:
+            atomic_json(
+                folder / "exit.json", {"state": "failed", "reason": "runtime_import_failed"}
+            )
+            return
+        try:
             result = execute(folder, spec)
             atomic_json(folder / "result.json", result)
-            atomic_json(folder / "exit.json", {"state": "succeeded"})
+            config = spec.get("compilation", {}).get("config", {})
+            perf = config.get("subcommand") in {"llm_perf", "agentx"} and config.get("params", {}).get("kind") in {"inference", "agentx"}
+            exit_state = {"state": "failed", "reason": "native_performance_failed"} if perf and result.get("tool_exit_code") else {"state": "succeeded"}
+            atomic_json(folder / "exit.json", exit_state)
         except Exception as exc:  # noqa: BLE001 -- isolate third-party errors without leaking credentials
             # Persist only allowlisted reason codes, never third-party response text.
             atomic_json(

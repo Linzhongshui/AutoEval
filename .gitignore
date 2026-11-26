@@ -35,6 +35,11 @@ __pycache__/
 /result/
 analysis_out/
 
+# Generated deployment kits and encrypted transfers
+/deliverables/autoeval-evaluation-kit-*/
+/deliverables/autoeval-evaluation-kit-*.zip
+/deliverables/autoeval-evaluation-kit-*.enc
+
 # Local database backups and restart logs
 /deliverables/autoeval-evaluation-kit-*/
 /deliverables/autoeval-evaluation-kit-*.zip

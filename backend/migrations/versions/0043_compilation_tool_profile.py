@@ -3,8 +3,8 @@
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0039_compilation_tool_profile"
-down_revision = "0038_report_versions"
+revision = "0043_compilation_tool_profile"
+down_revision = "0042_target_service_kind"
 branch_labels = depends_on = None
 
 

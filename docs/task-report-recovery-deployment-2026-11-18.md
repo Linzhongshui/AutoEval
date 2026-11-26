@@ -43,7 +43,7 @@
 
 真实服务器浏览器：任务完成、分数据集最终监控、GPQA/AB 两份日志、恢复 Case 证据、正式报告双数据集成绩与基线、已发布榜单通过；无浏览器运行错误。
 
-截图、验证 JSON、正常节奏操作 WebM：本地归档 `.screenshots/deliverables-archive-20261119/task-report-recovery-20261118/`。该录像是部署恢复复核，不是新增测评或完整智能分析验收。
+截图、验证 JSON、正常节奏操作 WebM：deliverables/task-report-recovery-20261118/。该录像是部署恢复复核，不是新增测评或完整智能分析验收。
 
 服务器 API healthy，其余相关 Worker running。未新增测评 / 分析作业，未发生本轮模型调用。
 

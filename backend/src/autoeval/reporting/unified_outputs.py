@@ -191,6 +191,10 @@ def parse_output(raw: bytes, expected: dict[str, list[str]], default_dataset=Non
     return normalized, summary
 
 
+class InvalidUnifiedOutput(ValueError):
+    """The source result fails the frozen output contract."""
+
+
 async def archive_output(
     sessions,
     settings,
@@ -202,7 +206,10 @@ async def archive_output(
     *,
     append_attempts=False,
 ):
-    cases, summary = parse_output(raw, expected, default_dataset)
+    try:
+        cases, summary = parse_output(raw, expected, default_dataset)
+    except ValueError as exc:
+        raise InvalidUnifiedOutput(str(exc)) from exc
     sha = hashlib.sha256(raw).hexdigest()
     run_id = uuid.UUID(str(run_id))
     if not collection_key or len(collection_key) > 128:

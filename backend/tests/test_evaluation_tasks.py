@@ -18,12 +18,12 @@ from sqlalchemy.engine import make_url
 from autoeval.catalog.registry import Asset, AssetVersion
 from autoeval.entrypoints.api import create_app
 from autoeval.evaluation.evaluation_tasks import SubmitTask
-from autoeval.evaluation.models import DatasetExecution
+from autoeval.evaluation.models import DatasetExecution, DatasetExecutionEnvironment
 from autoeval.infrastructure.config import get_settings
 from autoeval.infrastructure.models import Base, EvaluationRun, Outbox, RunSnapshot
-from autoeval.planning import PlanningJob
+from autoeval.planning import PlanInput, PlanningJob
 from autoeval.planning.planning_transport import PlanningRemoteContainer
-from autoeval.resources.models import TargetBinding
+from autoeval.resources.models import ResourceProvider, SSHResourceBinding, TargetBinding
 
 
 def submission(datasets=("GPQA", "MMMU-Pro")):
@@ -43,6 +43,34 @@ def submission(datasets=("GPQA", "MMMU-Pro")):
             for d in datasets
         ],
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("isolated", [True, False])
+async def test_workflow_dispatch_preserves_dataset_isolation_queue(monkeypatch, isolated):
+    from unittest.mock import AsyncMock
+
+    from autoeval.entrypoints.worker import role_options
+    from autoeval.evaluation import workflows
+
+    queue = workflows.ISOLATED_DATASET_QUEUE
+    workflow_queue = queue if isolated else "demo.workflow.v1"
+    activity = AsyncMock()
+    monkeypatch.setattr(workflows.workflow, "info", lambda: SimpleNamespace(task_queue=workflow_queue))
+    monkeypatch.setattr(workflows.workflow, "execute_activity", activity)
+    await workflows.PlannedEvaluationWorkflow().run("run-id")
+    role = role_options(get_settings())["isolated-execution" if isolated else "planning-execution"]
+    assert activity.await_args.kwargs["task_queue"] == role["task_queue"]
+    assert role["activities"][0].__name__ == activity.await_args.args[0]
+
+
+@pytest.mark.parametrize("request_model", [PlanInput, SubmitTask])
+def test_four_dataset_concurrency(request_model):
+    body = submission(("GPQA", "MMMU-Pro", "DeepSWE", "AutomationBench"))
+    body["dataset_concurrency"] = len(body["tasks"])
+    assert request_model(**body).dataset_concurrency == 4
+    with pytest.raises(ValidationError):
+        request_model(**{**body, "dataset_concurrency": 0})
 
 
 def test_submit_contract_has_only_final_parameters():
@@ -187,30 +215,62 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                 session.add(target)
                 await session.flush()
                 target_id = str(target.id)
+                provider = ResourceProvider(name="R13 PostgreSQL fixture", kind="customer_ssh")
+                session.add(provider)
+                await session.flush()
+                resource = SSHResourceBinding(
+                    provider_id=provider.id,
+                    binding_key="r13-fixture",
+                    version=1,
+                    host="fixture.invalid",
+                    port=22,
+                    username="tester",
+                    fingerprint="SHA256:" + "a" * 43,
+                    workdir="/work",
+                    auth_kind="private_key",
+                    credential_ref="0" * 32,
+                )
+                session.add(resource)
+                await session.flush()
+                resource_id = str(resource.id)
+
+            template = {"family": "aisbench", "revision": "test", "image_id": "sha256:" + "a" * 64}
 
             async def resolve(session, settings, body):
                 inputs = body.model_dump(mode="json")
                 for t in inputs["tasks"]:
                     t.update(
                         concurrency=t.get("concurrency") or 1,
-                        samples=[{"sample_id": "0"}],
+                        assigned_resource_id=inputs["resource_id"],
+                        assigned_resource_kind=inputs["resource_kind"],
+                        execution_template={
+                            **template,
+                            "family": "harbor"
+                            if t["dataset"] in {"DeepSWE", "AutomationBench"}
+                            else "aisbench",
+                        },
+                        samples=[{"sample_id": "0", "tool_case_id": "0"}],
                         manifest_sha256="a" * 64,
                         tool={},
                         subset_scope="lite",
                         compilation={
-                            "config": {"params": {"batch_size": t.get("concurrency") or 1}}
+                            "config": {"params": {"abbr": "fixture", "batch_size": t.get("concurrency") or 1}}
                         },
                     )
                 return inputs
 
-            async def preflight(*args, **kwargs):
+            async def preflight(session, inputs, **kwargs):
                 return SimpleNamespace(
                     sha256="b" * 64,
                     payload={
                         "execution_ready": True,
+                        "execution_templates": {
+                            task["task_id"]: task["execution_template"] for task in inputs["tasks"]
+                        },
                         "planner_ready": False,
-                        "debug_storage": {"store": "fixture"},
-                        "supported_datasets": ["GPQA", "MMMU-Pro"],
+                        "supported_datasets": [task["dataset"] for task in inputs["tasks"]],
+                        "node_id": "postgres-fixture-node",
+                        "network_available": 16,
                         "cpu_cores": 16,
                         "mem_mb": 65536,
                         "disk_gb": 100,
@@ -223,7 +283,7 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                 transport=httpx.ASGITransport(app), base_url="http://test"
             ) as c:
                 body = submission()
-                body["target_id"] = target_id
+                body.update(target_id=target_id, resource_id=resource_id)
                 body["dataset_concurrency"] = 2
 
                 async def send(key, value):
@@ -240,15 +300,19 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                 changed = copy.deepcopy(body)
                 changed["tasks"][0]["concurrency"] = 3
                 assert (await send("same-intent", changed)).status_code == 409
-                single = submission(("GPQA",))
-                single["target_id"] = target_id
-                another = await send("single", single)
-                assert another.status_code == 202
+                new_request = await send("new-identical-task", body)
+                assert new_request.status_code == 202
+                second_run = new_request.json()["data"]["run_id"]
+                assert second_run != rid
                 async with app.state.sessions() as session:
                     assert (
                         await session.scalar(select(func.count()).select_from(EvaluationRun)) == 2
                     )
-                    assert await session.scalar(select(func.count()).select_from(Outbox)) == 2
+                    outbox = list(await session.scalars(select(Outbox)))
+                    assert len(outbox) == 2
+                    from autoeval.evaluation.workflows import ISOLATED_DATASET_QUEUE
+
+                    assert all(row.payload["workflow_queue"] == ISOLATED_DATASET_QUEUE for row in outbox)
                     assert await session.scalar(select(func.count()).select_from(PlanningJob)) == 0
                     frozen = await session.scalar(
                         select(RunSnapshot).where(RunSnapshot.run_id == uuid.UUID(rid))
@@ -257,11 +321,28 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                     assert frozen.canonical_body["estimate"] is None
                 detail = (await c.get(f"/api/autoeval/v1/evaluation-tasks/{rid}")).json()["data"]
                 assert len(detail["datasets"]) == 2
+                second_detail = (await c.get(f"/api/autoeval/v1/evaluation-tasks/{second_run}")).json()["data"]
+                assert {d["id"] for d in detail["datasets"]}.isdisjoint(
+                    d["id"] for d in second_detail["datasets"]
+                )
+                for child in detail["datasets"] + second_detail["datasets"]:
+                    env = child["execution_environment"]
+                    assert env["state"] == "waiting_capacity" and env["container_id"] is None
+                    assert env["host"] == "fixture.invalid" and child["selected_cases"] == 1
+                legacy_body = {
+                    "config_version_id": str(uuid.uuid4()), "target_id": target_id,
+                    "resource_id": resource_id, "run_mode": "exploration", "max_model_requests": 1,
+                }
+                for endpoint, kind in (("runs", "customer_ssh"), ("aisbench-monitored/runs", "aisbench_monitor")):
+                    blocked = await c.post(
+                        f"/api/autoeval/v1/{endpoint}", json={**legacy_body, "resource_kind": kind},
+                        headers={"Idempotency-Key": "new-legacy"},
+                    )
+                    assert blocked.status_code == 422 and "evaluation-tasks" in blocked.text
                 files = f"/api/autoeval/v1/evaluation-tasks/{rid}/executor-files"
                 jobs = (await c.get(files)).json()["data"]
                 assert {job["id"] for job in jobs} == {row["id"] for row in detail["datasets"]}
-                other_run = another.json()["data"]["run_id"]
-                other_files = f"/api/autoeval/v1/evaluation-tasks/{other_run}/executor-files"
+                other_files = f"/api/autoeval/v1/evaluation-tasks/{second_run}/executor-files"
                 assert (await c.get(f"{other_files}/{jobs[0]['id']}")).status_code == 404
                 assert detail["snapshot"]["dataset_concurrency"] == 2
                 first = (await c.get("/api/autoeval/v1/evaluation-tasks?limit=1")).json()
@@ -279,6 +360,16 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                             )
                         )
                     ).all()
+                    for index, child in enumerate(children):
+                        session.add(
+                            DatasetExecutionEnvironment(
+                                dataset_execution_id=child.id,
+                                resource_id=uuid.UUID(resource_id),
+                                template=template,
+                                container_id=str(index + 1) * 64,
+                                state="cleanup_pending",
+                            )
+                        )
                     children[0].state = "succeeded"
                     children[1].state = "failed"
                     children[1].summary = {"reason": "TEST-partial-failure"}
@@ -287,6 +378,11 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                 ).status_code == 202
                 async with app.state.sessions() as session:
                     assert (await session.get(EvaluationRun, uuid.UUID(rid))).cancel_requested_at
+                detail = (await c.get(f"/api/autoeval/v1/evaluation-tasks/{rid}")).json()["data"]
+                environments = [row["execution_environment"] for row in detail["datasets"]]
+                assert {row["resource_id"] for row in environments} == {resource_id}
+                assert {row["container_id"] for row in environments} == {"1" * 12, "2" * 12}
+                assert {row["state"] for row in environments} == {"cleanup_pending"}
                 # Historical tasks normalize to one dataset without rewriting snapshots.
                 async with app.state.sessions() as session, session.begin():
                     legacy = EvaluationRun(
@@ -440,6 +536,332 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                     )
                     assert event.details["previous_result"]["remote_check"]["state"] == "unknown"
                 assert adapter.submits == 0
+
+                from unittest.mock import AsyncMock
+
+                from autoeval.evaluation import isolated_cleanup, orchestration
+                from autoeval.evaluation.models import CapacityLease
+                from autoeval.planning.planning_transport import HarborDaemonUnavailable
+
+                harbor = submission(("DeepSWE",))
+                harbor.update(target_id=target_id, resource_id=resource_id)
+                accepted = await send("r13-harbor-start-failure", harbor)
+                assert accepted.status_code == 202, accepted.text
+                harbor_id = uuid.UUID(accepted.json()["data"]["run_id"])
+                container_id = "d" * 64
+                remote = SimpleNamespace(
+                    ensure=AsyncMock(side_effect=HarborDaemonUnavailable(container_id)),
+                    submit=AsyncMock(),
+                    remove=AsyncMock(return_value=True),
+                )
+                execution_transport = AsyncMock(return_value=remote)
+                cleanup_transport = AsyncMock(return_value=remote)
+                monkeypatch.setattr(orchestration, "isolated_transport", execution_transport)
+                monkeypatch.setattr(isolated_cleanup, "isolated_transport", cleanup_transport)
+                monkeypatch.setattr(
+                    orchestration, "execution_template", lambda settings, resource, task: task["execution_template"]
+                )
+                monkeypatch.setattr(orchestration.FileSecretStore, "get", lambda *a: "test-only")
+                monkeypatch.setattr(
+                    "autoeval.billing.transport.execution_route", lambda *a, **kw: None
+                )
+                monkeypatch.setattr(orchestration, "write_manifest", lambda *a: None)
+                monkeypatch.setattr(
+                    "autoeval.reporting.task_reports.publish_task_report", AsyncMock()
+                )
+                async with asyncio.timeout(10):
+                    await orchestration.execute(app.state.sessions, settings, harbor_id)
+                remote.ensure.assert_awaited_once()
+                remote.submit.assert_not_awaited()
+                remote.remove.assert_awaited_once()
+                assert cleanup_transport.await_args.kwargs["container_id"] == container_id
+
+                async with app.state.sessions() as session:
+                    run = await session.get(EvaluationRun, harbor_id)
+                    child = await session.scalar(
+                        select(DatasetExecution).where(DatasetExecution.run_id == harbor_id)
+                    )
+                    environment = await session.get(DatasetExecutionEnvironment, child.id)
+                    lease = await session.scalar(
+                        select(CapacityLease).where(CapacityLease.owner_id == child.id)
+                    )
+                    assert run.state == child.state == "failed"
+                    assert environment.state == "cleaned" and lease.released
+
+                import json
+                from pathlib import Path
+
+                from autoeval.reporting.models import CaseExecutionRecord, UnifiedCollection
+
+                accepted = await send("r13-harbor-archive-retry", harbor)
+                assert accepted.status_code == 202
+                retry_id = uuid.UUID(accepted.json()["data"]["run_id"])
+                fixture_path = Path(__file__).parent / "fixtures/unified_outputs/deepswe.json"
+                unified = json.loads(fixture_path.read_bytes())
+                case = next(case for case in unified["cases"] if case["status"] == "success")
+                unified["cases"] = [{**case, "case_id": "0", "dataset": "DeepSWE"}]
+                unified["case_count"] = 1
+                remote.ensure.reset_mock(side_effect=True, return_value=True)
+                remote.ensure.return_value = container_id
+                remote.status = AsyncMock(return_value=SimpleNamespace(state="succeeded"))
+                remote.progress = AsyncMock(side_effect=OSError("Progress temporarily unavailable"))
+                remote.collect = AsyncMock(
+                    return_value={"result": {"unified_result": unified, "tool_exit_code": 0}}
+                )
+                remote.remove.reset_mock()
+
+                objects = {}
+                failed_writes = []
+
+                def put_object(settings, key, raw):
+                    if key.startswith("unified-results/") and not failed_writes:
+                        failed_writes.append(key)
+                        raise OSError("Injected object store outage")
+                    objects[key] = raw
+
+                async def report_terminal_lease(*args):
+                    async with app.state.sessions() as session:
+                        child = await session.scalar(
+                            select(DatasetExecution).where(DatasetExecution.run_id == retry_id)
+                        )
+                        lease = await session.scalar(
+                            select(CapacityLease).where(CapacityLease.owner_id == child.id)
+                        )
+                        if failed_writes and remote.collect.await_count == 2:
+                            assert child.summary["archive_pending"] is True
+                            assert child.summary["archive_error_type"] == "OSError"
+                            assert not lease.released
+                            remote.remove.assert_not_awaited()
+                    return {"result": {"unified_result": unified, "tool_exit_code": 0}}
+
+                remote.collect.side_effect = report_terminal_lease
+                for module in (
+                    "autoeval.planning.artifacts",
+                    "autoeval.reporting.unified_outputs",
+                    "autoeval.reporting.langfuse_integration",
+                ):
+                    monkeypatch.setattr(module + ".write_manifest", put_object)
+                # Simulate Worker loss after the daemon accepted the first submission.
+                remote.submit.side_effect = asyncio.CancelledError
+                with pytest.raises(asyncio.CancelledError):
+                    await orchestration.execute(app.state.sessions, settings, retry_id)
+                async with app.state.sessions() as session:
+                    saved_child = await session.scalar(
+                        select(DatasetExecution).where(DatasetExecution.run_id == retry_id)
+                    )
+                    saved_environment = await session.get(
+                        DatasetExecutionEnvironment, saved_child.id
+                    )
+                    assert saved_child.state == saved_environment.state == "submitting"
+                    assert saved_environment.container_id == container_id
+                remote.remove.assert_not_awaited()
+                remote.submit.side_effect = None
+
+                async with asyncio.timeout(15):
+                    await orchestration.execute(app.state.sessions, settings, retry_id)
+
+                remote.submit.assert_awaited_once()
+                remote.ensure.assert_awaited_once()
+                assert execution_transport.await_args.kwargs["container_id"] == container_id
+                assert all(
+                    call.args[0].submission_key == str(saved_child.id)
+                    for call in remote.status.await_args_list
+                )
+                remote.remove.assert_awaited_once()
+                assert remote.collect.await_count == 2 and len(failed_writes) == 1
+                async with app.state.sessions() as session:
+                    run = await session.get(EvaluationRun, retry_id)
+                    evidence = await session.scalar(
+                        select(CaseExecutionRecord).where(CaseExecutionRecord.run_id == retry_id)
+                    )
+                    collection = await session.scalar(
+                        select(UnifiedCollection).where(UnifiedCollection.run_id == retry_id)
+                    )
+                    assert run.state == "completed"
+                    assert evidence.sample_id == "0" and evidence.object_key in objects
+                    assert collection.object_key in objects
+
+                accepted = await send("r13-cancel-during-container-start", harbor)
+                assert accepted.status_code == 202
+                cancelled_id = uuid.UUID(accepted.json()["data"]["run_id"])
+                remote.submit.reset_mock()
+                remote.status.reset_mock()
+                remote.remove.reset_mock()
+
+                async def cancel_during_start():
+                    response = await c.post(
+                        f"/api/autoeval/v1/evaluation-tasks/{cancelled_id}/cancel"
+                    )
+                    assert response.status_code == 202
+                    assert response.json()["data"]["accepted"] is True
+                    return container_id
+
+                remote.ensure.side_effect = cancel_during_start
+                async with asyncio.timeout(10):
+                    await orchestration.execute(app.state.sessions, settings, cancelled_id)
+                remote.submit.assert_not_awaited()
+                remote.status.assert_not_awaited()
+                remote.remove.assert_awaited_once()
+
+                async with app.state.sessions() as session:
+                    run = await session.get(EvaluationRun, cancelled_id)
+                    child = await session.scalar(
+                        select(DatasetExecution).where(DatasetExecution.run_id == cancelled_id)
+                    )
+                    environment = await session.get(DatasetExecutionEnvironment, child.id)
+                    lease = await session.scalar(
+                        select(CapacityLease).where(CapacityLease.owner_id == child.id)
+                    )
+                    assert run.state == child.state == "cancelled"
+                    assert environment.container_id == container_id
+                    assert environment.state == "cleaned" and lease.released
+
+                mixed = submission(("AutomationBench", "DeepSWE"))
+                mixed.update(target_id=target_id, resource_id=resource_id)
+                accepted = await send("r13-shared-node-isolation", mixed)
+                assert accepted.status_code == 202
+                mixed_id = uuid.UUID(accepted.json()["data"]["run_id"])
+                async with app.state.sessions() as session:
+                    children = await session.scalars(
+                        select(DatasetExecution).where(DatasetExecution.run_id == mixed_id)
+                    )
+                    owners = {child.payload["dataset"]: child.id for child in children}
+
+                async def remove_failed_child():
+                    async with app.state.sessions() as session:
+                        survivor = await session.get(DatasetExecutionEnvironment, owners["DeepSWE"])
+                        reserved = await session.scalar(
+                            select(CapacityLease).where(CapacityLease.owner_id == owners["DeepSWE"])
+                        )
+                        assert survivor.container_id == "2" * 64
+                        assert not reserved.released
+                    return True
+
+                failed_adapter = SimpleNamespace(
+                    ensure=AsyncMock(return_value="1" * 64),
+                    submit=AsyncMock(),
+                    status=AsyncMock(
+                        return_value=SimpleNamespace(
+                            state="failed", reason="native_unified_result_missing_or_ambiguous"
+                        )
+                    ),
+                    collect=AsyncMock(return_value={"result": {}}),
+                    remove=AsyncMock(side_effect=remove_failed_child),
+                )
+                successful_adapter = SimpleNamespace(
+                    ensure=AsyncMock(return_value="2" * 64),
+                    submit=AsyncMock(),
+                    status=AsyncMock(return_value=SimpleNamespace(state="succeeded")),
+                    collect=AsyncMock(
+                        return_value={"result": {"unified_result": unified, "tool_exit_code": 0}}
+                    ),
+                    remove=AsyncMock(return_value=True),
+                )
+
+                async def choose_adapter(session, settings, resource, owner, template, **kwargs):
+                    assert resource == resource_id or resource == uuid.UUID(resource_id)
+                    return (
+                        failed_adapter if owner == owners["AutomationBench"] else successful_adapter
+                    )
+
+                monkeypatch.setattr(orchestration, "isolated_transport", choose_adapter)
+                monkeypatch.setattr(isolated_cleanup, "isolated_transport", choose_adapter)
+                async with asyncio.timeout(10):
+                    await orchestration.execute(app.state.sessions, settings, mixed_id)
+                failed_adapter.submit.assert_awaited_once()
+                successful_adapter.submit.assert_awaited_once()
+                failed_adapter.remove.assert_awaited_once()
+                successful_adapter.remove.assert_awaited_once()
+                async with app.state.sessions() as session:
+                    evidence = await session.scalar(
+                        select(CaseExecutionRecord).where(CaseExecutionRecord.run_id == mixed_id)
+                    )
+                    assert evidence.dataset_key == "DeepSWE"
+                    assert (
+                        await session.get(DatasetExecution, owners["AutomationBench"])
+                    ).state == "failed"
+                    assert (
+                        await session.get(DatasetExecution, owners["DeepSWE"])
+                    ).state == "succeeded"
+                    failed_child = await session.get(DatasetExecution, owners["AutomationBench"])
+                    assert (
+                        failed_child.summary["reason"]
+                        == "native_unified_result_missing_or_ambiguous"
+                    )
+                    for owner in owners.values():
+                        environment = await session.get(DatasetExecutionEnvironment, owner)
+                        lease = await session.scalar(
+                            select(CapacityLease).where(CapacityLease.owner_id == owner)
+                        )
+                        assert environment.state == "cleaned" and lease.released
+
+                # The second dataset would fit while the first waits. Serial order still wins.
+                serial = submission(("DeepSWE", "AutomationBench"))
+                serial.update(target_id=target_id, resource_id=resource_id, dataset_concurrency=1)
+                serial["tasks"][1]["concurrency"] = 1
+                serial_run = uuid.UUID((await send("serial-capacity", serial)).json()["data"]["run_id"])
+                holder = uuid.uuid4()
+                async with app.state.sessions() as session, session.begin():
+                    session.add(CapacityLease(
+                        owner_id=holder, node_id="postgres-fixture-node",
+                        demand={"cpu": 10, "mem": 0, "disk": 0, "networks": 0},
+                    ))
+                    ordered = {
+                        child.task_id: child.id for child in await session.scalars(
+                            select(DatasetExecution).where(DatasetExecution.run_id == serial_run)
+                        )
+                    }
+                visits = []
+                def owned_adapter(session, settings, resource, owner, template, **kwargs):
+                    async def ensure():
+                        visits.append(("create", owner))
+                        return owner.hex * 2
+
+                    async def remove():
+                        visits.append(("remove", owner))
+                        return True
+
+                    return SimpleNamespace(ensure=ensure, remove=remove, submit=AsyncMock(),
+                                           collect=AsyncMock(return_value={"result": {}}),
+                                           status=AsyncMock(return_value=SimpleNamespace(state="failed")))
+
+                monkeypatch.setattr(orchestration, "isolated_transport", AsyncMock(side_effect=owned_adapter))
+                monkeypatch.setattr(isolated_cleanup, "isolated_transport", AsyncMock(side_effect=owned_adapter))
+                class PauseAfterPoll(Exception):
+                    pass
+
+                heartbeat = iter((None,))
+                def pause():
+                    if next(heartbeat, False) is False:
+                        raise PauseAfterPoll()
+
+                with pytest.raises(PauseAfterPoll):
+                    await orchestration.execute(app.state.sessions, settings, serial_run, pause)
+                assert visits == []
+                async with app.state.sessions() as session, session.begin():
+                    assert not await session.scalar(select(DatasetExecutionEnvironment).where(
+                        DatasetExecutionEnvironment.dataset_execution_id.in_(ordered.values())
+                    ))
+                    from autoeval.evaluation.resource_allocation import release
+                    await release(session, holder)
+                async with asyncio.timeout(20):
+                    await orchestration.execute(app.state.sessions, settings, serial_run)
+                assert visits == [
+                    ("create", ordered["DeepSWE"]), ("remove", ordered["DeepSWE"]),
+                    ("create", ordered["AutomationBench"]), ("remove", ordered["AutomationBench"]),
+                ]
+
+                visits.clear()
+                four = submission(("GPQA", "MMMU-Pro", "DeepSWE", "AutomationBench"))
+                four.update(target_id=target_id, resource_id=resource_id, dataset_concurrency=4)
+                accepted = await send("four-parallel", four)
+                assert accepted.status_code == 202
+                async with asyncio.timeout(20):
+                    await orchestration.execute(
+                        app.state.sessions, settings, uuid.UUID(accepted.json()["data"]["run_id"])
+                    )
+                assert [action for action, _ in visits] == ["create"] * 4 + ["remove"] * 4
+                assert len({owner for _, owner in visits[:4]}) == 4
     finally:
         await admin.execute(f'DROP DATABASE "{database}"')
         await admin.close()

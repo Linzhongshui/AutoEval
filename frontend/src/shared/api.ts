@@ -34,7 +34,7 @@ export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> 
   return (await apiGetPage<T>(path, signal)).data;
 }
 
-type Page<T> = { data: T; next_offset: number | null; total?: number | null; statistics?: TaskStatistics };
+type Page<T> = { data: T; next_offset: number | null; total?: number | null; statistics?: TaskStatistics; filters?: components["schemas"]["ReportFilters"] };
 // Share only in-flight reads. Completed responses are never cached, so polling and
 // reads after a mutation remain fresh. Caller-owned abort signals stay isolated.
 const pendingReads = new Map<string, Promise<Page<unknown>>>();
@@ -47,7 +47,7 @@ export async function apiGetPage<T>(path: string, signal?: AbortSignal): Promise
     });
     if (!response.ok) throw await readError(response);
     const body = await response.json();
-    return { data: body.data as T, next_offset: body.next_offset ?? null, total: body.total ?? null, statistics: body.statistics };
+    return { data: body.data as T, next_offset: body.next_offset ?? null, total: body.total ?? null, statistics: body.statistics, filters: body.filters };
   })();
   if (signal) return request;
   pendingReads.set(path, request);
@@ -65,6 +65,26 @@ export async function apiPost<T>(path: string, payload?: unknown, key?: string, 
   if (!response.ok) throw await readError(response);
   const body = await response.json();
   return body.data as T;
+}
+
+export async function apiPostBlob(
+  path: string,
+  payload: unknown,
+  signal?: AbortSignal,
+): Promise<{ blob: Blob; filename: string }> {
+  const response = await fetch(`/api/autoeval/v1${path}`, {
+    method: "POST",
+    signal,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw await readError(response);
+  const disposition = response.headers.get("Content-Disposition") || "";
+  const match = /filename\*?=(?:UTF-8''|")?([^";]+)/i.exec(disposition);
+  return {
+    blob: await response.blob(),
+    filename: match ? decodeURIComponent(match[1]) : "autoeval-badcase.zip",
+  };
 }
 
 export interface BackendCapabilities {

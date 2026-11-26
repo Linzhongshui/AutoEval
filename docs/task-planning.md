@@ -2,7 +2,14 @@
 
 # 任务耗时与执行编排
 
-本次新增独立的规划和通用编排路径，保留原 GPQA Lite 接口及历史快照。控制台优先展示规划入口，可切换“GPQA Lite 快速验证”入口。AutomationBench 仍未开放。
+## SSH 资源池入口
+
+在「测评配置 → SSH 资源池」登记节点并验证 SSH 连接。在控制台依次选择模型、配置数据集和样本范围、选择候选 SSH 节点。控制台按数据集显示环境预检结果，用户确认后手动提交测评。从控制台进入资源池时，「返回控制台」保留当前测评表单。
+
+连接验证检查主机指纹、凭据和基础环境。容器工具的版本、固定镜像、挂载与并发容量由部署侧配置，任务预检按所选数据集和节点检查运行环境。
+
+
+控制台统一提交 GPQA、MMMU-Pro、DeepSWE 和 AutomationBench 测评。GPQA Lite 通过样本范围选择。规划器提供可选的耗时估算和参数建议。
 
 ## 启动与依赖
 
@@ -41,7 +48,7 @@ python -m pip install 'git+https://github.com/SJTUyh/AutoEval-Benchmark-Adaptor@
 ## 页面流程
 
 1. 保存模型服务和执行资源；在标准输入管理中编译固定版本配置，选择正确目标服务、工具根目录和数据路径。
-2. 登记全量/Lite 清单与 Profile。每个编译配置只允许一个数据集；一个父任务最多包含三个不同数据集。
+2. 登记全量/Lite 清单与 Profile。每个编译配置对应一个数据集，一个父任务最多包含四个不同数据集。
 3. 选择配置及清单，执行资源预检，选择已有吞吐曲线或启动探测。
 4. 计算当前配置耗时，或搜索更优顺序及并发。检查各数据集的单独耗时、计划内耗时和代表性时间线后采纳；采纳后使用后端返回的执行方案报告刷新预计耗时。
 5. 确认范围及真实调用费用后点击“提交测评”。预检仅是环境检查，不创建运行、不调用模型；只有该按钮会创建任务并跳转到“任务管理 → 测评任务详情”，编排视图仅保留编排记录。修改目标、资源、配置、范围或调度参数会清除旧计划与采纳状态。
@@ -49,6 +56,24 @@ python -m pip install 'git+https://github.com/SJTUyh/AutoEval-Benchmark-Adaptor@
 探测默认档位 1、2、4、8，每档至少 max(档位, 2) 个请求，输入及最大输出均为 512 token。预算包含一次整档非流式回退，默认最多 32 次请求、16,384 个输出 token。禁用自动 HTTP 重试，拒绝重定向，保持 TLS 校验。探测在实际执行环境发起，密钥仅通过运行时受保护文件注入并在结束/取消时删除。失败仅保存白名单原因码，区分超时、协议不兼容、鉴权失败、限流、连接失败和取消，不持久化上游异常文本。
 
 标准锁重新校验：推荐并发与锁冲突时采纳失败，用户需选择合法配置。平台控制数据集并发，每个隔离子任务中 max_num_workers=1，工具控制 batch_size 或 n_concurrent_trials。
+
+### SSH 主机与数据集执行容器
+
+控制台默认串行执行。在「执行策略 → 数据集之间」切换为「并行执行」时，「同时运行的数据集上限」会填入当前选中的数据集数。例如，勾选四个数据集后切换为并行，该值为 4，也可以手动调低。主机容量足够时，四个子任务可以同时运行；容量不足的子任务排队等候。每个数据集内部同时运行的样本数在该数据集的策略中单独设置。
+
+候选 SSH 主机可以承载多个数据集。正式任务按“测评任务 × 数据集”分配容器，绑定所选工具版本、镜像和只读挂载。预检使用临时容器。每个子任务取得容量租约后新建自己的容器，在其中执行本次选中的全部样本。再次新建相同配置的测评会获得新的子任务和容器。Harbor trial 的资源随所属子任务回收。
+
+控制台在预检后显示匹配主机、工具版本和计划容器数。任务详情显示实际容器短 ID、样本进度和回收状态。创建回执丢失时按子任务身份查回；工具提交结果未知时保留租约并查证。新测评使用 `POST /api/autoeval/v1/evaluation-tasks` 或已有规划提交入口。旧试点提交接口仅回读匹配的历史幂等请求。
+
+### 查看预检进度与复用记录
+
+资源池中 SSH 地址和端口相同的配置，在控制台归为一台主机。四个数据集可以使用同一主机上的不同资源配置。预检表格按数据集列出四个执行节点，提交请求仍携带所选配置的原始资源 ID。
+
+检查期间展开「环境检查记录」可查看入队、Worker 接手、容器准备、工具与数据校验、回收和检查结果的时间。任务摘要显示从入队开始的总耗时。表格显示预检容器短 ID，「查看环境检查详情」中可查到完整 ID、原始检查时间和来源预检任务。正式执行容器的 ID 在提交测评并获得容量后出现在任务详情。
+
+点击「重新检查」时，Worker 按数据集查找已通过且已回收容器的证据。SSH 绑定、镜像、挂载、工具和冻结输入相同，且距离原始检查不足五分钟，就会显示「复用已通过记录」。其余数据集重新执行环境检查。复用保留原始时间，整组预检的有效期取各数据集中最早的到期时间。
+
+有效期内，调整数据集顺序、串并行方式或样本并发会保留环境检查结果。有吞吐曲线时，控制台按新策略更新估算。提交时后端按最终参数校验配置和资源容量。更换模型、候选 SSH 资源、数据集、执行配置或样本清单会触发环境检查；证据到期后，页面提示重新检查，继续调整策略也会触发检查。
 
 ## 接口
 
@@ -71,7 +96,7 @@ python -m pip install 'git+https://github.com/SJTUyh/AutoEval-Benchmark-Adaptor@
 
 规划提交的测评同时出现在任务管理接口 `GET /api/autoeval/v1/runs` 与 `GET /api/autoeval/v1/runs/{id}` 中，详情返回冻结快照的样本数、运行状态、事件与报告入口；编排视图的 `/planning/runs` 保持不变。
 
-PlanInput：target_id、resource_id、resource_kind（docker_local/customer_ssh）、可选 throughput_profile_id、tasks（task_id/compilation_id/manifest_id/dataset）、dataset_concurrency（1–4，同时运行的数据集上限）、recommend、runs、seed。模拟默认 100 次、吞吐抖动 0.10、种子 20261111。数据集范围及 attempts 来自编译配置与冻结清单。
+PlanInput：target_id、resource_id、resource_kind（customer_ssh）、候选资源配置列表 resource_ids、可选 throughput_profile_id、tasks（task_id/compilation_id/manifest_id/dataset）、dataset_concurrency、recommend、runs、seed。模拟默认 100 次、吞吐抖动 0.10、种子 20261111。数据集范围及 attempts 来自编译配置与冻结清单。
 
 ## 证据、恢复与口径
 
@@ -139,6 +164,8 @@ PlanInput：target_id、resource_id、resource_kind（docker_local/customer_ssh�
 
 默认 `AE_PLANNING_JOB_KINDS=preflight,plan`，不会消费历史待执行探测。确认逐条遗留任务与预算后才能显式启用 probe；禁用不等于取消，历史记录保持不变。Docker 本地适配路径仍保留兼容，客户 SSH 路径强制选择绑定容器。
 
+控制台的耗时估算和优化建议都进入 `plan` 队列。若把预检和吞吐探测拆成专用 Worker，也要保留消费 `plan` 的进程。在与 API 相同的后端环境启动两个 `AE_PLANNING_JOB_KINDS=plan` 的规划 Worker，即可并行处理两条规划作业。每个进程一次处理一条，PostgreSQL 按作业 ID 加锁。排队期间如果预检已过期，该估算会提示重新检查环境；预检通过后可使用已有吞吐曲线重新估算。
+
 验证：在现有服务器 LLM 容器中完成固定版本预检与人工输入的离线规划，作业 `f3d3c192-bb99-4e03-a145-e74440918624` 成功、结果读回及清理完成；证据位于开发目录 `.screenshots/remote-planner-no-model-validation.json`。使用人工吞吐数据，没有模型请求，不作为真实吞吐精度或全量测评验收。容器共享 AISBench 的适配器包版本仍需按实际预检结果独立确认。
 
 
@@ -154,3 +181,45 @@ PlanInput：target_id、resource_id、resource_kind（docker_local/customer_ssh�
 控制台默认按当前配置执行。没有吞吐曲线或估时结果时仍可在必要预检和范围确认后提交。计算时长、主动探测和采纳优化方案都是独立可选操作；已有估时结果不强迫采纳，不因提交测评自动取消另一个探测。
 
 未选择 execution_plan_id 时，后台将 recommend=false、throughput_profile_id=null 固定到执行输入，按原配置及样本范围保存快照，estimate=null、execution_mode=direct；不调用 Planner 估算、不填造时长。标准锁定字段、目标合法性、资源能力、唯一并行拥有者及有效预检仍检查。max_num_workers 不为1时明确拒绝，要求修正配置，避免悄悄重写参数。执行环境就绪不再以 Planner 包安装状态为必要条件；规划与探测仍各自验证 Planner 身份。
+
+### 2026-11-21 R13 首次容器创建修复
+
+本机服务沿用了旧版固定容器绑定，节点缺少 `executors` 模板。已备份受保护配置，
+为 GPQA 和 MMMU-Pro 对应节点登记版本匹配的镜像模板。GPQA 全量清单的真实 SSH
+预检 `be9d0eb3-cffb-48a9-87d3-25986c95baa9` 返回 `execution_ready=true`。
+远端 Docker 事件确认新容器 `040b34fe8f15` 经历 create、start、destroy，回收后该预检归属下
+容器数为 0。本轮预检未启动测评或调用模型。其余工具需分别核对各自模板和执行能力。
+
+DeepSWE 已匹配 Harbor `698ff2d1e027` 模板并自动创建独立容器。预检
+`07eb14a5-0570-4231-bdbf-344680f5434e` 返回 `harbor_private_daemon_unavailable`。
+在相同节点复现后，日志显示容器内 Docker 创建 `docker0` 网桥时被拒绝。节点现存的
+Rootless Docker 实例已通过内部网络创建、镜像导入和定向回收检查。仍需验证每个子任务
+拥有独立的 Rootless Docker 实例，以及进程中断后的回收。上述检查没有触发模型请求。
+
+后续使用节点现有 Rootless Docker 实例离线加载 Python 镜像，启动无网络容器并确认 Python
+命令正常返回。另使用独立数据目录和套接字启动了一只新的 Rootless Docker 守护进程，
+创建和删除内部网络后确认进程退出。平台尚未接管该进程的启动、恢复和清理。
+
+新 Harbor 镜像为既有解释器路径提供入口，调用镜像内已安装 Harbor 的 Python。
+使用 DeepSWE 全量清单和现有 Rootless Docker 套接字，在临时容器中执行平台预检代码，
+返回 `execution_ready=true`、空阻塞列表及小样本验收提示，随后确认容器回收。
+这次验证使用独立诊断入口，控制台仍需接入按子任务启动和回收的守护进程。
+
+另为单次诊断分配新目录、私有套接字和独立 Rootless Docker 数据目录，完成相同的
+DeepSWE 全量预检，结果为 `execution_ready=true` 和空阻塞列表。已确认外层容器回收
+和新守护进程停止。该诊断未覆盖 Worker 重启恢复、两个子任务并发或正式评分归档。
+
+平台已部署节点端 Rootless Docker 程序。正式 SSH 预检
+`ac044ed6-8f2f-474c-8c94-a5a724dacb7b` 中，DeepSWE 全量清单返回
+`execution_ready=true`，回收后无对应容器或守护进程登记。四数据集联合预检
+`b8c1c943-7eb9-49f4-9d4e-d8b587ac51ae` 中，GPQA、DeepSWE、AutomationBench
+通过，MMMU-Pro 返回 `tool_identity_mismatch`。两次预检均未调用模型。
+
+随后将 MMMU-Pro 模板改绑至包含 AISBench `031a793`、锁定评分文件及适配器
+`955089a` 的镜像。四项全量联合预检 `0e94597a-0755-4503-956a-1241973c993e`
+返回 `execution_ready=true`，四项阻塞列表均为空。DeepSWE 仅显示首次试跑提示。
+未提交真实测评，模型调用为 0 次。
+
+### 执行配置列表
+
+在精度测评中选择模型服务后，打开「数据集与样本范围」旁的「执行配置列表」。列表按当前服务列出可用配置，配置标识可区分同名方案。查看详情可核对目录、默认并发、工具版本和样本清单。重命名只更新显示名称。复制并修改会保存独立配置，沿用标准锁定字段与源配置的清单约束；原配置及已提交任务的快照保持原值。新增执行配置沿用标准输入登记、编译和校验流程。

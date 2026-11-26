@@ -36,7 +36,7 @@ python -m autoeval.reporting.trace_recovery RUN_UUID /protected/native-traces.ta
 
 新增归档验证、身份冲突拒绝和恢复 Case 使用原 Trace 的测试；相关测试通过。真实浏览器已确认此前缺失的 finance-4024 在原始 / 恢复两个 Case 视图打开相同 Trace，Langfuse 调用树可查看，未关闭 TLS 校验。
 
-最终数量与验收截图见 本地归档 `.screenshots/deliverables-archive-20261119/trace-recovery-20261118/`，恢复日志位于服务器 API 容器 /tmp/trace-recovery-20261118.log。
+最终数量与验收截图见 deliverables/trace-recovery-20261118/，恢复日志位于服务器 API 容器 /tmp/trace-recovery-20261118.log。
 
 ## 最终验收结果
 

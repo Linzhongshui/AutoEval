@@ -6,6 +6,7 @@ export type { Param };
 export type Config = components["schemas"]["ConfigListItem"];
 
 export type Target = {
+  service_kind?: "local" | "official" | null;
   service_name?: string;
   id: string;
   remote_model: string;
@@ -15,7 +16,7 @@ export type Target = {
   default_config_version_id: string | null;
 };
 
-export type Resource = { id: string; binding_key: string; native_tool_root?: string | null };
+export type Resource = { id: string; binding_key: string; host?: string; port?: number; native_tool_root?: string | null };
 
 export type Profile = {
   provenance?: Record<string, { url?: string | null; revision?: string | null; sha256?: string | null }>;
@@ -51,6 +52,10 @@ export type RunSnapshot = {
   resource_kind: string;
   sample_count: number;
   dataset_concurrency?: number;
+  dataset_configurations?: {
+    config?: { subcommand?: string; params?: Record<string, unknown> };
+    tool?: { revision?: string };
+  }[];
   parameters: Record<string, unknown>;
   manifest_id: string;
   manifest_sha256: string;
@@ -61,6 +66,8 @@ export type RunSnapshot = {
 };
 
 export type DatasetResult = {
+  selected_cases?: number | null;
+  execution_environment?: { resource_id: string; host?: string | null; tool: string; revision: string; container_id: string | null; state: string } | null;
   id: string;
   dataset: string;
   state: string;

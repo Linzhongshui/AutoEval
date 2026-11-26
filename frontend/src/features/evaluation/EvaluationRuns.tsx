@@ -10,7 +10,7 @@ import { ListPagination } from "../../shared/ui/ListPagination";
 import { useEffect, useRef, useState } from "react";
 import { CheckCircle2, CircleAlert, Layers, Play } from "lucide-react";
 import { apiGet, apiGetPage, apiPost } from "../../shared/api";
-import type { Config, Resource, Run, RunDetail, Target } from "./types";
+import type { Config, DatasetResult, Resource, Run, RunDetail, Target } from "./types";
 import { datasetProgress, eligibleConfig, eligibleTarget, formatTime, isTerminal, resourceLabel, runLink, withSelected } from "./logic";
 import { useDefaultConfig, useOptions } from "./hooks";
 import { useExplorationSubmission } from "./submitIntent";
@@ -22,6 +22,19 @@ import { ExecutionRounds } from "./ExecutionRounds";
 
 const terminal = (state: string) => isTerminal(state);
 const time = formatTime;
+
+const environmentLabels: Record<string, string> = {
+  waiting_capacity: "等待容量", creating: "正在创建", submitting: "已分配",
+  cleanup_pending: "待清理", cleaned: "已回收", not_created: "未创建",
+};
+
+function DatasetEnvironment({ environment }: { environment: NonNullable<DatasetResult["execution_environment"]> }) {
+  return <>
+    <small>SSH 主机 {environment.host || environment.resource_id}</small>
+    <small title={environment.revision}>{environment.tool} · {environment.revision.slice(0, 12)}</small>
+    <small>{environment.container_id && `容器 ${environment.container_id} · `}{environmentLabels[environment.state] || environment.state}</small>
+  </>;
+}
 
 export function EvaluationRuns({ runId = "", initialTarget = "", allowSubmit = false, debugEnabled = false }: { debugEnabled?: boolean; runId?: string; initialTarget?: string; allowSubmit?: boolean }) {
   const [caseDataset, setCaseDataset] = useState<{ runId: string; dataset: string }>();
@@ -64,7 +77,7 @@ export function EvaluationRuns({ runId = "", initialTarget = "", allowSubmit = f
         if (!rows[0] || !eligibleTarget(rows[0])) { setMessage("服务不存在或不适用于当前GPQA探索路径。"); return; }
         setTarget(rows[0]); setMessage("已加载保存的服务，请确认配置和资源后提交。");
       }).catch(() => { if (!controller.signal.aborted) setMessage("服务读取失败，请返回服务配置重试。"); });
-    return () => controller.abort();
+      return () => controller.abort();
   }, [initialTarget]);
 
   // A filter change invalidates in-flight list responses so slow answers never
@@ -97,7 +110,7 @@ export function EvaluationRuns({ runId = "", initialTarget = "", allowSubmit = f
   );
   useEffect(() => { setOffset(0); }, [statusFilter, resourceFilter, query, includeTest]);
 
-  // Detail polling stops once the task reaches a terminal state.
+  // Terminal runs can still be reclaiming their dataset containers.
   usePolling(
     async () => {
       try {
@@ -109,7 +122,7 @@ export function EvaluationRuns({ runId = "", initialTarget = "", allowSubmit = f
         setDetailError("任务不存在或查询失败；已显示的状态可能过期，请勿据此重新提交。");
       }
     },
-    { enabled: Boolean(runId) && !terminal(detail?.state || ""), intervalMs: 2000 },
+    { enabled: Boolean(runId) && (!terminal(detail?.state || "") || Boolean(detail?.datasets?.some(d => d.execution_environment?.state === "cleanup_pending"))), intervalMs: 2000 },
   );
   useEffect(() => { setDetail(null); setDetailError(""); setDetailTab("运行概览"); }, [runId]);
 
@@ -125,6 +138,18 @@ export function EvaluationRuns({ runId = "", initialTarget = "", allowSubmit = f
   const filteredRuns = runs;
   const activeTab = detailTab === "执行器原始文件" && !debugEnabled ? "运行概览" : detailTab;
   const detailTabs = ["运行概览", "执行日志", ...(debugEnabled ? ["执行器原始文件"] : []), "监控快照", "配置快照"];
+
+  const frozen = detail?.snapshot?.dataset_configurations?.find(row =>
+    row.config?.subcommand === "agentx" || row.config?.subcommand === "llm_perf");
+  const performanceTask = Boolean(frozen);
+  const agentx = frozen?.config?.subcommand === "agentx";
+  const load = frozen?.config?.params;
+  const loadFields = agentx
+    ? [["Weka 语料", "variant"], ["模式", "run_mode"], ["会话并发", "concurrency"], ["每档时长（秒）", "duration"], ["Trace 上限", "trace_limit"]]
+    : [["配置请求数", "requests"], ["并发数", "concurrency"], ["目标输入（token）", "input_tokens"], ["最大输出（token）", "max_output_tokens"]];
+  const workload = loadFields.filter(([, key]) => load?.[key] != null).map(([label, key]) =>
+    <div className="case-stat" key={key}><span>{label}</span><strong>{String(load?.[key])}</strong></div>);
+  const summary = detail?.report?.summary.performance as { total_requests?: number; successful_requests?: number } | undefined;
 
   return (
     <div className="stack evaluation-runs">
@@ -172,13 +197,13 @@ export function EvaluationRuns({ runId = "", initialTarget = "", allowSubmit = f
       {detailError && <p role="alert">{detailError}</p>}
       {detail && (
         <article className="card stack execution-detail restored-detail" data-testid="evaluation-detail">
-          <div className="spread"><div className="detail-title"><h2 title={detail.id}>任务 {detail.id.slice(0, 8)}</h2><span className={`badge ${toneClass(taskStatus(detail.state).tone)}`} data-testid="evaluation-state">{taskStatus(detail.state).label}</span><span className="muted">探索测评</span></div>
+          <div className="spread"><div className="detail-title"><h2 title={detail.id}>任务 {detail.id.slice(0, 8)}</h2><span className={`badge ${toneClass(taskStatus(detail.state).tone)}`} data-testid="evaluation-state">{taskStatus(detail.state).label}</span><span className="muted">{performanceTask ? "性能测评" : "探索测评"}</span></div>
             <div className="inline">{!terminal(detail.state) && <button disabled={busy} onClick={() => void action("cancel")}>取消测评</button>}{detail.report && <a className="primary button" href={`#report/${detail.report.id}`}>查看报告</a>}</div></div>
           <div className="execution-meta">
             <span>模型 <b>{detail.snapshot?.remote_model || "—"}</b></span>
-            <span>运行方式 <b>{detail.snapshot?.dataset_concurrency != null
+            <span>运行方式 <b>{performanceTask ? (agentx ? "AgentX 轨迹回放" : "普通推理") : <>{detail.snapshot?.dataset_concurrency != null
               ? (detail.snapshot.dataset_concurrency > 1 ? "并行" : "串行")
-              : (detail.datasets?.length === 1 ? "串行" : "待确认")} · 探索</b></span>
+              : (detail.datasets?.length === 1 ? "串行" : "待确认")} · 探索</>}</b></span>
             <span>创建时间 <b>{time(detail.created_at)}</b></span><span>状态更新时间 <b>{time(detail.updated_at)}</b></span><span>最近查询 <b>{lastRefresh ? new Date(lastRefresh).toLocaleTimeString("zh-CN") : "尚未刷新"}</b></span>
             <span>资源 <b>{resourceLabel(detail.snapshot?.resource_kind)}</b></span>
             <span>发布门禁 <b>不适用</b></span>
@@ -188,7 +213,7 @@ export function EvaluationRuns({ runId = "", initialTarget = "", allowSubmit = f
               className={activeTab === name ? "active" : ""} onClick={() => setDetailTab(name)}>{name}</button>)}
           </div>
           {detail.execution_unresolved && <p className="notice" role="alert">执行状态待查证，资源占用和已有记录已保留，请勿重复提交。</p>}
-          {activeTab === "配置快照" ? <section data-testid="run-snapshot"><h3>本次配置快照</h3><dl className="detail-properties"><div><dt>执行参数</dt><dd>{detail.snapshot?.parameters ? Object.entries(detail.snapshot.parameters).map(([key, value]) => `${({output:"回答长度", concurrency:"并发数", temperature:"随机性", top_p:"候选范围", scope:"范围"} as Record<string,string>)[key] || key}：${String(value)}`).join("；") : "暂无信息"}</dd></div><div><dt>样本清单</dt><dd>{detail.snapshot?.manifest_id || "暂无信息"}</dd></div><div><dt>工具版本</dt><dd>{String(detail.snapshot?.tool?.revision || "暂无信息")}</dd></div></dl><p className="muted">本次提交时冻结，后续配置修改不会影响历史任务。</p><dl className="detail-properties"><div><dt>模型</dt><dd>{detail.snapshot?.remote_model || "—"}</dd></div><div><dt>样本数</dt><dd>{detail.snapshot?.sample_count ?? "—"}</dd></div><div><dt>配置版本</dt><dd>{detail.snapshot?.config_version_id || "—"}</dd></div></dl><ManagementDrawer title="查看完整快照与校验值"><pre className="snapshot">{JSON.stringify(detail.snapshot, null, 2)}</pre></ManagementDrawer></section> : activeTab === "执行器原始文件" ? (
+          {activeTab === "配置快照" ? <section data-testid="run-snapshot"><h3>本次配置快照</h3>{performanceTask ? <div className="task-overview-stats">{workload}</div> : <><dl className="detail-properties"><div><dt>执行参数</dt><dd>{detail.snapshot?.parameters ? Object.entries(detail.snapshot.parameters).map(([key, value]) => `${({output:"回答长度", concurrency:"并发数", temperature:"随机性", top_p:"候选范围", scope:"范围"} as Record<string,string>)[key] || key}：${String(value)}`).join("；") : "暂无信息"}</dd></div><div><dt>样本清单</dt><dd>{detail.snapshot?.manifest_id || "暂无信息"}</dd></div><div><dt>工具版本</dt><dd>{String(detail.snapshot?.tool?.revision || "暂无信息")}</dd></div></dl><p className="muted">本次提交时冻结，后续配置修改不会影响历史任务。</p><dl className="detail-properties"><div><dt>模型</dt><dd>{detail.snapshot?.remote_model || "—"}</dd></div><div><dt>样本数</dt><dd>{detail.snapshot?.sample_count ?? "—"}</dd></div><div><dt>配置版本</dt><dd>{detail.snapshot?.config_version_id || "—"}</dd></div></dl></>}<ManagementDrawer title="查看完整快照与校验值"><pre className="snapshot">{JSON.stringify(detail.snapshot, null, 2)}</pre></ManagementDrawer></section> : activeTab === "执行器原始文件" ? (
             <ExecutorFiles key={detail.id} runId={detail.id} currentRound={detail.current_round} />
           ) : activeTab === "执行日志" ? (
             <RunLog key={detail.id} runId={detail.id} datasets={[...new Set(detail.datasets?.map(d => d.dataset))]} />
@@ -198,22 +223,32 @@ export function EvaluationRuns({ runId = "", initialTarget = "", allowSubmit = f
             <section className="detail-progress">
               <div className="spread"><b>测评执行状态</b><span>{taskStatus(detail.state).label} · {detail.datasets?.map(d => d.dataset).join("、") || "测评任务"}</span></div>
               {detailError && <p className="notice" role="alert">当前展示为上次查询结果，状态可能过期；恢复连接后自动刷新。</p>}
-              {detail.state === "failed" && <p role="alert">执行失败。请查看下方 Case 的错误类别和证据，确认原因后再决定后续操作。<button className="link" onClick={() => document.getElementById("case-detail")?.scrollIntoView({ behavior: "smooth", block: "start" })}>定位失败记录</button></p>}
-              <RunProgress key={detail.id} showSampleProgress={(detail.datasets?.length || 0) <= 1} runId={detail.id} terminal={terminal(detail.state)} state={detail.state} createdAt={detail.created_at} events={detail.events} stage={({ accepted: "已接收，等待调度", queued: "排队中", preparing: "准备执行环境", running: "测评执行中", aggregating: "收集结果与生成报告", completed: "执行结束", cancelling: "取消确认中，仍可能保留资源占用", cancelled: "取消已确认", failed: "执行失败" } as Record<string, string>)[detail.state] || "状态待确认"} />
+              {!performanceTask && detail.state === "failed" && <p role="alert">执行失败。请查看下方 Case 的错误类别和证据，确认原因后再决定后续操作。<button className="link" onClick={() => document.getElementById("case-detail")?.scrollIntoView({ behavior: "smooth", block: "start" })}>定位失败记录</button></p>}
+              <RunProgress key={detail.id} performanceTask={performanceTask} showSampleProgress={(detail.datasets?.length || 0) <= 1} runId={detail.id} terminal={terminal(detail.state)} state={detail.state} createdAt={detail.created_at} events={detail.events} stage={({ accepted: "已接收，等待调度", queued: "排队中", preparing: "准备执行环境", running: "测评执行中", aggregating: "收集结果与生成报告", completed: "执行结束", cancelling: "取消确认中，仍可能保留资源占用", cancelled: "取消已确认", failed: "执行失败" } as Record<string, string>)[detail.state] || "状态待确认"} />
               {detail.cancel_requested_at && <p>取消请求：{time(detail.cancel_requested_at)}；以终止确认及清理状态为准。</p>}
               <p className="muted">{detail.report ? "报告已归档，当前仅展示历史执行统计；成绩与证据完整性请查看报告。" : "报告尚未归档；工具进度来自监控观测，不代表评分结论。"}</p>
-              <p className="muted">执行成功与判分通过分别记录；Case 列表保留每次尝试，缺失值不补零。</p>
+              {!performanceTask && <p className="muted">执行成功与判分通过分别记录；Case 列表保留每次尝试，缺失值不补零。</p>}
             </section>
+            {performanceTask ? <section className="card stack"><h3>性能负载与执行记录</h3>
+              <div className="task-overview-stats">{workload}
+                {typeof summary?.total_requests === "number" && <div className="case-stat"><span>归档请求数</span><strong>{summary.total_requests}</strong></div>}
+                {typeof summary?.successful_requests === "number" && <div className="case-stat"><span>成功请求数</span><strong>{summary.successful_requests}</strong></div>}
+              </div>
+              {detail.datasets?.map(d => <div key={d.id}><b>{d.dataset}</b> · {datasetStatus(d.state).label} · {formatDuration(d.actual_duration_sec)}
+                {d.execution_environment && <div className="muted"><DatasetEnvironment environment={d.execution_environment} /></div>}</div>)}
+              <p className="muted">{agentx ? "轨迹回放按会话并发档归档原生指标。" : "普通推理按请求汇总性能指标。"}{detail.report && <a className="link" href={`#report/${detail.report.id}`}>查看性能指标和原生 CSV</a>}</p>
+            </section> : <>
             <div className="task-overview-stats">{[["计划样本", detail.snapshot?.sample_count], ["执行成功", detail.report?.summary.successful_samples], ["执行失败", detail.report?.summary.failed_samples], ["缺测样本", detail.report?.summary.missing_samples], ["判分准确率", typeof detail.report?.summary.accuracy === "number" ? `${formatScore(detail.report.summary.accuracy)}%` : "—"], ["报告有效性", detail.report?.validity || "—"]].map(([label, value]) => <div className="case-stat" key={String(label)}><span>{String(label)}</span><strong>{value === undefined || value === null ? "—" : String(value)}</strong></div>)}</div>
-            {!!detail.datasets?.length && <section className="card stack" aria-label="数据集执行结果"><h3>数据集执行结果</h3><TableWrap><table><thead><tr><th>数据集</th><th>状态</th><th>已归档样本</th><th>准确率</th><th>耗时</th><th>失败原因</th></tr></thead><tbody>{detail.datasets.map(d => <tr key={d.id}><td>{d.dataset}{" "}<button className="link" type="button" onClick={() => { setCaseDataset({ runId: detail.id, dataset: d.dataset }); document.getElementById("case-detail")?.scrollIntoView({ block: "start" }); }}>查看 Case</button></td><td>{datasetStatus(d.state).label}<small>{datasetProgress(d.summary)}</small></td><td>{String(d.summary?.observed_cases ?? "—")} / {String(d.summary?.expected_cases ?? "—")}</td><td>{typeof d.summary?.accuracy === "number" ? `${formatScore(d.summary.accuracy)}%` : "—"}</td><td>{formatDuration(d.actual_duration_sec)}</td><td>{String(d.summary?.diagnostic ?? d.summary?.reason ?? "—")}</td></tr>)}</tbody></table></TableWrap><p className="muted">各数据集历史执行摘要独立展示，不生成跨数据集综合分；成绩有效性以归档证据核验为准。</p>{detail.dataset_report && <ManagementDrawer title="数据集报告与证据"><p>读取归档对象时核验哈希；不能读取时不以历史摘要替代。</p><button onClick={() => void apiGet(`/evaluation-tasks/${detail.id}/report`).then(setReportEvidence).catch(() => setMessage("报告证据读取或完整性校验失败"))}>读取归档报告</button>{reportEvidence != null && <pre className="snapshot">{JSON.stringify(reportEvidence, null, 2)}</pre>}</ManagementDrawer>}</section>}
+            {!!detail.datasets?.length && <section className="card stack" aria-label="数据集执行结果"><h3>数据集执行结果</h3><TableWrap><table><thead><tr><th>数据集</th><th>状态</th><th>已归档样本</th><th>准确率</th><th>耗时</th><th>失败原因</th></tr></thead><tbody>{detail.datasets.map(d => <tr key={d.id}><td>{d.dataset}{" "}<button className="link" type="button" onClick={() => { setCaseDataset({ runId: detail.id, dataset: d.dataset }); document.getElementById("case-detail")?.scrollIntoView({ block: "start" }); }}>查看 Case</button>{d.execution_environment && <DatasetEnvironment environment={d.execution_environment} />}</td><td>{datasetStatus(d.state).label}<small>{datasetProgress(d.summary)}</small></td><td>{String(d.summary?.observed_cases ?? "—")} / {String(d.summary?.expected_cases ?? d.selected_cases ?? "—")}</td><td>{typeof d.summary?.accuracy === "number" ? `${formatScore(d.summary.accuracy)}%` : "—"}</td><td>{formatDuration(d.actual_duration_sec)}</td><td>{String(d.summary?.diagnostic ?? d.summary?.reason ?? "—")}</td></tr>)}</tbody></table></TableWrap><p className="muted">各数据集历史执行摘要独立展示，不生成跨数据集综合分；成绩有效性以归档证据核验为准。</p>{detail.dataset_report && <ManagementDrawer title="数据集报告与证据"><p>读取归档对象时核验哈希；不能读取时不以历史摘要替代。</p><button onClick={() => void apiGet(`/evaluation-tasks/${detail.id}/report`).then(setReportEvidence).catch(() => setMessage("报告证据读取或完整性校验失败"))}>读取归档报告</button>{reportEvidence != null && <pre className="snapshot">{JSON.stringify(reportEvidence, null, 2)}</pre>}</ManagementDrawer>}</section>}
             {detail.datasets?.some(d => d.summary?.recovery_report_id) && <p className="notice">本任务已从同次执行的原始产物恢复评分与归档；原失败历史保留，未重新调用模型。正式成绩见关联报告。</p>}
             <section id="case-detail" data-testid="case-detail">
               {detail.follow_up_enabled && <ExecutionRounds key={detail.id} runId={detail.id} state={detail.state} />}
-              <CaseHistory key={`${detail.id}:${terminal(detail.state)}:${caseDataset?.runId === detail.id ? caseDataset.dataset : ""}`} initialRun={detail.id} selectedDataset={caseDataset?.runId === detail.id ? caseDataset.dataset : detail.datasets?.[0]?.dataset} showPending={detail.follow_up_enabled && detail.state === "cancelled"} datasets={detail.datasets?.map(d => d.dataset) ?? []}
+              <CaseHistory key={`${detail.id}:${terminal(detail.state)}:${caseDataset?.runId === detail.id ? caseDataset.dataset : ""}`} initialRun={detail.id} selectedDataset={caseDataset?.runId === detail.id ? caseDataset.dataset : detail.datasets?.[0]?.dataset} showPending={detail.follow_up_enabled && (detail.state === "failed" || detail.state === "cancelled")} datasets={detail.datasets?.map(d => d.dataset) ?? []}
                 onRetry={detail.follow_up_enabled && terminal(detail.state) ? (dataset_key, sample_id) => setFollowUp({
                   runId: detail.id, target: { dataset_key, sample_id },
                 }) : undefined} />
             </section>
+            </>}
             <div className="detail-bottom-meta"><span data-testid="cleanup-state">资源清理：{cleanupStatus(detail.cleanup.state).label}</span>{["failed", "not_scheduled"].includes(detail.cleanup.state) && detail.report && <button disabled={busy} onClick={() => void action("cleanup")}>重试资源清理</button>}<ManagementDrawer title="任务标识与归档记录"><h3>状态记录</h3><ol>{detail.events?.map((event) => <li key={event.seq}>{time(event.created_at)} · {({ results_recovered: "结果恢复完成（未重跑）", accepted: "已接收", queued: "排队", preparing: "准备环境", running: "开始执行", aggregating: "汇总结果", completed: "执行完成", failed: "执行失败", cancelled: "取消确认", cancelling: "取消中", execution_unresolved: "结果待查证", execution_cleaned: "清理确认", execution_cleanup_pending: "等待清理" } as Record<string, string>)[event.type] || "状态变更"}</li>)}</ol><p>运行 ID：{detail.id}</p><CopyIdentifier value={detail.id} /><p>清理尝试：{detail.cleanup.attempt_count} 次</p><p data-testid="evaluation-validity">历史报告状态：{detail.report?.validity || "未归档"}</p><p>历史摘要不代表当前证据完整，成绩以报告核验结果为准。</p><pre className="snapshot" data-testid="evaluation-summary">{JSON.stringify(detail.report?.summary || {}, null, 2)}</pre></ManagementDrawer></div>
           </>}
         </article>

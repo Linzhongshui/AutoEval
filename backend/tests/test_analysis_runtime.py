@@ -91,8 +91,13 @@ def test_short_citations_retain_original_attempt_identity_and_hash():
 
 
 async def test_log_reader_uses_exact_owned_job_and_rejects_path_input():
+    import io
     import json
+    import shlex
+    import stat
     import uuid
+    from contextlib import nullcontext
+    from types import SimpleNamespace
 
     from autoeval.infrastructure.contracts import JobRef
     from autoeval.planning.planning_transport import PlanningRemoteContainer
@@ -101,18 +106,27 @@ async def test_log_reader_uses_exact_owned_job_and_rejects_path_input():
     adapter.container_id = "pinned-container"
     adapter.remote_dir = "/pinned-runtime"
     calls = []
+    removed = []
+    raw = json.dumps({"content": "fixture log", "truncated": False}).encode()
+    sftp = SimpleNamespace(
+        lstat=lambda p: SimpleNamespace(st_mode=stat.S_IFREG, st_size=len(raw)),
+        open=lambda p, mode: io.BytesIO(raw),
+        remove=removed.append,
+    )
+    client = SimpleNamespace(open_sftp=lambda: nullcontext(sftp))
 
-    def command(args):
-        if "found = []" in args[4]:
+    def command(client, args, payload=None):
+        if args[:2] == ["docker", "exec"]:
             return "[]"
-        calls.append(args)
-        return json.dumps({"content": "fixture log", "truncated": False})
+        assert args[:2] == ["sh", "-c"]
+        calls.append(shlex.split(args[2].split("; ", 2)[2]))
 
-    adapter.command = command
+    adapter.control = SimpleNamespace(connect=lambda: nullcontext(client), command=command)
     key = str(uuid.uuid4())
     result = await adapter.collect_log(JobRef(external_job_id=key, submission_key=key))
     assert result["content"] == "fixture log"
-    assert calls[0][-1] == "/pinned-runtime/jobs/" + key + "/tool.log"
+    assert calls[0][-3] == "/pinned-runtime/jobs/" + key + "/tool.log"
+    assert removed == [calls[0][-1]]
     with pytest.raises(ValueError):
         await adapter.collect_log(JobRef(external_job_id=key, submission_key="../other"))
     assert len(calls) == 1

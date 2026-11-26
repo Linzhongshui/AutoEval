@@ -13,10 +13,27 @@ from autoeval.evaluation.resource_allocation import (
     fits,
     resource_for_task,
 )
+from autoeval.evaluation.workflows import ISOLATED_DATASET_QUEUE
 from autoeval.infrastructure.models import EvaluationRun, Outbox, RunSnapshot
 from autoeval.planning.artifacts import current_preflight
 from autoeval.resources.models import TargetBinding
 from autoeval.resources.targets import validate_url
+
+
+async def replay_legacy_submission(request, key, request_hash):
+    """Acknowledge historical submissions without starting a shared-container job."""
+    async with request.app.state.sessions() as session:
+        run = await session.scalar(
+            select(EvaluationRun).where(
+                EvaluationRun.trigger_scope == "local-operator:evaluation",
+                EvaluationRun.idempotency_key == key,
+            )
+        )
+    if run is None:
+        raise HTTPException(422, "请通过 /api/autoeval/v1/evaluation-tasks 提交独立容器测评")
+    if run.request_hash != request_hash:
+        raise HTTPException(409, "Idempotency content conflict")
+    return {"data": {"run_id": str(run.id), "state": run.state}, "request_id": request.state.request_id}
 
 
 async def create_run(session, settings, body, execution_plan_id, key):
@@ -50,6 +67,10 @@ async def create_run(session, settings, body, execution_plan_id, key):
     fresh = await current_preflight(session, inputs)
     if not fresh or not fresh.payload.get("execution_ready"):
         raise HTTPException(409, "Fresh resource preflight required")
+    if fresh.payload.get("execution_templates") != {
+        task["task_id"]: task["execution_template"] for task in inputs["tasks"]
+    }:
+        raise HTTPException(409, "SSH execution templates changed; run preflight again")
     report = None
     if execution_plan_id:
         execution = await session.get(PlanningArtifact, execution_plan_id)
@@ -71,7 +92,7 @@ async def create_run(session, settings, body, execution_plan_id, key):
                     409, "Platform owns dataset parallelism; configure max_num_workers=1"
                 )
     for item in inputs["tasks"]:
-        if not resource_for_task(fresh.payload, item["task_id"]).get("debug_storage"):
+        if not item.get("execution_template") and not resource_for_task(fresh.payload, item["task_id"]).get("debug_storage"):
             raise HTTPException(409, "请重新预检执行器的持久挂载 /var/lib/autoeval/artifacts")
         if item["dataset"] not in fresh.payload["supported_datasets"] or not fits(
             demand_for(item), {}, resource_for_task(fresh.payload, item["task_id"])
@@ -109,6 +130,7 @@ async def create_run(session, settings, body, execution_plan_id, key):
         "remote_model": target.remote_model,
         "execution_origin": settings.evaluation_origin,
     }
+    frozen["task_type"] = "performance" if inputs.get("performance") else "accuracy"
     # A single GPQA result can use the existing report/leaderboard contract without
     # changing its frozen planning inputs or inventing aggregate multi-dataset scores.
     if len(inputs["tasks"]) == 1 and inputs["tasks"][0]["dataset"] == "GPQA":
@@ -139,6 +161,8 @@ async def create_run(session, settings, body, execution_plan_id, key):
             'acknowledged_at': acknowledged_at.isoformat(),
             'execution_deadline': (acknowledged_at + timedelta(hours=24)).isoformat(),
         }
+    elif inputs.get("performance") and not budget_config_path:
+        raise HTTPException(409, "已启用预算校验，请配置性能任务预算")
     elif budget_config_path:
         import json
         from pathlib import Path
@@ -182,7 +206,7 @@ async def create_run(session, settings, body, execution_plan_id, key):
             MonitorBinding(
                 run_id=run.id,
                 attempt=index,
-                latest={"source": "executor_lifecycle", "tool_status": "pending", "task_name": str(child_id), "observed_at": datetime.now(UTC).isoformat(), "snapshot_kind": "live", "collection_status": "waiting_tool", "stale": False, "finish_count": None, "total_count": len(item["samples"]), "progress_description": "监控已启用，等待远程作业启动"},
+                latest={"source": "executor_lifecycle", "tool_status": "pending", "task_name": str(child_id), "observed_at": datetime.now(UTC).isoformat(), "snapshot_kind": "live", "collection_status": "waiting_tool", "stale": False, "finish_count": None, "total_count": None if inputs.get("performance") else len(item["samples"]), "progress_description": "监控已启用，等待远程作业启动"},
                 identity={
                     "task_name": str(child_id),
                     "dataset": item["dataset"],
@@ -195,7 +219,7 @@ async def create_run(session, settings, body, execution_plan_id, key):
             run_id=run.id,
             kind="START_RUN",
             dedup_key="planned:" + str(run.id),
-            payload={"workflow_kind": "planned_evaluation"},
+            payload={"workflow_kind": "planned_evaluation", "workflow_queue": ISOLATED_DATASET_QUEUE},
         )
     )
     return {"run_id": str(run.id), "state": "accepted"}

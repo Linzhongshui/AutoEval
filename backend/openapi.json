@@ -1177,6 +1177,108 @@
         }
       }
     },
+    "/api/autoeval/v1/planning/compilations/{compilation_id}/copy": {
+      "post": {
+        "tags": [
+          "task planning"
+        ],
+        "summary": "Copy Compilation",
+        "operationId": "copy_compilation_api_autoeval_v1_planning_compilations__compilation_id__copy_post",
+        "parameters": [
+          {
+            "name": "compilation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Compilation Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompilationCopy"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/autoeval/v1/planning/compilations/{compilation_id}/rename": {
+      "post": {
+        "tags": [
+          "task planning"
+        ],
+        "summary": "Rename Compilation",
+        "operationId": "rename_compilation_api_autoeval_v1_planning_compilations__compilation_id__rename_post",
+        "parameters": [
+          {
+            "name": "compilation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Compilation Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompilationName"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/autoeval/v1/planning/options": {
       "get": {
         "tags": [
@@ -1292,7 +1394,15 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PlanInput"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/PlanInput"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PerformanceTask"
+                  }
+                ],
+                "title": "Body"
               }
             }
           },
@@ -2256,7 +2366,15 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SubmitTask"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SubmitTask"
+                  },
+                  {
+                    "$ref": "#/components/schemas/PerformanceTask"
+                  }
+                ],
+                "title": "Body"
               }
             }
           }
@@ -4085,6 +4203,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ModelConnectionTestInput"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -5216,6 +5351,91 @@
               "default": false,
               "title": "Summary Only"
             }
+          },
+          {
+            "name": "model",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Model"
+            }
+          },
+          {
+            "name": "analysis_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Analysis Status"
+            }
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Query"
+            }
+          },
+          {
+            "name": "review_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Review Status"
+            }
+          },
+          {
+            "name": "task_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "accuracy",
+                    "performance",
+                    "other"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Task Type"
+            }
           }
         ],
         "responses": {
@@ -5224,7 +5444,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PageEnvelope_ReportView_"
+                  "$ref": "#/components/schemas/ReportPage"
                 }
               }
             }
@@ -5285,6 +5505,110 @@
         }
       }
     },
+    "/api/autoeval/v1/reports/{report_id}/performance-csv": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Performance Csv",
+        "operationId": "performance_csv_api_autoeval_v1_reports__report_id__performance_csv_get",
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Report Id"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Path"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/autoeval/v1/reports/{report_id}/review": {
+      "post": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Review",
+        "description": "Mark one immutable report as an approved history source; never edits evidence.",
+        "operationId": "review_api_autoeval_v1_reports__report_id__review_post",
+        "parameters": [
+          {
+            "name": "report_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Report Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_dict_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/autoeval/v1/reports/{report_id}/evidence": {
       "get": {
         "tags": [
@@ -5312,6 +5636,164 @@
                 "schema": {
                   "$ref": "#/components/schemas/Envelope_dict_"
                 }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/autoeval/v1/runs/{run_id}/badcase-comparison": {
+      "get": {
+        "tags": [
+          "badcase comparison"
+        ],
+        "summary": "Badcase Comparison",
+        "operationId": "badcase_comparison_api_autoeval_v1_runs__run_id__badcase_comparison_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/autoeval/v1/runs/{run_id}/badcase-case": {
+      "get": {
+        "tags": [
+          "badcase export"
+        ],
+        "summary": "Badcase Case Detail",
+        "operationId": "badcase_case_detail_api_autoeval_v1_runs__run_id__badcase_case_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "sample_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Sample Id"
+            }
+          },
+          {
+            "name": "dataset_key",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dataset Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/autoeval/v1/runs/{run_id}/badcase-export": {
+      "post": {
+        "tags": [
+          "badcase export"
+        ],
+        "summary": "Badcase Export",
+        "operationId": "badcase_export_api_autoeval_v1_runs__run_id__badcase_export_post",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -5391,6 +5873,79 @@
           "accepted"
         ],
         "title": "Accepted"
+      },
+      "AgentXPerformance": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "agentx",
+            "title": "Kind"
+          },
+          "variant": {
+            "type": "string",
+            "enum": [
+              "256k",
+              "full"
+            ],
+            "title": "Variant"
+          },
+          "run_mode": {
+            "type": "string",
+            "enum": [
+              "smoke",
+              "benchmark"
+            ],
+            "title": "Run Mode",
+            "default": "smoke"
+          },
+          "duration": {
+            "type": "integer",
+            "maximum": 86400.0,
+            "minimum": 1.0,
+            "title": "Duration"
+          },
+          "concurrency": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 256.0,
+                "minimum": 1.0
+              },
+              {
+                "items": {
+                  "type": "integer",
+                  "maximum": 256.0,
+                  "minimum": 1.0
+                },
+                "type": "array",
+                "maxItems": 256,
+                "minItems": 1
+              }
+            ],
+            "title": "Concurrency"
+          },
+          "trace_limit": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace Limit"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "variant",
+          "duration",
+          "concurrency"
+        ],
+        "title": "AgentXPerformance"
       },
       "AppliedPlan": {
         "properties": {
@@ -5693,8 +6248,87 @@
         ],
         "title": "CloseProbe"
       },
+      "CompilationCopy": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "execution": {
+            "type": "string",
+            "enum": [
+              "local",
+              "docker"
+            ],
+            "title": "Execution"
+          },
+          "tool_root": {
+            "type": "string",
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Tool Root"
+          },
+          "directory": {
+            "type": "string",
+            "maxLength": 1024,
+            "title": "Directory"
+          },
+          "concurrency": {
+            "type": "integer",
+            "maximum": 256.0,
+            "minimum": 1.0,
+            "title": "Concurrency"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "execution",
+          "tool_root",
+          "directory",
+          "concurrency"
+        ],
+        "title": "CompilationCopy"
+      },
+      "CompilationName": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "CompilationName"
+      },
       "CompilationOption": {
         "properties": {
+          "tool_revisions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tool Revisions"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
           "id": {
             "type": "string",
             "title": "Id"
@@ -7070,6 +7704,48 @@
         ],
         "title": "ExplorationSubmitted"
       },
+      "ExportInput": {
+        "properties": {
+          "dataset_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Key"
+          },
+          "scope": {
+            "type": "string",
+            "enum": [
+              "selected",
+              "high",
+              "suspicious",
+              "all"
+            ],
+            "title": "Scope",
+            "default": "suspicious"
+          },
+          "sample_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 100,
+            "title": "Sample Ids"
+          },
+          "include_traces": {
+            "type": "boolean",
+            "title": "Include Traces",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ExportInput"
+      },
       "FollowUpAccepted": {
         "properties": {
           "run_id": {
@@ -7147,6 +7823,13 @@
             },
             "type": "array",
             "title": "Blockers"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
           },
           "sample_count": {
             "type": "integer",
@@ -7271,6 +7954,49 @@
           "id"
         ],
         "title": "IdOnly"
+      },
+      "InferencePerformance": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "inference",
+            "title": "Kind"
+          },
+          "input_tokens": {
+            "type": "integer",
+            "maximum": 1048576.0,
+            "minimum": 1.0,
+            "title": "Input Tokens"
+          },
+          "max_output_tokens": {
+            "type": "integer",
+            "maximum": 1048576.0,
+            "minimum": 1.0,
+            "title": "Max Output Tokens"
+          },
+          "concurrency": {
+            "type": "integer",
+            "maximum": 256.0,
+            "minimum": 1.0,
+            "title": "Concurrency"
+          },
+          "requests": {
+            "type": "integer",
+            "maximum": 100000.0,
+            "minimum": 1.0,
+            "title": "Requests"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "kind",
+          "input_tokens",
+          "max_output_tokens",
+          "concurrency",
+          "requests"
+        ],
+        "title": "InferencePerformance"
       },
       "JobAccepted": {
         "properties": {
@@ -7560,6 +8286,25 @@
         ],
         "title": "ManifestOption"
       },
+      "ModelConnectionTestInput": {
+        "properties": {
+          "ssh_resource_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ssh Resource Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ModelConnectionTestInput"
+      },
       "ModelCreate": {
         "properties": {
           "model_id": {
@@ -7732,39 +8477,6 @@
         ],
         "title": "PageEnvelope[PlannedRunItem]"
       },
-      "PageEnvelope_ReportView_": {
-        "properties": {
-          "data": {
-            "items": {
-              "$ref": "#/components/schemas/ReportView"
-            },
-            "type": "array",
-            "title": "Data"
-          },
-          "next_offset": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Next Offset"
-          },
-          "request_id": {
-            "type": "string",
-            "title": "Request Id"
-          }
-        },
-        "type": "object",
-        "required": [
-          "data",
-          "next_offset",
-          "request_id"
-        ],
-        "title": "PageEnvelope[ReportView]"
-      },
       "PageEnvelope_RunListItem_": {
         "properties": {
           "data": {
@@ -7853,6 +8565,57 @@
         ],
         "title": "Parameters"
       },
+      "PerformanceTask": {
+        "properties": {
+          "resource_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Resource Id"
+          },
+          "resource_kind": {
+            "type": "string",
+            "const": "customer_ssh",
+            "title": "Resource Kind"
+          },
+          "target_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Target Id"
+          },
+          "performance": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/InferencePerformance"
+              },
+              {
+                "$ref": "#/components/schemas/AgentXPerformance"
+              }
+            ],
+            "title": "Performance",
+            "discriminator": {
+              "propertyName": "kind",
+              "mapping": {
+                "agentx": "#/components/schemas/AgentXPerformance",
+                "inference": "#/components/schemas/InferencePerformance"
+              }
+            }
+          },
+          "ignore_budget": {
+            "type": "boolean",
+            "title": "Ignore Budget",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "resource_id",
+          "resource_kind",
+          "target_id",
+          "performance"
+        ],
+        "title": "PerformanceTask"
+      },
       "PlanInput": {
         "properties": {
           "resource_id": {
@@ -7862,10 +8625,7 @@
           },
           "resource_kind": {
             "type": "string",
-            "enum": [
-              "docker_local",
-              "customer_ssh"
-            ],
+            "const": "customer_ssh",
             "title": "Resource Kind"
           },
           "resource_ids": {
@@ -8247,8 +9007,94 @@
         ],
         "title": "RegisterExecutor"
       },
+      "ReportFilters": {
+        "properties": {
+          "models": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Models"
+          },
+          "analysis_statuses": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Analysis Statuses"
+          }
+        },
+        "type": "object",
+        "required": [
+          "models",
+          "analysis_statuses"
+        ],
+        "title": "ReportFilters"
+      },
+      "ReportPage": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/ReportView"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "next_offset": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Offset"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          },
+          "filters": {
+            "$ref": "#/components/schemas/ReportFilters"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "next_offset",
+          "total",
+          "request_id",
+          "filters"
+        ],
+        "title": "ReportPage"
+      },
       "ReportView": {
         "properties": {
+          "task_type": {
+            "type": "string",
+            "enum": [
+              "accuracy",
+              "performance",
+              "other"
+            ],
+            "title": "Task Type"
+          },
+          "dataset_concurrency": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Concurrency"
+          },
           "dataset_results": {
             "anyOf": [
               {
@@ -8357,10 +9203,48 @@
             "additionalProperties": true,
             "type": "object",
             "title": "Baseline Comparison"
+          },
+          "review_status": {
+            "type": "string",
+            "title": "Review Status"
+          },
+          "reviewed_by": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed By"
+          },
+          "reviewed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed At"
+          },
+          "review_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Review Note"
           }
         },
         "type": "object",
         "required": [
+          "task_type",
           "id",
           "run_id",
           "execution_kind",
@@ -8378,9 +9262,39 @@
           "gate_status",
           "analysis_status",
           "analysis_id",
-          "baseline_comparison"
+          "baseline_comparison",
+          "review_status"
         ],
         "title": "ReportView"
+      },
+      "ReviewInput": {
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approve",
+              "revoke"
+            ],
+            "title": "Decision"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "type": "object",
+        "required": [
+          "decision"
+        ],
+        "title": "ReviewInput"
       },
       "RunListItem": {
         "properties": {
@@ -8567,6 +9481,21 @@
       },
       "ServiceUpdate": {
         "properties": {
+          "service_kind": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "local",
+                  "official"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Kind"
+          },
           "service_name": {
             "type": "string",
             "maxLength": 128,
@@ -8658,10 +9587,7 @@
           },
           "resource_kind": {
             "type": "string",
-            "enum": [
-              "docker_local",
-              "customer_ssh"
-            ],
+            "const": "customer_ssh",
             "title": "Resource Kind"
           },
           "resource_ids": {
@@ -8749,6 +9675,21 @@
             "type": "string",
             "format": "uuid",
             "title": "Model Version Id"
+          },
+          "service_kind": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "local",
+                  "official"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Kind"
           },
           "base_url": {
             "type": "string",

@@ -90,12 +90,16 @@ class StandardInputVersion(Record, Base):
 class StandardInputCompilation(Record, Base):
     __table_args__ = (Index("ix_standard_input_mapping", "model_id", "input_id"),)
     __tablename__ = "standard_input_compilation"
-    input_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("standard_input_version.id", ondelete="RESTRICT")
-    )
+    input_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("standard_input_version.id", ondelete="RESTRICT"))
     model_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("asset.id", ondelete="RESTRICT"))
     sha256: Mapped[str] = mapped_column(String(64), unique=True)
     payload: Mapped[dict] = mapped_column(JSONB)
+
+
+class CompilationDisplayName(Base):
+    __tablename__ = "compilation_display_name"
+    compilation_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("standard_input_compilation.id"), primary_key=True)
+    name: Mapped[str] = mapped_column(String(128))
 
 
 class Strict(BaseModel):

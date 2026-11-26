@@ -12,20 +12,13 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, select
 from temporalio import activity
 
 from autoeval.catalog.datasets import (
-    DatasetManifest,
     canonical_manifest,
     read_manifest,
     write_manifest,
-)
-from autoeval.catalog.models import (
-    ConfigDatasetBinding,
-    EvaluationProfile,
-    TestConfigItem,
-    TestConfigVersion,
 )
 from autoeval.evaluation.evaluations import EvaluationReport
 from autoeval.evaluation.runs import ExecutionLease
@@ -33,7 +26,7 @@ from autoeval.evaluation.task_monitor import MonitorBinding, save_observation
 from autoeval.infrastructure.cleanup import ExecutionCleanup
 from autoeval.infrastructure.config import get_settings
 from autoeval.infrastructure.db import create_database
-from autoeval.infrastructure.models import EvaluationRun, Outbox, RunEvent, RunSnapshot
+from autoeval.infrastructure.models import EvaluationRun, RunEvent, RunSnapshot
 from autoeval.infrastructure.secrets import FileSecretStore
 from autoeval.reporting.data_workbench import development
 from autoeval.reporting.models import UnifiedArtifact
@@ -198,161 +191,10 @@ async def submit(
     request: Request,
     idempotency_key: str = Header(min_length=1, max_length=128),
 ):
-    settings = request.app.state.settings
-    env = environment(settings)
-    if str(body.resource_id) != env["id"]:
-        raise HTTPException(422, "Monitor resource mismatch")
+    from autoeval.evaluation.submission import replay_legacy_submission
+
     digest = hashlib.sha256(canonical_manifest(body.model_dump(mode="json"))).hexdigest()
-    async with request.app.state.sessions() as session, session.begin():
-        await session.execute(
-            text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
-            {"key": "monitored:" + idempotency_key},
-        )
-        old = await session.scalar(
-            select(EvaluationRun).where(
-                EvaluationRun.trigger_scope == "local-operator:evaluation",
-                EvaluationRun.idempotency_key == idempotency_key,
-            )
-        )
-        if old:
-            if old.request_hash != digest:
-                raise HTTPException(409, "Idempotency conflict")
-            return {"data": {"run_id": str(old.id), "state": old.state}}
-        config = await session.get(TestConfigVersion, body.config_version_id)
-        items = (
-            await session.scalars(
-                select(TestConfigItem).where(
-                    TestConfigItem.config_version_id == body.config_version_id
-                )
-            )
-        ).all()
-        if not config or len(items) != 1 or items[0].dataset_key != "GPQA":
-            raise HTTPException(422, "GPQA-only configuration required")
-        params = items[0].parameter_values
-        if (
-            params.get("scope") != "Lite"
-            or params.get("concurrency") != 1
-            or not 1 <= params.get("output", 0) <= 2048
-            or params.get("temperature") != 0
-            or params.get("top_p") != 1
-        ):
-            raise HTTPException(
-                422,
-                "Monitored pilot requires Lite, concurrency=1, output<=2048, temperature=0, top_p=1",
-            )
-        binding = await session.scalar(
-            select(ConfigDatasetBinding).where(ConfigDatasetBinding.config_item_id == items[0].id)
-        )
-        manifest = await session.get(DatasetManifest, binding.manifest_id) if binding else None
-        if (
-            not manifest
-            or manifest.scope != "lite"
-            or not 1 <= manifest.sample_count <= body.max_model_requests
-        ):
-            raise HTTPException(422, "Frozen Lite manifest exceeds budget")
-        data = await asyncio.to_thread(read_manifest, settings, manifest)
-        samples = data["samples"]
-        if [s["sample_id"] for s in samples] != [f"gpqa_diamond:{i}" for i in range(len(samples))]:
-            raise HTTPException(
-                422, "CLI pilot supports the approved deterministic first-N GPQA manifest"
-            )
-        target = await session.get(TargetBinding, body.target_id)
-        if (
-            not target
-            or target.remote_model != "deepseek-flash"
-            or target.base_url != "https://api.deepseek.com"
-        ):
-            raise HTTPException(422, "Pilot target is not the approved DeepSeek service")
-        await session.execute(
-            text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
-            {"key": "monitor-resource:" + env["container_id"]},
-        )
-        if await session.scalar(
-            select(ExecutionLease).where(ExecutionLease.container_id == env["container_id"])
-        ):
-            raise HTTPException(409, "Monitored container is occupied")
-        await asyncio.to_thread(verify_environment, settings, env)
-        run = EvaluationRun(
-            trigger_scope="local-operator:evaluation",
-            idempotency_key=idempotency_key,
-            request_hash=digest,
-            run_mode="exploration",
-            created_by="local-operator",
-        )
-        session.add(run)
-        await session.flush()
-        abbr = "ae-" + run.id.hex[:16]
-        job = env["root"] + "/jobs/" + str(run.id)
-        identity = {
-            "container": env["container"],
-            "container_id": env["container_id"],
-            "port": env["port"],
-            "work_dir": job + "/output",
-            "task_name": abbr + "/GPQA_diamond",
-        }
-        profile = await session.get(EvaluationProfile, binding.profile_id)
-        frozen = {
-            "execution_origin": "real",
-            "execution_path": "aisbench_cli_monitor",
-            "remote_model": target.remote_model,
-            "base_url": target.base_url,
-            "target_id": str(target.id),
-            "config_version_id": str(config.id),
-            "config_sha256": config.content_hash,
-            "parameters": params,
-            "manifest_id": str(manifest.id),
-            "manifest_sha256": manifest.sha256,
-            "samples": samples,
-            "profile_id": str(binding.profile_id),
-            "profile_sha256": profile.sha256,
-            "profile_execution_override": "pinned_cli_monitor",
-            "model_version_id": str(target.model_version_id),
-            "resource_kind": "aisbench_monitor",
-            "resource_id": env["id"],
-            "max_model_requests": body.max_model_requests,
-            "max_output_tokens": params["output"],
-            "tool": {
-                "revision": env["aisbench_revision"],
-                "source_url": "https://github.com/SJTUyh/benchmark",
-                "patches": env["pins"],
-            },
-            "monitor_environment": env,
-            "monitor_identity": identity,
-            "model_abbr": abbr,
-        }
-        session.add(ExecutionLease(container_id=env["container_id"], run_id=run.id))
-        session.add(
-            RunSnapshot(
-                run_id=run.id,
-                schema_version="gpqa-cli.v1",
-                canonical_body=frozen,
-                sha256=hashlib.sha256(canonical_manifest(frozen)).hexdigest(),
-            )
-        )
-        session.add(MonitorBinding(run_id=run.id, attempt=1, identity=identity))
-        session.add(
-            Outbox(
-                run_id=run.id,
-                kind="START_RUN",
-                dedup_key="start:" + str(run.id),
-                payload={
-                    "workflow_kind": "monitored_gpqa_v1",
-                    "workflow_queue": "demo.monitored.v1",
-                },
-            )
-        )
-        session.add(
-            RunEvent(
-                run_id=run.id,
-                seq=1,
-                type="accepted",
-                body={"execution_path": "aisbench_cli_monitor"},
-            )
-        )
-        return {
-            "data": {"run_id": str(run.id), "state": "accepted"},
-            "request_id": request.state.request_id,
-        }
+    return await replay_legacy_submission(request, idempotency_key, digest)
 
 
 class Gateway:

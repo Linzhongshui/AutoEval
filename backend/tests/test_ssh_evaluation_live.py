@@ -14,10 +14,11 @@ from sqlalchemy import select
 from temporalio.client import Client
 from temporalio.worker import Worker
 
-from autoeval.catalog.datasets import DatasetManifest, read_manifest
+from autoeval.catalog.datasets import DatasetManifest, canonical_manifest, read_manifest
 from autoeval.catalog.models import ConfigDatasetBinding, EvaluationProfile
 from autoeval.catalog.models import TestConfigItem as ConfigItem
 from autoeval.catalog.models import TestConfigVersion as ConfigVersion
+from autoeval.catalog.registry import AssetVersion
 from autoeval.entrypoints.api import create_app
 from autoeval.entrypoints.dispatcher import deliver_once
 from autoeval.entrypoints.reconciler import reconcile_gpqa
@@ -27,9 +28,9 @@ from autoeval.evaluation.runs import ExecutionLease
 from autoeval.evaluation.workflows import GpqaExplorationWorkflow
 from autoeval.infrastructure.cleanup import ExecutionCleanup, reclaim
 from autoeval.infrastructure.config import get_settings
-from autoeval.infrastructure.models import Outbox, RunSnapshot
+from autoeval.infrastructure.models import EvaluationRun, Outbox, RunSnapshot
 from autoeval.reporting.case_history import AttemptInput, CaseExecutionRecord, begin_attempt
-from autoeval.resources.execution_transport import ssh_transport
+from autoeval.resources.execution_transport import frozen_ssh_resource, ssh_transport
 from autoeval.resources.models import SSHResourceBinding, TargetBinding
 from autoeval.resources.ssh_native import SSHNativeTransport
 
@@ -116,6 +117,47 @@ async def harness(monkeypatch):
         yield app, api, client, settings, body
 
 
+async def seed_historical_run(app, settings, body, key):
+    """Seed an in-flight pilot snapshot using the simulator's prepared Lite1 assets."""
+    async with app.state.sessions() as session, session.begin():
+        config = await session.get(ConfigVersion, uuid.UUID(body["config_version_id"]))
+        item = await session.scalar(select(ConfigItem).where(ConfigItem.config_version_id == config.id))
+        binding = await session.scalar(select(ConfigDatasetBinding).where(ConfigDatasetBinding.config_item_id == item.id))
+        profile = await session.get(EvaluationProfile, binding.profile_id)
+        manifest = await session.get(DatasetManifest, binding.manifest_id)
+        dataset = await session.get(AssetVersion, manifest.dataset_version_id)
+        resource = await session.get(SSHResourceBinding, uuid.UUID(body["resource_id"]))
+        target = await session.get(TargetBinding, uuid.UUID(body["target_id"]))
+        address = f"{resource.host}:{resource.port}:{resource.workdir}"
+        frozen = {
+            **body, "schema_version": "gpqa-run.v1", "execution_origin": "simulation",
+            "config_sha256": config.content_hash, "parameters": item.parameter_values,
+            "profile_id": str(profile.id), "profile_sha256": profile.sha256, "tool": profile.contract,
+            "manifest_id": str(manifest.id), "manifest_sha256": manifest.sha256,
+            "samples": (await asyncio.to_thread(read_manifest, settings, manifest))["samples"],
+            "dataset_content": dataset.metadata_json, "model_version_id": str(target.model_version_id),
+            "base_url": target.base_url, "remote_model": target.remote_model,
+            "ssh": frozen_ssh_resource(resource, settings),
+            "allocation_key": "ssh:" + hashlib.sha256(address.encode()).hexdigest()[:60],
+            "generation": {"thinking": {"type": "disabled"}}, "gate_status": "not_applicable",
+        }
+        run = EvaluationRun(trigger_scope="local-operator:evaluation", idempotency_key=key,
+                            request_hash=hashlib.sha256(canonical_manifest(body)).hexdigest(),
+                            run_mode="exploration", created_by="test")
+        session.add(run)
+        await session.flush()
+        session.add_all([
+            ExecutionLease(container_id=frozen["allocation_key"], run_id=run.id),
+            RunSnapshot(run_id=run.id, schema_version=frozen["schema_version"],
+                        canonical_body=frozen, sha256=hashlib.sha256(canonical_manifest(frozen)).hexdigest()),
+            Outbox(run_id=run.id, kind="START_RUN", dedup_key="start:" + str(run.id),
+                   payload={"workflow_kind": "gpqa_exploration",
+                            "workflow_queue": settings.gpqa_workflow_queue,
+                            "activity_queue": settings.gpqa_activity_queue}),
+        ])
+        return run.id
+
+
 async def wait_terminal(api, run_id):
     for _ in range(150):
         body = (await api.get(f"/api/autoeval/v1/runs/{run_id}")).json()["data"]
@@ -180,6 +222,8 @@ async def test_ssh_submission_snapshot_report_and_cancel(harness, monkeypatch):
     monkeypatch.setattr(SSHNativeTransport, "request", simulated_model)
     for cancelled in (False, True):
         headers = {"Idempotency-Key": uuid.uuid4().hex}
+        assert (await api.post("/api/autoeval/v1/runs", json=body, headers=headers)).status_code == 422
+        await seed_historical_run(app, settings, body, headers["Idempotency-Key"])
         response = await api.post("/api/autoeval/v1/runs", json=body, headers=headers)
         assert response.status_code == 202, response.text
         run_id = response.json()["data"]["run_id"]
@@ -270,11 +314,7 @@ async def test_ssh_started_attempt_recovers_remote_evidence_without_model_reques
         raise AssertionError("Recovery must never invoke the model")
 
     monkeypatch.setattr(SSHNativeTransport, "request", forbid_model)
-    response = await api.post(
-        "/api/autoeval/v1/runs", json=body, headers={"Idempotency-Key": uuid.uuid4().hex}
-    )
-    assert response.status_code == 202, response.text
-    run_id = uuid.UUID(response.json()["data"]["run_id"])
+    run_id = await seed_historical_run(app, settings, body, uuid.uuid4().hex)
     async with app.state.sessions() as session, session.begin():
         intent = await session.scalar(
             select(Outbox).where(Outbox.run_id == run_id).with_for_update()

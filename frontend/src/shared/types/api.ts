@@ -402,6 +402,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/autoeval/v1/planning/compilations/{compilation_id}/copy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Copy Compilation */
+        post: operations["copy_compilation_api_autoeval_v1_planning_compilations__compilation_id__copy_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/autoeval/v1/planning/compilations/{compilation_id}/rename": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rename Compilation */
+        post: operations["rename_compilation_api_autoeval_v1_planning_compilations__compilation_id__rename_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/autoeval/v1/planning/options": {
         parameters: {
             query?: never;
@@ -1606,6 +1640,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/autoeval/v1/reports/{report_id}/performance-csv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Performance Csv */
+        get: operations["performance_csv_api_autoeval_v1_reports__report_id__performance_csv_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/autoeval/v1/reports/{report_id}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Review
+         * @description Mark one immutable report as an approved history source; never edits evidence.
+         */
+        post: operations["review_api_autoeval_v1_reports__report_id__review_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/autoeval/v1/reports/{report_id}/evidence": {
         parameters: {
             query?: never;
@@ -1617,6 +1688,57 @@ export interface paths {
         get: operations["evidence_api_autoeval_v1_reports__report_id__evidence_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/autoeval/v1/runs/{run_id}/badcase-comparison": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Badcase Comparison */
+        get: operations["badcase_comparison_api_autoeval_v1_runs__run_id__badcase_comparison_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/autoeval/v1/runs/{run_id}/badcase-case": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Badcase Case Detail */
+        get: operations["badcase_case_detail_api_autoeval_v1_runs__run_id__badcase_case_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/autoeval/v1/runs/{run_id}/badcase-export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Badcase Export */
+        post: operations["badcase_export_api_autoeval_v1_runs__run_id__badcase_export_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1682,6 +1804,31 @@ export interface components {
         Accepted: {
             /** Accepted */
             accepted: boolean;
+        };
+        /** AgentXPerformance */
+        AgentXPerformance: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "agentx";
+            /**
+             * Variant
+             * @enum {string}
+             */
+            variant: "256k" | "full";
+            /**
+             * Run Mode
+             * @default smoke
+             * @enum {string}
+             */
+            run_mode: "smoke" | "benchmark";
+            /** Duration */
+            duration: number;
+            /** Concurrency */
+            concurrency: number | number[];
+            /** Trace Limit */
+            trace_limit?: number | null;
         };
         /** AppliedPlan */
         AppliedPlan: {
@@ -1780,8 +1927,33 @@ export interface components {
              */
             acknowledge_unknown: true;
         };
+        /** CompilationCopy */
+        CompilationCopy: {
+            /** Name */
+            name: string;
+            /**
+             * Execution
+             * @enum {string}
+             */
+            execution: "local" | "docker";
+            /** Tool Root */
+            tool_root: string;
+            /** Directory */
+            directory: string;
+            /** Concurrency */
+            concurrency: number;
+        };
+        /** CompilationName */
+        CompilationName: {
+            /** Name */
+            name: string;
+        };
         /** CompilationOption */
         CompilationOption: {
+            /** Tool Revisions */
+            tool_revisions?: string[];
+            /** Display Name */
+            display_name?: string | null;
             /** Id */
             id: string;
             /** Dataset */
@@ -2289,6 +2461,24 @@ export interface components {
             /** Gate Status */
             gate_status?: string | null;
         };
+        /** ExportInput */
+        ExportInput: {
+            /** Dataset Key */
+            dataset_key?: string | null;
+            /**
+             * Scope
+             * @default suspicious
+             * @enum {string}
+             */
+            scope: "selected" | "high" | "suspicious" | "all";
+            /** Sample Ids */
+            sample_ids?: string[];
+            /**
+             * Include Traces
+             * @default true
+             */
+            include_traces: boolean;
+        };
         /** FollowUpAccepted */
         FollowUpAccepted: {
             /** Run Id */
@@ -2321,6 +2511,8 @@ export interface components {
             samples: components["schemas"]["FollowUpSample"][];
             /** Blockers */
             blockers: string[];
+            /** Warnings */
+            warnings?: string[];
             /** Sample Count */
             sample_count: number;
             /** Scope Sha256 */
@@ -2363,6 +2555,22 @@ export interface components {
         IdOnly: {
             /** Id */
             id: string;
+        };
+        /** InferencePerformance */
+        InferencePerformance: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "inference";
+            /** Input Tokens */
+            input_tokens: number;
+            /** Max Output Tokens */
+            max_output_tokens: number;
+            /** Concurrency */
+            concurrency: number;
+            /** Requests */
+            requests: number;
         };
         /** JobAccepted */
         JobAccepted: {
@@ -2466,6 +2674,11 @@ export interface components {
             /** Dataset */
             dataset: string;
         };
+        /** ModelConnectionTestInput */
+        ModelConnectionTestInput: {
+            /** Ssh Resource Id */
+            ssh_resource_id?: string | null;
+        };
         /** ModelCreate */
         ModelCreate: {
             /** Model Id */
@@ -2525,15 +2738,6 @@ export interface components {
             /** Request Id */
             request_id: string;
         };
-        /** PageEnvelope[ReportView] */
-        PageEnvelope_ReportView_: {
-            /** Data */
-            data: components["schemas"]["ReportView"][];
-            /** Next Offset */
-            next_offset: number | null;
-            /** Request Id */
-            request_id: string;
-        };
         /** PageEnvelope[RunListItem] */
         PageEnvelope_RunListItem_: {
             /** Data */
@@ -2560,6 +2764,31 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
+        /** PerformanceTask */
+        PerformanceTask: {
+            /**
+             * Resource Id
+             * Format: uuid
+             */
+            resource_id: string;
+            /**
+             * Resource Kind
+             * @constant
+             */
+            resource_kind: "customer_ssh";
+            /**
+             * Target Id
+             * Format: uuid
+             */
+            target_id: string;
+            /** Performance */
+            performance: components["schemas"]["InferencePerformance"] | components["schemas"]["AgentXPerformance"];
+            /**
+             * Ignore Budget
+             * @default false
+             */
+            ignore_budget: boolean;
+        };
         /** PlanInput */
         PlanInput: {
             /**
@@ -2569,9 +2798,9 @@ export interface components {
             resource_id: string;
             /**
              * Resource Kind
-             * @enum {string}
+             * @constant
              */
-            resource_kind: "docker_local" | "customer_ssh";
+            resource_kind: "customer_ssh";
             /** Resource Ids */
             resource_ids?: string[];
             /**
@@ -2727,8 +2956,34 @@ export interface components {
             /** Container Name */
             container_name: string;
         };
+        /** ReportFilters */
+        ReportFilters: {
+            /** Models */
+            models: string[];
+            /** Analysis Statuses */
+            analysis_statuses: string[];
+        };
+        /** ReportPage */
+        ReportPage: {
+            /** Data */
+            data: components["schemas"]["ReportView"][];
+            /** Next Offset */
+            next_offset: number | null;
+            /** Total */
+            total: number;
+            /** Request Id */
+            request_id: string;
+            filters: components["schemas"]["ReportFilters"];
+        };
         /** ReportView */
         ReportView: {
+            /**
+             * Task Type
+             * @enum {string}
+             */
+            task_type: "accuracy" | "performance" | "other";
+            /** Dataset Concurrency */
+            dataset_concurrency?: number | null;
             /** Dataset Results */
             dataset_results?: {
                 [key: string]: unknown;
@@ -2779,6 +3034,24 @@ export interface components {
             baseline_comparison: {
                 [key: string]: unknown;
             };
+            /** Review Status */
+            review_status: string;
+            /** Reviewed By */
+            reviewed_by?: string | null;
+            /** Reviewed At */
+            reviewed_at?: string | null;
+            /** Review Note */
+            review_note?: string | null;
+        };
+        /** ReviewInput */
+        ReviewInput: {
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "approve" | "revoke";
+            /** Note */
+            note?: string | null;
         };
         /** RunListItem */
         RunListItem: {
@@ -2844,6 +3117,8 @@ export interface components {
         };
         /** ServiceUpdate */
         ServiceUpdate: {
+            /** Service Kind */
+            service_kind?: ("local" | "official") | null;
             /** Service Name */
             service_name: string;
             /**
@@ -2900,9 +3175,9 @@ export interface components {
             resource_id: string;
             /**
              * Resource Kind
-             * @enum {string}
+             * @constant
              */
-            resource_kind: "docker_local" | "customer_ssh";
+            resource_kind: "customer_ssh";
             /** Resource Ids */
             resource_ids?: string[];
             /**
@@ -2945,6 +3220,8 @@ export interface components {
              * Format: uuid
              */
             model_version_id: string;
+            /** Service Kind */
+            service_kind?: ("local" | "official") | null;
             /** Base Url */
             base_url: string;
             /** Remote Model */
@@ -3855,6 +4132,76 @@ export interface operations {
             };
         };
     };
+    copy_compilation_api_autoeval_v1_planning_compilations__compilation_id__copy_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                compilation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompilationCopy"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_compilation_api_autoeval_v1_planning_compilations__compilation_id__rename_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                compilation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompilationName"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     options_api_autoeval_v1_planning_options_get: {
         parameters: {
             query?: {
@@ -3930,7 +4277,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PlanInput"];
+                "application/json": components["schemas"]["PlanInput"] | components["schemas"]["PerformanceTask"];
             };
         };
         responses: {
@@ -4595,7 +4942,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SubmitTask"];
+                "application/json": components["schemas"]["SubmitTask"] | components["schemas"]["PerformanceTask"];
             };
         };
         responses: {
@@ -5645,7 +5992,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ModelConnectionTestInput"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -6421,6 +6772,11 @@ export interface operations {
                 offset?: number;
                 limit?: number;
                 summary_only?: boolean;
+                model?: string | null;
+                analysis_status?: string | null;
+                query?: string | null;
+                review_status?: string | null;
+                task_type?: ("accuracy" | "performance" | "other") | null;
             };
             header?: never;
             path?: never;
@@ -6434,7 +6790,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PageEnvelope_ReportView_"];
+                    "application/json": components["schemas"]["ReportPage"];
                 };
             };
             /** @description Validation Error */
@@ -6479,6 +6835,74 @@ export interface operations {
             };
         };
     };
+    performance_csv_api_autoeval_v1_reports__report_id__performance_csv_get: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header?: never;
+            path: {
+                report_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_api_autoeval_v1_reports__report_id__review_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                report_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Envelope_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     evidence_api_autoeval_v1_reports__report_id__evidence_get: {
         parameters: {
             query?: never;
@@ -6497,6 +6921,106 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Envelope_dict_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    badcase_comparison_api_autoeval_v1_runs__run_id__badcase_comparison_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    badcase_case_detail_api_autoeval_v1_runs__run_id__badcase_case_get: {
+        parameters: {
+            query: {
+                sample_id: string;
+                dataset_key?: string | null;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    badcase_export_api_autoeval_v1_runs__run_id__badcase_export_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportInput"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

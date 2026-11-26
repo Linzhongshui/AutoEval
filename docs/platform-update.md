@@ -33,7 +33,7 @@ check 校验包、架构和提交，导入本地镜像，在新目录解包网�
 
 1. 关闭新任务入口、暂停定时提交，等待在途任务和远程执行结束。保存旧镜像、网页、有效 Compose、受保护配置及历史报告标识。按恢复手册备份并验证可还原的业务库、Temporal 和 S3 对象。检查可用磁盘空间；确认新镜像中的 API 所连接的数据库就是 Compose 的 postgres 服务与下方 DB_NAME 对应的数据库。[备份与隔离恢复](https://github.com/llauren48/AutoEval-Platform/blob/8912940/.skills/deploy-autoeval/references/acceptance-recovery.md)
 2. 在同一维护窗口仅运行一次 apply，保持外层入口处于维护状态。脚本停止网关和列出的业务进程，再新增一份业务库转储并检查归档目录，运行迁移，核对 current 与 head，重建 API、Worker 和网关。基础设施复用现有容器与卷。
-   
+
 ```bash
 export DB_USER=autoeval DB_NAME=autoeval
 export BACKUP_DIR="/srv/backups/platform-8912940-$(date +%Y%m%d-%H%M%S)"

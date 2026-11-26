@@ -17,7 +17,16 @@ def test_confirm_from_original_task(operation):
     def api(route):
         path = route.request.url.split("/api/autoeval/v1", 1)[-1].split("?", 1)[0]
         data = []
-        if path == base:
+        if path == "/evaluation-tasks":
+            data = [
+                {
+                    "id": "task",
+                    "state": "cancelled",
+                    "created_at": "2026-11-20T00:00:00Z",
+                    "follow_up_enabled": True,
+                }
+            ]
+        elif path == base:
             data = {
                 "id": "task",
                 "state": "cancelled",
@@ -55,7 +64,7 @@ def test_confirm_from_original_task(operation):
         elif path == "/runs/task/monitor/log":
             assert "round_number=2" in route.request.url and "shard_id=shard" in route.request.url
             data = {"content": "已归档的分片日志"}
-        route.fulfill(status=200, json={"data": data, "next_offset": None})
+        route.fulfill(status=200, json={"data": data, "next_offset": None, "total": 0})
 
     with sync_playwright() as p:
         browser = p.chromium.launch(
@@ -67,20 +76,27 @@ def test_confirm_from_original_task(operation):
         )
         page = browser.new_page()
         page.route("**/api/autoeval/v1/**", api)
-        page.goto(os.environ["AE_BROWSER_URL"].rstrip("/") + "/#run/task")
-        page.get_by_text("执行轮次", exact=True).click()
-        page.get_by_text("第 1 轮 · 首次执行", exact=True).wait_for()
-        page.get_by_role("button", name="查看分片日志", exact=True).click()
-        page.get_by_text("已归档的分片日志", exact=True).wait_for()
-        page.get_by_role("button", name="续跑测评", exact=True).click()
+        origin = os.environ["AE_BROWSER_URL"].rstrip("/")
         if operation == "case-retry":
-            page.get_by_text("1 个待执行 Case", exact=True).click()
-            page.get_by_role("button", name="重试此 Case", exact=True).click()
+            page.goto(origin + "/#run/task")
+            page.get_by_text("执行轮次", exact=True).click()
+            page.get_by_text("第 1 轮 · 首次执行", exact=True).wait_for()
+            page.get_by_role("button", name="查看分片日志", exact=True).click()
+            page.get_by_text("已归档的分片日志", exact=True).wait_for()
+            page.get_by_role("button", name="查看 Case", exact=True).click()
+            table = page.get_by_test_id("case-attempts")
+            table.get_by_role("columnheader", name="证据与轨迹", exact=True).wait_for()
+            table.get_by_role("columnheader", name="重试", exact=True).wait_for()
+            pending = table.get_by_role("row").filter(has_text="q2")
+            pending.get_by_text("待执行", exact=True).wait_for()
+            pending.get_by_role("button", name="重试此 Case", exact=True).click()
             page.get_by_role("dialog", name="重试此 Case").get_by_text(
                 "GPQA · q2", exact=False
             ).wait_for()
             page.get_by_role("button", name="确认重试此 Case", exact=True).click()
         else:
+            page.goto(origin + "/#tasks")
+            page.get_by_role("row").get_by_role("button", name="续跑测评", exact=True).click()
             page.get_by_role("button", name="确认续跑测评", exact=True).click()
         page.get_by_text("执行请求已受理，任务详情将显示本轮状态。", exact=True).wait_for()
         assert len(requests) == 1

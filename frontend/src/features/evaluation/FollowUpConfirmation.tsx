@@ -17,13 +17,12 @@ const reasons: Record<string, string> = {
 };
 
 export function FollowUpConfirmation({
-  runId, target, onClose, onAccepted, onSelectCase,
+  runId, target, onClose, onAccepted,
 }: {
   runId: string;
   target?: CaseTarget;
   onClose: () => void;
   onAccepted: () => void;
-  onSelectCase: (target: CaseTarget) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const key = useRef(crypto.randomUUID());
@@ -63,9 +62,6 @@ export function FollowUpConfirmation({
   }
 
   const lost = preview?.samples.filter(sample => sample.category === "evidence_lost") ?? [];
-  const unstarted = target ? [] : preview?.samples.filter(sample =>
-    !sample.has_attempts && sample.category === "remaining"
-  ) ?? [];
   const title = target ? "重试此 Case" : "续跑测评";
   return <dialog ref={dialog} aria-label={title} className="management-drawer" onCancel={event => {
     event.preventDefault();
@@ -78,12 +74,6 @@ export function FollowUpConfirmation({
       {!target && <p>可复用 {preview.samples.filter(sample => sample.category === "reusable").length} 个样本。</p>}
       {!!lost.length && <details><summary>{lost.length} 个样本的归档证据已丢失</summary>
         <ul>{lost.map(sample => <li key={JSON.stringify([sample.dataset_key, sample.sample_id])}>{sample.dataset_key} · {sample.sample_id}</li>)}</ul>
-      </details>}
-      {!!unstarted.length && <details><summary>{unstarted.length} 个待执行 Case</summary>
-        <ul>{unstarted.map(({ dataset_key, sample_id }) => <li key={JSON.stringify([dataset_key, sample_id])}>
-          {dataset_key} · {sample_id}{" "}
-          <button type="button" disabled={busy} onClick={() => onSelectCase({ dataset_key, sample_id })}>重试此 Case</button>
-        </li>)}</ul>
       </details>}
       {!!preview.blockers.length && <ul>{preview.blockers.map(reason => <li key={reason}>{reasons[reason] ?? reason}</li>)}</ul>}
     </>}

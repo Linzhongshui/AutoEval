@@ -34,6 +34,13 @@ def test_local_identity_cannot_be_used_in_production():
         Settings(environment="production")
 
 
+def test_follow_up_enabled_by_default_with_explicit_opt_out(monkeypatch):
+    monkeypatch.delenv("AE_EVALUATION_FOLLOW_UP_ENABLED", raising=False)
+    assert Settings(_env_file=None).evaluation_follow_up_enabled is True
+    monkeypatch.setenv("AE_EVALUATION_FOLLOW_UP_ENABLED", "false")
+    assert Settings(_env_file=None).evaluation_follow_up_enabled is False
+
+
 def test_schema_is_single_workspace_and_postgres_compilable():
     for table in Base.metadata.sorted_tables:
         assert "project_id" not in table.c

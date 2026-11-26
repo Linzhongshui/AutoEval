@@ -1,6 +1,10 @@
 .service-methods { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr)); gap: 10px; }
 .service-methods button { justify-content: flex-start; gap: 10px; text-align: left; padding: 12px; white-space: normal; }
-.service-methods button[aria-pressed="true"] { color: #5033ad; border-color: #a793ed; background: #f5f2ff; }
+.service-methods button[aria-pressed="true"] {
+  color: var(--primary);
+  border-color: var(--primary);
+  background: var(--accent-soft);
+}
 .service-methods svg { flex-shrink: 0; }
 .service-methods small { display: block; color: #586378; margin-top: 3px; font-size: 12px; }
 .service-kind { display: inline-block; padding: 3px 7px; border-radius: 5px; color: #544575; background: #f1eef8; white-space: nowrap; font-size: 12px; }

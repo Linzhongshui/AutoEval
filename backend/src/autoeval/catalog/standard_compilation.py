@@ -3,6 +3,7 @@
 import copy
 import hashlib
 import json
+from urllib.parse import urlsplit
 
 from autoeval.catalog.adaptor_versions import separate_runtime
 
@@ -472,6 +473,10 @@ def compile_config(entry, body, target=None):
             environment.update(model=target.remote_model, url=target.base_url)
         else:
             environment.update(model_names=[target.remote_model], api_base=target.base_url)
+            hostname = urlsplit(target.base_url).hostname
+            hosts = base["params"].get("extra_allowed_hosts", [])
+            if hostname and hostname.casefold() not in {host.casefold() for host in hosts}:
+                environment["extra_allowed_hosts"] = [*hosts, hostname]
     if body.datasets_dir:
         environment["datasets_dir"] = body.datasets_dir
     if body.tool_root:

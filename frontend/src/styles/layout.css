@@ -60,10 +60,10 @@
   color: #555977;
 }
 .sidebar nav a:hover {
-  background: #f1efff;
+  background: var(--accent-hover);
 }
 .sidebar nav a.selected {
-  background: #eae6ff;
+  background: var(--accent-soft);
   color: var(--primary);
   font-weight: 700;
 }
@@ -121,6 +121,15 @@
   background: none;
   border: none;
   color: inherit;
+}
+.breadcrumb .link {
+  color: var(--primary);
+  padding: 3px 8px;
+  border: 1px solid var(--accent-border);
+  border-radius: 5px;
+}
+.breadcrumb .link:hover {
+  background: var(--accent-soft);
 }
 .page-heading {
   display: flex;

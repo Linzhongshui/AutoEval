@@ -1,12 +1,15 @@
 """Explicit, bounded model-list probes; never sends generation requests."""
 
+import asyncio
 import json
 import uuid
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
 
 import httpx
+import paramiko
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 from sqlalchemy import select, text
@@ -14,7 +17,9 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from autoeval.catalog.models import Asset, AssetVersion, ModelConfigBinding
 from autoeval.infrastructure.secrets import FileSecretStore
-from autoeval.resources.models import ConnectionProbe, TargetBinding
+from autoeval.resources.models import ConnectionProbe, SSHResourceBinding, TargetBinding
+from autoeval.resources.ssh_executor import SSHExecutor
+from autoeval.resources.ssh_resources import connection_for
 
 
 class CredentialInput(BaseModel):
@@ -57,6 +62,22 @@ def validate_url(url: str, allowed_hosts: list[str]) -> str:
     return url.rstrip("/")
 
 
+def local_registration_url(url: str) -> str:
+    url = url.strip()
+    parsed = urlsplit(url)
+    if (
+        parsed.scheme not in ("http", "https")
+        or not parsed.hostname
+        or parsed.username is not None
+        or parsed.query
+        or parsed.fragment
+        or parsed.port == 0
+        or any(char.isspace() for char in url)
+    ):
+        raise ValueError("Invalid local model URL")
+    return url.rstrip("/")
+
+
 async def probe_model_list(
     base_url: str, remote_model: str, key: str, client: httpx.AsyncClient
 ) -> tuple[str, dict]:
@@ -96,10 +117,18 @@ async def put_credential(body: CredentialInput, request: Request):
 async def create_target(body: TargetInput, request: Request):
     settings = request.app.state.settings
     try:
-        base_url = validate_url(body.base_url, settings.allowed_model_hosts)
+        if body.service_kind == "local":
+            base_url = local_registration_url(body.base_url)
+        else:
+            base_url = validate_url(body.base_url, settings.allowed_model_hosts)
+    except ValueError as exc:
+        if body.service_kind == "local":
+            raise HTTPException(422, "请填写本地模型服务的 HTTP 或 HTTPS 基础地址") from exc
+        raise HTTPException(422, "模型服务地址须使用允许列表中的 HTTPS 主机和默认 HTTPS 端口") from exc
+    try:
         FileSecretStore(settings.secret_store_path).get(body.credential_ref)
     except (ValueError, OSError) as exc:
-        raise HTTPException(422, "Invalid endpoint or credential reference") from exc
+        raise HTTPException(422, "平台无法读取该服务的凭据引用，请重新登记密钥") from exc
     try:
         async with request.app.state.sessions() as session, session.begin():
             if await session.get(AssetVersion, body.model_version_id) is None:
@@ -119,25 +148,66 @@ async def create_target(body: TargetInput, request: Request):
     return {"data": result, "request_id": request.state.request_id}
 
 
+class ModelConnectionTestInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    ssh_resource_id: uuid.UUID | None = None
+
+
+def probe_from_ssh(connection, url, model, key):
+    executor = SSHExecutor(connection)
+    script = Path(__file__).with_name("model_list_probe.py").read_text(encoding="utf8")
+    with executor.connect() as client:
+        raw = executor.command(
+            client, ["/usr/bin/python3", "-I", "-c", script],
+            json.dumps([url, model, key]), timeout=15,
+        )
+    # Treat remote output as untrusted. Only return the documented statuses and HTTP code.
+    result = json.loads(raw)
+    if not isinstance(result, list) or len(result) != 2:
+        raise ValueError("Invalid SSH probe response")
+    outcome, details = result
+    if outcome not in ("matched", "model_not_found", "connection_error", "invalid_response", "upstream_error"):
+        raise ValueError("Invalid SSH probe response")
+    status = details.get("http_status") if isinstance(details, dict) else None
+    return outcome, {"http_status": status} if type(status) is int and 100 <= status <= 599 else {}
+
+
 @router.post("/targets/{target_id}/connection-tests")
-async def check_connection(target_id: uuid.UUID, request: Request):
+async def check_connection(target_id: uuid.UUID, request: Request, body: ModelConnectionTestInput | None = None):
     settings = request.app.state.settings
     try:
         async with request.app.state.sessions() as session:
             target = await session.get(TargetBinding, target_id)
             if target is None:
                 raise HTTPException(404, "Target not found")
+            resource_id = body.ssh_resource_id if body else None
+            if service_kind(target) == "local" and resource_id is None:
+                raise HTTPException(409, "本地模型服务由测评执行环境访问，平台不发起连接检测")
             validate_url(target.base_url, settings.allowed_model_hosts)
             try:
                 key = FileSecretStore(settings.secret_store_path).get(target.credential_ref)
-                async with httpx.AsyncClient(timeout=10, follow_redirects=False) as client:
-                    outcome, details = await probe_model_list(
-                        target.base_url, target.remote_model, key, client
-                    )
+                if resource_id is not None:
+                    resource = await session.get(SSHResourceBinding, resource_id)
+                    if resource is None:
+                        raise HTTPException(404, "SSH 资源不存在")
+                    connection = connection_for(resource, settings)
+                    try:
+                        outcome, details = await asyncio.to_thread(
+                            probe_from_ssh, connection, target.base_url, target.remote_model, key
+                        )
+                    except (paramiko.SSHException, OSError, RuntimeError, ValueError, EOFError):
+                        outcome, details = "ssh_error", {}
+                else:
+                    async with httpx.AsyncClient(timeout=10, follow_redirects=False) as client:
+                        outcome, details = await probe_model_list(
+                            target.base_url, target.remote_model, key, client
+                        )
             except (OSError, ValueError):
                 outcome, details = "credential_unavailable", {}
             except httpx.HTTPError:
                 outcome, details = "connection_error", {}
+            if resource_id is not None:
+                details["ssh_resource_id"] = str(resource_id)
             record = ConnectionProbe(
                 target_id=target.id, checked_at=datetime.now(UTC), outcome=outcome, details=details
             )

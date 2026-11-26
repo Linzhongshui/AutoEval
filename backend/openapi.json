@@ -1177,6 +1177,108 @@
         }
       }
     },
+    "/api/autoeval/v1/planning/compilations/{compilation_id}/copy": {
+      "post": {
+        "tags": [
+          "task planning"
+        ],
+        "summary": "Copy Compilation",
+        "operationId": "copy_compilation_api_autoeval_v1_planning_compilations__compilation_id__copy_post",
+        "parameters": [
+          {
+            "name": "compilation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Compilation Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompilationCopy"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/autoeval/v1/planning/compilations/{compilation_id}/rename": {
+      "post": {
+        "tags": [
+          "task planning"
+        ],
+        "summary": "Rename Compilation",
+        "operationId": "rename_compilation_api_autoeval_v1_planning_compilations__compilation_id__rename_post",
+        "parameters": [
+          {
+            "name": "compilation_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Compilation Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompilationName"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/autoeval/v1/planning/options": {
       "get": {
         "tags": [
@@ -2662,6 +2764,140 @@
         }
       }
     },
+    "/api/autoeval/v1/evaluation-tasks/{run_id}/executor-files": {
+      "get": {
+        "tags": [
+          "executor files"
+        ],
+        "summary": "Attempts",
+        "operationId": "attempts_api_autoeval_v1_evaluation_tasks__run_id__executor_files_get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_list_ExecutorAttempt__"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/autoeval/v1/evaluation-tasks/{run_id}/executor-files/{job_id}": {
+      "get": {
+        "tags": [
+          "executor files"
+        ],
+        "summary": "Files",
+        "operationId": "files_api_autoeval_v1_evaluation_tasks__run_id__executor_files__job_id__get",
+        "parameters": [
+          {
+            "name": "run_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Run Id"
+            }
+          },
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "view",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "directory",
+                "outputs",
+                "archive",
+                "archive-directory"
+              ],
+              "type": "string",
+              "default": "directory",
+              "title": "View"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 2048,
+              "default": "",
+              "title": "Path"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_Union_ExecutorDirectory__ExecutorPreview__ExecutorFileStatus__"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/autoeval/v1/test-configs/{config_id}/execution-spec": {
       "get": {
         "tags": [
@@ -2888,6 +3124,16 @@
                 }
               ],
               "title": "State"
+            }
+          },
+          {
+            "name": "prioritize_retries",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Prioritize Retries"
             }
           },
           {
@@ -3125,6 +3371,16 @@
                 }
               ],
               "title": "State"
+            }
+          },
+          {
+            "name": "prioritize_retries",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Prioritize Retries"
             }
           },
           {
@@ -3947,6 +4203,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ModelConnectionTestInput"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -5975,8 +6248,87 @@
         ],
         "title": "CloseProbe"
       },
+      "CompilationCopy": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "execution": {
+            "type": "string",
+            "enum": [
+              "local",
+              "docker"
+            ],
+            "title": "Execution"
+          },
+          "tool_root": {
+            "type": "string",
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Tool Root"
+          },
+          "directory": {
+            "type": "string",
+            "maxLength": 1024,
+            "title": "Directory"
+          },
+          "concurrency": {
+            "type": "integer",
+            "maximum": 256.0,
+            "minimum": 1.0,
+            "title": "Concurrency"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "execution",
+          "tool_root",
+          "directory",
+          "concurrency"
+        ],
+        "title": "CompilationCopy"
+      },
+      "CompilationName": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "CompilationName"
+      },
       "CompilationOption": {
         "properties": {
+          "tool_revisions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tool Revisions"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
           "id": {
             "type": "string",
             "title": "Id"
@@ -6153,6 +6505,15 @@
               }
             ],
             "title": "Tool Root"
+          },
+          "resource_ids": {
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "type": "array",
+            "maxItems": 16,
+            "title": "Resource Ids"
           }
         },
         "additionalProperties": false,
@@ -7000,6 +7361,34 @@
         ],
         "title": "Envelope[SubmittedRun]"
       },
+      "Envelope_Union_ExecutorDirectory__ExecutorPreview__ExecutorFileStatus__": {
+        "properties": {
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExecutorDirectory"
+              },
+              {
+                "$ref": "#/components/schemas/ExecutorPreview"
+              },
+              {
+                "$ref": "#/components/schemas/ExecutorFileStatus"
+              }
+            ],
+            "title": "Data"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "request_id"
+        ],
+        "title": "Envelope[Union[ExecutorDirectory, ExecutorPreview, ExecutorFileStatus]]"
+      },
       "Envelope_Union_JobStatus__NoneType__": {
         "properties": {
           "data": {
@@ -7042,6 +7431,27 @@
           "request_id"
         ],
         "title": "Envelope[dict]"
+      },
+      "Envelope_list_ExecutorAttempt__": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/ExecutorAttempt"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "request_id": {
+            "type": "string",
+            "title": "Request Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data",
+          "request_id"
+        ],
+        "title": "Envelope[list[ExecutorAttempt]]"
       },
       "ExecutionSpecData": {
         "properties": {
@@ -7090,6 +7500,169 @@
           "gate_status"
         ],
         "title": "ExecutionSpecData"
+      },
+      "ExecutorAttempt": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "dataset": {
+            "type": "string",
+            "title": "Dataset"
+          },
+          "round": {
+            "type": "integer",
+            "title": "Round"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "dataset",
+          "round"
+        ],
+        "title": "ExecutorAttempt"
+      },
+      "ExecutorDirectory": {
+        "properties": {
+          "state": {
+            "type": "string",
+            "const": "directory",
+            "title": "State"
+          },
+          "archived": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archived"
+          },
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/ExecutorEntry"
+            },
+            "type": "array",
+            "title": "Entries"
+          },
+          "more": {
+            "type": "boolean",
+            "title": "More"
+          }
+        },
+        "type": "object",
+        "required": [
+          "state",
+          "entries",
+          "more"
+        ],
+        "title": "ExecutorDirectory"
+      },
+      "ExecutorEntry": {
+        "properties": {
+          "metadata_only": {
+            "type": "boolean",
+            "title": "Metadata Only",
+            "default": false
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "directory": {
+            "type": "boolean",
+            "title": "Directory"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size"
+          },
+          "mtime": {
+            "type": "number",
+            "title": "Mtime"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "directory",
+          "size",
+          "mtime"
+        ],
+        "title": "ExecutorEntry"
+      },
+      "ExecutorFileStatus": {
+        "properties": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "binary",
+              "pending",
+              "removed",
+              "missing_file",
+              "unverified",
+              "unavailable",
+              "wrong_storage",
+              "protected"
+            ],
+            "title": "State"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "state"
+        ],
+        "title": "ExecutorFileStatus"
+      },
+      "ExecutorPreview": {
+        "properties": {
+          "state": {
+            "type": "string",
+            "const": "text",
+            "title": "State"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "start": {
+            "type": "integer",
+            "title": "Start"
+          },
+          "end": {
+            "type": "integer",
+            "title": "End"
+          },
+          "size": {
+            "type": "integer",
+            "title": "Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "state",
+          "content",
+          "start",
+          "end",
+          "size"
+        ],
+        "title": "ExecutorPreview"
       },
       "ExplorationSubmitted": {
         "properties": {
@@ -7713,6 +8286,25 @@
         ],
         "title": "ManifestOption"
       },
+      "ModelConnectionTestInput": {
+        "properties": {
+          "ssh_resource_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ssh Resource Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ModelConnectionTestInput"
+      },
       "ModelCreate": {
         "properties": {
           "model_id": {
@@ -8078,6 +8670,7 @@
           },
           "dataset_concurrency": {
             "type": "integer",
+            "maximum": 4.0,
             "minimum": 1.0,
             "title": "Dataset Concurrency",
             "default": 1
@@ -8368,6 +8961,18 @@
           },
           "tool": {
             "$ref": "#/components/schemas/ToolContract"
+          },
+          "compilation_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Compilation Id"
           }
         },
         "additionalProperties": false,
@@ -9015,6 +9620,7 @@
           },
           "dataset_concurrency": {
             "type": "integer",
+            "maximum": 4.0,
             "minimum": 1.0,
             "title": "Dataset Concurrency",
             "default": 1

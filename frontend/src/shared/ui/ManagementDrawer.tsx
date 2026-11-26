@@ -13,7 +13,11 @@ export function ManagementDrawer({ title, children, onDismiss, open: controlledO
     dialog.current?.showModal();
 
   }, [open]);
-  const close = () => { setOpen(false); onDismiss?.(); };
+  const close = () => {
+    dialog.current?.close();
+    setOpen(false);
+    onDismiss?.();
+  };
   return <>
     {!hideTrigger && <button type="button" className="link" onClick={() => setOpen(true)}>{title}</button>}
     {open && createPortal(

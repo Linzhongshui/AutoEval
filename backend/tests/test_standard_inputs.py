@@ -76,6 +76,37 @@ def test_compile_full_inputs_without_activating_execution(index):
     assert result["adaptor_revision"] == "955089ab32ef696c231d628f5ad0d9da28f430c4"
 
 
+def test_compile_freezes_allowed_ssh_resources():
+    entry = discover(bundle())[0]
+    first, second = uuid.uuid4(), uuid.uuid4()
+    body = CompileInput(resource_ids=[first, second])
+    compiled = compile_config(entry, body)
+    assert compiled["runtime_config"]["resource_ids"] == [str(first), str(second)]
+    assert "resource_ids" not in compiled["config"]["params"]
+    assert compiled["sha256"] != compile_config(entry, CompileInput())["sha256"]
+
+    legacy_body = CompileInput(tool_root="/benchmark")
+    legacy_hash = digest(
+        {"entry": entry, "body": legacy_body.model_dump(mode="json", exclude={"resource_ids"})}
+    )[:32]
+    legacy = compile_config(entry, legacy_body)
+    assert legacy["config"]["params"]["work_dir"] == f"/work/autoeval/inputs/{legacy_hash}"
+
+
+@pytest.mark.parametrize(
+    "hosts,expected",
+    [([], ["model.internal"]), (["proxy"], ["proxy", "model.internal"]),
+     (["MODEL.INTERNAL"], ["MODEL.INTERNAL"])],
+)
+def test_harbor_compilation_allows_model_hostname(hosts, expected):
+    entry = next(row for row in discover(bundle()) if row["benchmark"] == "DeepSWE")
+    endpoint = target()
+    endpoint.base_url = "https://model.internal:8443/v1"
+    body = CompileInput(adjustments={"params": {"extra_allowed_hosts": hosts}})
+    result = compile_config(entry, body, endpoint)
+    assert result["config"]["params"]["extra_allowed_hosts"] == expected
+
+
 @pytest.mark.parametrize("index", range(6))
 def test_missing_startup_requires_platform_template(index):
     entry = discover(bundle())[index]

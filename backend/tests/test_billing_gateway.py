@@ -3,6 +3,7 @@ import json
 import uuid
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
+from urllib.parse import urljoin
 
 import pytest
 
@@ -34,7 +35,17 @@ def test_private_budget_routing_and_no_fallback(tmp_path):
     compiled = {
         "config": {"subcommand": "llm_accuracy", "params": {"url": "https://api.deepseek.com/v1"}}
     }
-    assert route_compilation(compiled, route)["config"]["params"]["url"] == route["base_url"]
+    aisbench_url = route_compilation(compiled, route)["config"]["params"]["url"]
+    assert urljoin(aisbench_url + "/", "v1/chat/completions") == (
+        route["base_url"] + "/chat/completions"
+    )
+    harbor = {"config": {"subcommand": "harbor_agent", "params": {"api_base": ""}}}
+    harbor["config"]["params"].update(api_base="https://model.internal/v1",
+                                      extra_allowed_hosts=["proxy", "model.internal"])
+    routed = route_compilation(harbor, route)["config"]["params"]
+    assert routed["api_base"] == route["base_url"]
+    assert routed["extra_allowed_hosts"] == ["proxy", "172.17.0.99"]
+    assert harbor["config"]["params"]["extra_allowed_hosts"] == ["proxy", "model.internal"]
     assert compiled["config"]["params"]["url"] == "https://api.deepseek.com/v1"
     with pytest.raises(ValueError, match="fallback forbidden"):
         execution_route(settings, run, target, "AutomationBench")
@@ -67,6 +78,48 @@ async def test_gateway_rejects_unscoped_and_expired_tokens_without_model_calls(t
             await c.post(route, json={}, headers={"Authorization": "Bearer " + token})
         ).status_code == 403
     await app.state.engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_deepswe_token_bound_reaches_run_check_without_model_call(tmp_path, monkeypatch):
+    from contextlib import asynccontextmanager
+    from unittest.mock import AsyncMock
+
+    import httpx
+
+    from autoeval.billing import gateway
+
+    db = SimpleNamespace(get=AsyncMock(return_value=None))
+
+    @asynccontextmanager
+    async def sessions():
+        yield db
+
+    monkeypatch.setattr(gateway, "create_database", lambda settings: (None, sessions))
+    path = tmp_path / "gateway.json"
+    token = "fixture"
+    path.write_text(json.dumps({
+        "deadline": (datetime.now(UTC) + timedelta(minutes=5)).isoformat(),
+        "grants": [{
+            "token_sha256": hashlib.sha256(token.encode()).hexdigest(),
+            "max_output_tokens": 4096,
+        }],
+    }))
+    app = gateway.create_gateway(path)
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        route = f"/runs/{uuid.uuid4()}/v1/chat/completions"
+        headers = {"Authorization": "Bearer " + token}
+        body = {"model": "deepseek-flash", "messages": [{"role": "user", "content": "fixture"}]}
+        for invalid_body in (body, {**body, "max_tokens": 4097}):
+            response = await client.post(route, headers=headers, json=invalid_body)
+            assert response.json()["detail"] == "explicit_single_completion_bound_required"
+        db.get.assert_not_awaited()
+        checked = await client.post(route, headers=headers, json={**body, "max_tokens": 4096})
+        assert checked.status_code == 403
+        assert checked.json()["detail"] == "run_not_executable"
+        db.get.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -176,3 +229,22 @@ def test_default_budget_policy_does_not_block_probe_validation(tmp_path):
     response = client.post('/api/autoeval/v1/planning/probes', json={})
     assert response.status_code == 422
     assert 'Active budget' not in response.text
+
+
+def test_budget_acceptance_scope_is_limited_to_one_sample():
+    from autoeval.billing.transport import authorized_scope
+
+    config = {
+        "expected_scope": {"MMMU-Pro": 1, "DeepSWE": 1},
+        "expected_concurrency": 1,
+        "expected_subset_scope": "lite",
+    }
+    tasks = [
+        {"dataset": dataset, "samples": ["sample"], "concurrency": 1, "subset_scope": "lite"}
+        for dataset in config["expected_scope"]
+    ]
+    snapshot = {"execution_origin": "real", "inputs": {"tasks": tasks}}
+    assert authorized_scope(config, snapshot)
+    assert not authorized_scope({"expected_scope": config["expected_scope"]}, snapshot)
+    tasks[0]["samples"].append("extra")
+    assert not authorized_scope(config, snapshot)

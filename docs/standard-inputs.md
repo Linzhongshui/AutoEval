@@ -1,5 +1,7 @@
 # 标准仓输入接入
 
+编译 DeepSWE、AutomationBench 的 Harbor 配置时，平台从模型目标的 `api_base` 提取主机名或 IP，并追加到 `params.extra_allowed_hosts`。已有条目保留，主机名忽略大小写去重。标准仓锁定该列表时，若缺少目标主机，编译会报告冲突。启用预算网关时，执行副本将原模型主机替换为网关主机。
+
 更新：新版默认输入契约已升级为适配器 `955089a`，Docker 参数移至 `runtime_config`，不再生成 `--no-template`；下文旧版本说明保留为历史输入契约参考。统一输出新增能力及尚未开放的远程执行边界见[新版接入说明](./unified-output-integration.md)。
 
 本模块只登记标准输入、建立模型映射并生成适配器启动配置，不执行测评。输出格式、结果收集、报告、基线审批及门禁均未接入。本机已增加迁移 `0023_standard_inputs`；其他环境先执行 `uv run alembic upgrade head`，再重启 API。
@@ -139,3 +141,9 @@ uv run pytest tests/browser_checks/test_browser_standard_inputs.py -q
 
 ## 标准输入列表筛选
 GET /standard-inputs 支持 revision（默认 latest，可传 all 或完整提交号）、source_model、dataset，组合条件在数据库分页前应用。latest 指非测试输入中最近导入记录所属的完整提交号，不按 Tag 名称排序，也不向旧版本回退补齐缺失模型。GET /standard-inputs/filters 返回已导入提交、模型及基准选项。前端切换筛选回到第一页；标准目录聚合调用显式传 revision=all，保留历史兼容。
+
+## SSH 资源与源码目录
+
+在「补全启动参数与模型映射」中选择 SSH 资源后，逐行核对 AISBench 源码目录。标准锁定目录优先，其次使用该资源在相同运行方式和测评方式下唯一的已保存路径。Docker 缺少历史路径时预填 R13 镜像的 `/benchmark`，自定义镜像可手动调整。默认值只用于配置，实际路径仍需在环境预检中验证。
+
+一份快照保存一个源码目录和所选资源 ID。多个资源的目录不同时，请按目录分别保存配置。

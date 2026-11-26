@@ -3,6 +3,7 @@
 import copy
 import hashlib
 import json
+from urllib.parse import urlsplit
 
 from autoeval.catalog.adaptor_versions import separate_runtime
 
@@ -457,7 +458,10 @@ def compile_config(entry, body, target=None):
         blockers.append("model_mapping_missing")
     if not target:
         blockers.append("target_missing")
-    identity_hash = digest({"entry": entry, "body": body.model_dump(mode="json")})[:32]
+    requested = body.model_dump(mode="json")
+    if not body.resource_ids:
+        requested.pop("resource_ids")
+    identity_hash = digest({"entry": entry, "body": requested})[:32]
     environment = {
         "execution": body.execution,
         "work_dir": "/work/autoeval/inputs/" + identity_hash,
@@ -469,6 +473,10 @@ def compile_config(entry, body, target=None):
             environment.update(model=target.remote_model, url=target.base_url)
         else:
             environment.update(model_names=[target.remote_model], api_base=target.base_url)
+            hostname = urlsplit(target.base_url).hostname
+            hosts = base["params"].get("extra_allowed_hosts", [])
+            if hostname and hostname.casefold() not in {host.casefold() for host in hosts}:
+                environment["extra_allowed_hosts"] = [*hosts, hostname]
     if body.datasets_dir:
         environment["datasets_dir"] = body.datasets_dir
     if body.tool_root:
@@ -503,6 +511,8 @@ def compile_config(entry, body, target=None):
         if final.get(key) != value:
             blockers.append("standard_lock_conflict:" + key)
     tool_config, runtime_config, cli_flags = separate_runtime(base, body.adaptor_revision)
+    if body.resource_ids:
+        runtime_config["resource_ids"] = [str(resource_id) for resource_id in body.resource_ids]
     result = {
         "input_policy": body.input_policy,
         "config": tool_config,

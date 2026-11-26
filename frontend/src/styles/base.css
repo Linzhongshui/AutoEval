@@ -37,8 +37,8 @@ button {
   white-space: nowrap;
 }
 button:hover {
-  background: #f1efff;
-  border-color: #b9b0ff;
+  background: var(--accent-hover);
+  border-color: var(--accent-border);
 }
 button:disabled {
   opacity: 0.5;

@@ -32,14 +32,15 @@
   font-size: 13px;
 }
 .primary {
-  background: var(--primary);
+  background: var(--accent);
   border-color: var(--primary);
-  color: white;
-  box-shadow: 0 3px 6px #5138ff10;
+  color: var(--on-accent);
+  box-shadow: 0 3px 6px var(--accent-soft);
 }
 .primary:hover {
-  background: #4325eb;
-  color: white;
+  background: var(--accent);
+  text-decoration: underline;
+  color: var(--on-accent);
 }
 .link {
   padding: 0;
@@ -50,7 +51,7 @@
 }
 .link:hover {
   background: none;
-  color: #3213d8;
+  color: var(--primary);
 }
 .strong {
   font-weight: 700;
@@ -63,7 +64,7 @@
   align-items: center;
   vertical-align: middle;
   white-space: nowrap;
-  background: #eeebff;
+  background: var(--accent-soft);
   color: var(--primary);
   font-size: 12px;
   font-weight: 500;
@@ -117,7 +118,7 @@
   font-weight: 650;
 }
 .tabs button:hover {
-  background: #f8f6ff;
+  background: var(--accent-hover);
 }
 .report-view-tabs {
   margin-top: 14px;
@@ -272,8 +273,8 @@
   border-radius: 5px;
 }
 .mode-row .tabs button.active {
-  background: var(--primary);
-  color: white;
+  background: var(--accent);
+  color: var(--on-accent);
 }
 .table-wrap {
   overflow: auto;
@@ -300,7 +301,7 @@ tbody tr:last-child td {
   border-bottom: 0;
 }
 tbody tr:hover {
-  background: #faf9ff;
+  background: var(--accent-hover);
 }
 td > .badge + .badge {
   margin-left: 4px;
@@ -378,7 +379,7 @@ td small .badge {
   background: transparent;
 }
 .config-tree button.active {
-  background: #eae6ff;
+  background: var(--accent-soft);
 }
 .actions {
   display: flex;
@@ -414,7 +415,7 @@ td small .badge {
   width: 49px;
   height: 49px;
   border-radius: 13px;
-  background: #f1eeff;
+  background: var(--accent-soft);
   color: var(--primary);
 }
 .stat-icon svg {
@@ -459,7 +460,7 @@ td small .badge {
   padding-left: 0;
 }
 .highlight {
-  background: #eeeaff;
+  background: var(--accent-soft);
 }
 .task-columns {
   display: grid;
@@ -620,7 +621,7 @@ progress::-moz-progress-bar {
   display: inline-block;
 }
 .legend.purple {
-  background: var(--primary);
+  background: var(--data-purple);
 }
 .legend.gray {
   background: #b9becb;
@@ -723,7 +724,7 @@ progress::-moz-progress-bar {
   width: 29px;
   height: 29px;
   border-radius: 50%;
-  background: #ede9ff;
+  background: var(--accent-soft);
   color: var(--primary);
   font-size: 18px;
   font-weight: 700;
@@ -741,7 +742,7 @@ progress::-moz-progress-bar {
   padding: 5px 7px;
   font-size: 11px;
   border: 0;
-  background: #f0edff;
+  background: var(--accent-soft);
   color: var(--primary);
   margin: 2px;
 }
@@ -796,7 +797,7 @@ progress::-moz-progress-bar {
 }
 .outline {
   color: var(--primary);
-  border-color: #b4aaff;
+  border-color: var(--accent-border);
   font-size: 12px;
   padding: 5px 12px;
 }
@@ -1000,7 +1001,7 @@ progress::-moz-progress-bar {
   margin-bottom: 12px;
   border: 1px solid #ddd6f5;
   border-radius: 8px;
-  background: #faf8ff;
+  background: var(--accent-hover);
   color: #62547c;
   font-size: 13px;
 }
@@ -1233,10 +1234,10 @@ progress::-moz-progress-bar {
   white-space: normal;
 }
 .dataset-branches button:hover {
-  background: #f4f1ff;
+  background: var(--accent-hover);
 }
 .dataset-branches button.active {
-  background: #eae6ff;
+  background: var(--accent-soft);
   color: var(--primary);
   font-weight: 600;
 }
@@ -1445,9 +1446,9 @@ td small .badge,
   padding: 3px 7px;
   font-size: 12px;
   line-height: 1.5;
-  border: 1px solid #ded8ff;
+  border: 1px solid var(--accent-border);
   color: var(--primary);
-  background: #f3f0ff;
+  background: var(--accent-hover);
 }
 .dataset-mobile-more {
   display: none;
@@ -1522,15 +1523,15 @@ td small .badge,
   display: grid;
   grid-template-columns: 1.4fr 1fr;
   gap: 48px;
-  background: #efedff;
-  border: 1px solid #e2dcff;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
   border-radius: 14px;
   padding: 36px;
 }
 .overview-eyebrow {
   font-size: 11px;
   letter-spacing: 2px;
-  color: #7164b8;
+  color: var(--primary);
   font-weight: 650;
 }
 .overview-hero h2 {
@@ -1608,7 +1609,7 @@ td small .badge,
 }
 .report-file {
   padding: 10px;
-  background: #f3f1ff;
+  background: var(--accent-hover);
   border-radius: 8px;
   color: var(--primary);
 }
@@ -1622,7 +1623,7 @@ td small .badge,
   justify-content: flex-start;
   text-align: left;
   padding: 14px 10px;
-  background: #faf9ff;
+  background: var(--accent-hover);
 }
 .quick-grid button > svg:first-child {
   color: var(--primary);
@@ -1695,7 +1696,7 @@ td small .badge,
 }
 .workflow-datasets .active-dataset {
   border-color: var(--primary);
-  background: #eeebff;
+  background: var(--accent-soft);
   color: var(--primary);
 }
 .workflow-backdrop {
@@ -1766,7 +1767,7 @@ td small .badge,
   width: 100%;
 }
 .dataset-tree-row.is-active {
-  background: #eeebff;
+  background: var(--accent-soft);
   color: var(--primary);
 }
 .dataset-tree-row input[type="checkbox"] {

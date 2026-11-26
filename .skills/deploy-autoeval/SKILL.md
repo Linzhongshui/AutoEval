@@ -7,6 +7,8 @@ description: 部署、升级、验收或恢复单团队 AutoEval 测评平台。
 
 在能访问目标的会话中执行以下流程。按用户给定目标选择发布版本、主机和验收环境。单纯编写方案或检查部署时仅执行相应的只读步骤。
 
+新环境安装、迁移历史报告或升级到 347b335 并运行 DeepSWE 时，先按[新环境部署与升级指南](references/new-environment-upgrade.md)选择 AMD64/ARM64 平台归档、同版前端和 x86 执行节点，再按任务入口完成验收。
+
 目标需要复用已归档的 Linux AMD64 镜像时，先按 [OBS 运行镜像手册](references/obs-images.md) 选择平台、数据集与目标 Docker 引擎，再按下列流程部署和验收。新版本的应用镜像仍按选定源码构建。
 
 DeepSWE 部署先确认执行器。控制台的 AISBench/Harbor 任务走跨环境测评资源流程；实际使用原生 Pier 和 Linux x86_64 节点时，按 [Pier x86 部署与验收](references/deepswe-pier-x86.md) 准备控制端、任务镜像和独立评分环境。

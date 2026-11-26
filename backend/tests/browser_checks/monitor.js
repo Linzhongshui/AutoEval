@@ -53,8 +53,16 @@
       data = window.detail;
     } else if (url.pathname === '/api/autoeval/v1/runs' || url.pathname === '/api/autoeval/v1/evaluation-tasks') {
       data = [window.detail];
+    } else if (url.pathname.endsWith('/fixture-run/executor-files')) {
+      data = [{ id: 'job-1', dataset: 'GPQA', round: 1 }];
+    } else if (url.pathname.endsWith('/executor-files/job-1')) {
+      data = url.searchParams.get('path') === 'output/case.txt'
+        ? { state: 'text', content: 'sample', start: 0, end: 6, size: 6 }
+        : { state: 'directory', more: false, entries: [
+          { name: 'output/case.txt', directory: false, size: 6, mtime: 0, metadata_only: false },
+        ] };
     } else if (url.pathname.endsWith('/capabilities')) {
-      data = { evaluation_enabled: false, analysis_enabled: false, customer_ssh_enabled: false, workspace_mode: 'single', subject: 'fixture' };
+      data = { executor_files_enabled: window.executorFilesEnabled === true, evaluation_enabled: false, analysis_enabled: false, customer_ssh_enabled: false, workspace_mode: 'single', subject: 'fixture' };
     }
     return new Response(JSON.stringify({ data, next_offset: null, request_id: 'fixture' }), {
       status, headers: { 'Content-Type': 'application/json' },

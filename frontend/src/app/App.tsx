@@ -49,6 +49,7 @@ const menus = [
 export function App() {
   const [page, setPage] = useState(location.hash.slice(1) || "console");
   const [profiles, setProfiles] = useProfiles(page === "config" || page.startsWith("config/"));
+  const [executorFilesEnabled, setExecutorFilesEnabled] = useState(false);
   const [workbenchEnabled, setWorkbenchEnabled] = useState(false);
   const [candidateScoresOpen, setCandidateScoresOpen] = useState(false);
   useEffect(() => { if (page !== "leaderboard") setCandidateScoresOpen(false); }, [page]);
@@ -128,7 +129,7 @@ export function App() {
         </div>
       </aside>
       <main className="main">
-        <BackendConnection onWorkbenchEnabled={setWorkbenchEnabled} />
+        <BackendConnection onExecutorFilesEnabled={setExecutorFilesEnabled} onWorkbenchEnabled={setWorkbenchEnabled} />
         <div className="breadcrumb">
           {page.startsWith("report/") ? (
             <button onClick={() => go("reports")}>报告管理</button>
@@ -162,6 +163,7 @@ export function App() {
         {evaluationPage && (
           <div className="stack evaluation-tasks">
             <EvaluationRuns
+              debugEnabled={executorFilesEnabled}
               runId={page.startsWith("run/") ? page.slice(4) : undefined}
               initialTarget={
                 page.startsWith("evaluate?")

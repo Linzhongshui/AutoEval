@@ -49,6 +49,7 @@ export type RunSnapshot = {
   remote_model: string;
   resource_kind: string;
   sample_count: number;
+  dataset_concurrency?: number;
   parameters: Record<string, unknown>;
   manifest_id: string;
   manifest_sha256: string;
@@ -67,6 +68,7 @@ export type DatasetResult = {
 };
 
 export type RunDetail = Omit<Run, "datasets"> & {
+  current_round?: number;
   follow_up_enabled?: boolean;
   datasets?: DatasetResult[];
   dataset_report?: { datasets?: DatasetResult[] } | null;

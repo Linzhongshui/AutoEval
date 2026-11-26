@@ -110,3 +110,7 @@ docker tag alpine@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5
 | MMMU-Pro | `/home/chenluwen/autoeval-data/mmmu` | `/benchmark/ais_bench/datasets/mmmu_pro` | 1730 条 |
 
 离线检查使用原任务指定的 AISBench 镜像和加载器。API 和执行 worker 已确认读取新挂载。该修复属于执行资源配置，不需要修改 AISBench 数据集源码。未重跑模型或改写原任务历史。
+
+## e968d1b 执行镜像的离线 Agent
+
+使用 `offline-e968d1b-20261126` 的节点按[执行镜像更新与验证](../deploy/deepswe-e968d1b/README.md)更换执行模板，并同步核对外部挂载的 AISBench runner。

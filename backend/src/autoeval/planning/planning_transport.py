@@ -159,7 +159,7 @@ class PlanningRemoteContainer(ArtifactExecutor):
                 ]
             if arguments[-1] == "preflight" and payload and any(
                 t.get("compilation", {}).get("config", {}).get("subcommand") in {"agentx", "llm_perf"}
-                for t in json.loads(payload)
+                for t in (json.loads(payload) or [])
             ):
                 return self.control.command(client, ["docker", *arguments], payload, timeout=300)
             return self.control.command(client, ["docker", *arguments], payload)
@@ -359,9 +359,10 @@ print(json.dumps({'content': raw.decode('utf-8', errors='replace'), 'truncated':
                     self.remote_dir + "/planning_runtime.py",
                     "preflight",
                 ],
-                json.dumps(tasks).encode(),
+                json.dumps(tasks if tasks is not None else []).encode(),
             )
         )
+        snapshot["planning_container"] = [self.container_id, self.image_id]
         return await storage_preflight(self, snapshot) if tasks and retained_storage else snapshot
 
 
@@ -435,9 +436,10 @@ class PlanningDocker(ArtifactExecutor):
                     self.remote_dir + "/planning_runtime.py",
                     "preflight",
                 ],
-                json.dumps(tasks).encode(),
+                json.dumps(tasks if tasks is not None else []).encode(),
             )
         )
+        snapshot["planning_container"] = [self.container_id, self.image_id]
         return await storage_preflight(self, snapshot) if tasks else snapshot
 
 
@@ -494,7 +496,7 @@ class PlanningSSH(SSHExecutor):
                     self.command(
                         client,
                         ["python3", path, "preflight"],
-                        json.dumps(tasks).encode(),
+                        json.dumps(tasks if tasks is not None else []).encode(),
                     )
                 )
 

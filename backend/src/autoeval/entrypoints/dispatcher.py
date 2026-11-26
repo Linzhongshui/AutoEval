@@ -66,6 +66,16 @@ async def deliver_once(sessions, client, *, run_id=None) -> bool:
                 request = {"run_id": str(row.run_id), "round_id": round_id}
                 workflow_id = f"demo/run/{row.run_id}/round/{round_id}"
                 default_queue = "demo.workflow.v1"
+                if "workflow_queue" not in row.payload:
+                    # Older retry intents omit the queue, even for isolated SSH runs.
+                    original_queue = await session.scalar(
+                        select(Outbox.payload["workflow_queue"].as_string()).where(
+                            Outbox.run_id == row.run_id,
+                            Outbox.kind == "START_RUN",
+                            Outbox.dedup_key == f"planned:{row.run_id}",
+                        )
+                    )
+                    default_queue = original_queue or default_queue
             elif row.kind == "ANALYZE_REPORT":
                 analysis_id = row.payload["analysis_id"]
                 request = {

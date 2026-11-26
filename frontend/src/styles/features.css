@@ -2004,7 +2004,7 @@ textarea { font: inherit; }
   justify-content: center;
   gap: 6px;
   color: var(--primary);
-  background: #efecff;
+  background: var(--accent-soft);
   opacity: 1;
 }
 .probe-progress-card { display:grid;gap:10px;padding:16px;border:1px solid #ddd8fc;border-radius:10px;background:#f5f3ff;color:#465078;text-align:left; }

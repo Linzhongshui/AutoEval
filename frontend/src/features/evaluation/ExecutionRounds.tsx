@@ -8,7 +8,7 @@ type Round = {
   cancel_requested_at?: string | null;
   cancelled_at?: string | null;
   report_id: string | null;
-  target?: { dataset_key?: string; sample_id?: string };
+  target?: { dataset_key?: string; sample_id?: string; cases?: {dataset_key: string; sample_id: string}[] };
   shards?: { id: string; dataset: string; state: string; summary?: { cleanup_pending?: boolean } }[];
 };
 
@@ -67,8 +67,11 @@ export function ExecutionRounds({ runId, state }: { runId: string; state: string
     {error && <p role="alert">无法读取执行轮次。</p>}
     {!error && !rounds.length && <p role="status">正在读取执行轮次…</p>}
     <ol>{rounds.map(round => <li key={round.number}>
-      <strong>第 {round.number} 轮 · {operations[round.operation] ?? round.operation}</strong>
+      <strong>第 {round.number} 轮 · {round.target?.cases ? "批量重试" : operations[round.operation] ?? round.operation}</strong>
       {round.state && <span> · {states[round.state] ?? round.state}</span>}
+      {round.target?.cases && <details><summary>重试 {round.target.cases.length} 个样本</summary>
+        <ul className="retry-case-list">{round.target.cases.map(row => <li key={JSON.stringify([row.dataset_key, row.sample_id])}>{row.dataset_key} · {row.sample_id}</li>)}</ul>
+      </details>}
       {round.target?.sample_id && <p>{round.target.dataset_key} · {round.target.sample_id}</p>}
       {round.cancel_requested_at && <p>请求取消于 {new Date(round.cancel_requested_at).toLocaleString()}</p>}
       {round.cancelled_at && <p>确认取消于 {new Date(round.cancelled_at).toLocaleString()}</p>}

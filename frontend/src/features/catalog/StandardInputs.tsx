@@ -134,6 +134,28 @@ function InputDetail({ entry }: { entry: InputVersion }) {
   </div>;
 }
 
+function PreviewRow({ entry }: { entry: InputVersion }) {
+  const [expanded, setExpanded] = useState(false);
+  return <>
+    <tr>
+      <td>{entry.source_model}</td>
+      <td>{entry.benchmark}</td>
+      <td>{entry.startup_missing ? "待补全启动配置" : "包含启动配置"}</td>
+      <td>{entry.changed_files?.join("、") || "无"}</td>
+      <td>{entry.removed_files?.join("、") || "无"}</td>
+      <td><button type="button" className="link" aria-expanded={expanded}
+        onClick={() => setExpanded(!expanded)}>
+        {expanded ? "收起详情" : "查看标准参数差异与原文"}
+      </button></td>
+    </tr>
+    {expanded && <tr><td colSpan={6}>
+      <pre className="snapshot">{JSON.stringify({
+        field_changes: entry.field_changes, locked_fields: entry.locked_fields, files: entry.files,
+      }, null, 2)}</pre>
+    </td></tr>}
+  </>;
+}
+
 export function StandardInputs() {
   const tags = useRepositoryTags();
   const [rows, setRows] = useState<InputVersion[]>([]);
@@ -165,9 +187,35 @@ export function StandardInputs() {
     <div className="inline"><label>分支、Tag 或提交<input aria-label="标准仓分支或提交" value={ref} onChange={(e) => { setRef(e.target.value); setPreview(null); }} /></label><button disabled={busy} onClick={() => void perform(async () => { setPreview(null); setPreview(await apiPost<Preview>("/standard-inputs/sync-preview", { ref })); })}>同步预览</button><label>离线输入包<input className="standard-package-upload" aria-label="选择离线输入包" type="file" accept=".json,application/json" disabled={busy} onChange={(e) => { const file = e.target.files?.[0]; if (!file) return; setPreview(null); void perform(async () => { if (file.size > 3_000_000) throw Error("输入包不能超过 3 MB"); setPreview(await apiPost<Preview>("/standard-inputs/preview", JSON.parse(await file.text()))); }); e.target.value = ""; }} /></label></div>
     <small>离线目录先使用后台 import_standard_inputs 工具生成输入包。远程分支会先固定为完整提交号。</small>
     {message && <p role="status">{message}</p>}
-    {preview && <section className="notice stack"><h3>导入预览</h3><p>版本 Tag：{tagLabel(tags, preview.bundle.revision)}</p><p>提交：{preview.bundle.revision}</p><ul>{preview.entries.map((entry) => <li key={`${entry.source_model}/${entry.benchmark}`}>{entry.source_model} / {entry.benchmark} · {entry.startup_missing ? "待补全启动配置" : "包含启动配置"}<small>变更：{entry.changed_files?.join("、") || "无"}；移除：{entry.removed_files?.join("、") || "无"}</small><details><summary>查看标准参数差异与原文</summary><pre className="snapshot">{JSON.stringify({ field_changes: entry.field_changes, locked_fields: entry.locked_fields, files: entry.files }, null, 2)}</pre></details></li>)}</ul><button disabled={busy} className="primary" onClick={() => void perform(async () => { await apiPost("/standard-inputs/import", { bundle: preview.bundle, expected_sha256: preview.sha256 }); setPreview(null); setRevision((v) => v + 1); setMessage("标准输入已登记。"); })}>确认登记输入版本</button></section>}
+    {preview && <section className="standard-import-preview" aria-label="导入预览">
+      <header>
+        <h3>导入预览</h3>
+        <div className="preview-revision">
+          <span>版本 Tag：{tagLabel(tags, preview.bundle.revision)}</span>
+          <span>提交：<code>{preview.bundle.revision}</code></span>
+        </div>
+      </header>
+      <div className="table-wrap" tabIndex={0} role="region" aria-label="导入预览明细">
+        <table aria-label="待导入的标准输入">
+          <thead><tr>
+            {["来源模型", "数据集", "启动配置", "变更文件", "移除文件", "详情"].map(label =>
+              <th key={label} scope="col">{label}</th>)}
+          </tr></thead>
+          <tbody>{preview.entries.map(entry =>
+            <PreviewRow key={`${entry.source_model}/${entry.benchmark}`} entry={entry} />)}
+            {!preview.entries.length && <tr><td colSpan={6}>暂无预览条目</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <footer><button type="button" disabled={busy} className="primary" onClick={() => void perform(async () => {
+        await apiPost("/standard-inputs/import", { bundle: preview.bundle, expected_sha256: preview.sha256 });
+        setPreview(null);
+        setRevision(v => v + 1);
+        setMessage("标准输入已登记。");
+      })}>确认登记输入版本</button></footer>
+    </section>}
     <div className="inline" aria-label="标准输入筛选">
-      <label>版本<select aria-label="筛选标准版本" value={versionFilter} onChange={e => { setVersionFilter(e.target.value); setOffset(0); }}><option value="latest">最新导入版本</option><option value="all">全部版本</option>{options.revisions.map(r => <option key={r} value={r}>{tagLabel(tags, r)} · {r.slice(0, 12)}</option>)}</select></label>
+      <label>版本<select aria-label="筛选标准版本" value={versionFilter} onChange={e => { setVersionFilter(e.target.value); setOffset(0); }}><option value="latest">最新导入版本</option><option value="all">全部版本</option>{options.revisions.filter(r => tags.tags.some(tag => tag.revision === r)).map(r => <option key={r} value={r}>{tagLabel(tags, r)} · {r.slice(0, 12)}</option>)}</select></label>
       <label>模型<select aria-label="筛选标准模型" value={modelFilter} onChange={e => { setModelFilter(e.target.value); setOffset(0); }}><option value="">全部模型</option>{options.models.map(m => <option key={m} value={m}>{m}</option>)}</select></label>
       <label>数据集<select aria-label="筛选标准数据集" value={datasetFilter} onChange={e => { setDatasetFilter(e.target.value); setOffset(0); }}><option value="">全部数据集</option>{options.datasets.map(d => <option key={d} value={d}>{d}</option>)}</select></label>
     </div>

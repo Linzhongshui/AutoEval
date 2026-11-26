@@ -87,6 +87,9 @@ class GpqaExplorationWorkflow:
         )
 
 
+ISOLATED_DATASET_QUEUE = "autoeval.dataset-containers.v1"
+
+
 @workflow.defn
 class PlannedEvaluationWorkflow:
     @workflow.run
@@ -94,7 +97,9 @@ class PlannedEvaluationWorkflow:
         await workflow.execute_activity(
             "execute_planned_evaluation",
             run_id,
-            task_queue="demo.planning-execution.v1",
+            task_queue=ISOLATED_DATASET_QUEUE
+            if workflow.info().task_queue == ISOLATED_DATASET_QUEUE
+            else "demo.planning-execution.v1",
             start_to_close_timeout=timedelta(days=30),
             heartbeat_timeout=timedelta(minutes=2),
             retry_policy=RetryPolicy(maximum_attempts=0),
@@ -108,7 +113,9 @@ class EvaluationFollowUpWorkflow:
         await workflow.execute_activity(
             "execute_planned_evaluation",
             args=[request["run_id"], request["round_id"]],
-            task_queue="demo.planning-execution.v1",
+            task_queue=ISOLATED_DATASET_QUEUE
+            if workflow.info().task_queue == ISOLATED_DATASET_QUEUE
+            else "demo.planning-execution.v1",
             start_to_close_timeout=timedelta(days=30),
             heartbeat_timeout=timedelta(minutes=2),
             retry_policy=RetryPolicy(maximum_attempts=0),

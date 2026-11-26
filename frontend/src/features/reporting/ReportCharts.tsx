@@ -1,8 +1,10 @@
-import { Activity, BarChart3, Info } from "lucide-react";
+import { Activity, BarChart3 } from "lucide-react";
 import type { Report } from "./ReportView";
 
 const percent = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 100;
+
+const formatDelta = (value: number, baseline: number) => (value > baseline ? '+' : '') + (value - baseline).toFixed(2);
 
 export type DatasetChartResult = {
   dataset_key: string;
@@ -15,28 +17,39 @@ export type DatasetChartResult = {
 
 export function ReportCharts({ report }: { report: Report }) {
   const datasets = report.dataset_results ?? [{ dataset_key: report.dataset_key || "GPQA", summary: report.summary, validity: report.validity, evidence_status: report.evidence_status, baseline_comparison: report.baseline_comparison }];
-  return <section className="report-charts" aria-label="报告全部数据集图表">
+  const groups = datasets.map(dataset => {
+    const baseline = dataset.baseline_comparison;
+    const measured = report.evidence_status === "verified" && dataset.evidence_status === "verified" && ["complete", "partial"].includes(dataset.validity) && dataset.summary.scoring_status === "succeeded" && percent(dataset.summary.accuracy) ? dataset.summary.accuracy : null;
+    const reference = measured !== null && dataset.validity === "complete" && baseline.status === "matched" && baseline.baseline_unit === "percent" && baseline.measured_value === measured && percent(baseline.baseline_value) ? baseline.baseline_value : null;
+    const scope = dataset.summary.subset_scope;
+    return { dataset, measured, reference, baseline, scope: scope === "full" ? "全量" : scope === "lite" ? "Lite" : scope };
+  });
+  const scopes = new Set(groups.map(g => g.scope));
+  const hasBaseline = groups.some(g => g.reference !== null);
+  return <section className="report-charts dataset-axis-layout" aria-label="报告全部数据集图表">
     <section className="report-chart-panel">
-      <header className="spread"><h3><BarChart3 size={18} />精度测评</h3><span className="badge">{datasets.length} 个数据集</span></header>
-      <p className="muted">各数据集准确率 · 越高越好 · 不计算综合分</p>
-      <div className="chart-legend"><span><i className="chart-swatch measured" />本次测评</span><span><i className="chart-swatch reference" />基线</span></div>
-      <figure className="accuracy-comparison" aria-label="多数据集准确率与基线分组对比图">
-        <div className="chart-ticks" aria-hidden="true"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div>
-        {datasets.map((dataset) => {
-          const baseline = dataset.baseline_comparison;
-          const measured = report.evidence_status === "verified" && dataset.evidence_status === "verified" && ["complete", "partial"].includes(dataset.validity) && dataset.summary.scoring_status === "succeeded" && percent(dataset.summary.accuracy) ? dataset.summary.accuracy : null;
-          const reference = measured !== null && dataset.validity === "complete" && baseline.status === "matched" && baseline.baseline_unit === "percent" && baseline.measured_value === measured && percent(baseline.baseline_value) ? baseline.baseline_value : null;
-          return <div className="dataset-chart-group" key={dataset.dataset_key}>
-            <div className="spread"><b>{dataset.display_name || dataset.dataset_key}</b><small>{dataset.summary.subset_scope}</small></div>
-            {([["本次测评", measured, "measured"], ["基线", reference, "reference"]] as const).map(([label, value, tone]) => <div className="chart-row" key={label}><span>{label}</span><div className="chart-track">{value !== null && <div className={`chart-bar ${tone}`} style={{width: `${value}%`}} role="meter" aria-label={`${dataset.display_name || dataset.dataset_key} ${label}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={value} />}</div><strong>{value === null ? "—" : `${value.toFixed(2)}%`}</strong></div>)}
-            {baseline.attached_after_execution && <p className="muted">标准库参考：执行后补录固定版本；不代表相同参数复测，不据此判定发布通过。</p>}
-            <p className="chart-baseline-version">{measured !== null && reference !== null ? `较基线 ${measured-reference > 0 ? "+" : ""}${(measured-reference).toFixed(2)} 个百分点` : measured === null ? "暂无可核验准确率" : "暂无可比基线"} · 基线版本：{baseline.baseline_key ? `${baseline.baseline_key} / ${baseline.baseline_version || "未提供"}` : "未配置"}</p>
-          </div>;
-        })}
-        {!datasets.length && <p className="empty">暂无数据集结果</p>}
-        <figcaption>各数据集独立比较；缺失值不填零，部分覆盖不与完整基线比较。</figcaption>
+      <header className="spread"><h3><BarChart3 size={18} />精度测评</h3><span className="badge">{scopes.size === 1 && groups[0]?.scope && groups[0].scope + " · "}{groups.length} 个数据集</span></header>
+      <div className="chart-legend"><span><i className="chart-swatch measured" />本次测评</span>{hasBaseline && <span><i className="chart-swatch reference" />基线</span>}</div>
+      <figure className="accuracy-comparison axis-figure" aria-label="多数据集准确率与基线分组对比图">
+        {groups.length ? <div className="axis-scroll"><div className="axis-plot" style={{minWidth: groups.length * 130 + 48}}>
+          <div className="axis-scale">{[100,75,50,25,0].map(n => <span key={n}>{n}%</span>)}</div>
+          {groups.map(({dataset, measured, reference, scope}) => <div className="axis-group" key={dataset.dataset_key}>
+            <div className="axis-bars">{([["本次测评",measured],["基线",reference]] as const).map(([label,n]) =>
+              n === null ? (label === "本次测评" && <small key={label}>缺测</small>) :
+              <div key={label} role="meter" aria-label={dataset.dataset_key+" "+label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={n}
+                title={reference !== null && measured !== null ? "较基线 "+formatDelta(measured, reference)+" 个百分点" : label}
+                className={"axis-bar "+(label === "基线" ? "reference" : "")} style={{height:n+"%"}}><b>{Number(n.toFixed(2))}%</b></div>)}</div>
+            <strong>{dataset.display_name || dataset.dataset_key}</strong>{scopes.size > 1 && <small>{scope}</small>}
+          </div>)}
+        </div></div> : <p>暂无数据集结果</p>}
+        <figcaption>{!hasBaseline && "本报告暂无可比基线。"}各数据集独立计分，部分覆盖时仅展示本次成绩。</figcaption>
       </figure>
+      <details><summary>查看基线详情</summary>{groups.map(({dataset, measured, reference, baseline}) => <p key={dataset.dataset_key} className="chart-baseline-version">
+        <b>{dataset.display_name || dataset.dataset_key}</b> · {reference !== null && measured !== null ? "较基线 "+formatDelta(measured, reference)+" 个百分点" : measured === null ? "暂无可核验准确率" : dataset.validity === "partial" ? "部分覆盖" : baseline.baseline_key ? "暂无可比基线" : "基线未配置"}
+        {baseline.baseline_key && <> · {baseline.baseline_key} / {baseline.baseline_version || "版本未提供"}</>}
+        {baseline.attached_after_execution && " · 执行后补录的标准库参考"}
+      </p>)}</details>
     </section>
-    <section className="report-chart-panel"><header className="spread"><h3><Activity size={18} />性能测评</h3><span className="badge neutral">未接入</span></header><p className="muted">同一指标下按数据集分组比较本次测评与基线</p><div className="performance-chart-empty" role="status"><Activity size={30} /><strong>暂无性能测评数据</strong><p>当前报告未采集吞吐量或延迟，无法绘制多数据集性能对比。</p></div><p className="chart-explanation"><Info size={14} />不同单位的性能指标分别展示，不混用量纲或填充示例值。</p></section>
+    <div className="performance-chart-empty performance-inline" role="status"><Activity size={16}/>性能测评 · 暂无性能测评数据</div>
   </section>;
 }

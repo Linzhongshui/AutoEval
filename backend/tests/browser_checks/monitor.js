@@ -37,6 +37,7 @@
     } else if (url.pathname === '/api/autoeval/v1/runs/fixture-run/monitor/snapshots') {
       data = [{ id: 'snap-1', kind: window.monitor.snapshot_kind, sha256: 'abc', created_at: '2026-11-12T00:00:00Z' }];
     } else if (url.pathname === '/api/autoeval/v1/runs/fixture-run/monitor/snapshots/snap-1') {
+      if (window.snapshotFailure) status = 503;
       data = { projection: window.monitor, raw: { task_name: window.monitor.task_name } };
     } else if (url.pathname === '/api/autoeval/v1/runs/fixture-run/monitor/log') {
       if (window.logFailure) { status = 503; data = null; }

@@ -237,3 +237,38 @@ async def test_legacy_report_scope_and_score_remain_valid(monkeypatch, scope):
         AsyncMock(return_value=("verified", {"schema_version": "gpqa-report.v1"})),
     )
     assert await validate_report(request, session, entry) == frozen
+
+
+@pytest.mark.asyncio
+async def test_published_evidence_cache_coalesces_and_expires(monkeypatch):
+    import asyncio
+
+    from autoeval.reporting import data_workbench
+
+    now = 0
+    monkeypatch.setattr(data_workbench, "monotonic", lambda: now)
+    calls = 0
+
+    async def verify(*args):
+        nonlocal calls
+        calls += 1
+        await asyncio.sleep(0)
+        if calls == 1:
+            return "verified", {"schema_version": "gpqa-report.v1"}
+        return "missing", None
+
+    monkeypatch.setattr(data_workbench, "verified_report_body", verify)
+    cache = data_workbench.PublishedEvidenceCache()
+    report = SimpleNamespace(id="r", object_key="report.json", sha256="report")
+    snapshot = SimpleNamespace(sha256="snapshot")
+    args = (None, report, None, snapshot)
+    first, second = await asyncio.gather(cache.get(*args), cache.get(*args))
+    assert first == second
+    assert first[0] == "verified"
+    assert (await cache.get(*args))[0] == "verified"
+    assert calls == 1
+
+    now = 31
+    assert await cache.get(*args) == ("missing", None)
+    assert await cache.get(*args) == ("missing", None)
+    assert calls == 3

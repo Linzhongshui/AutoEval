@@ -11,9 +11,7 @@ export function ManagementDrawer({ title, children, onDismiss, open: controlledO
   useEffect(() => {
     if (!open) return;
     dialog.current?.showModal();
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = previous; };
+
   }, [open]);
   const close = () => {
     dialog.current?.close();

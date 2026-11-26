@@ -1,7 +1,9 @@
 """UI contract checks; all API responses are simulated, never real model requests."""
 
+import json
 from pathlib import Path
 
+import pytest
 from playwright.sync_api import expect
 
 
@@ -108,3 +110,87 @@ def test_non_real_report_does_not_offer_analysis_start(browser_page):
     expect(page.get_by_text("非真实执行来源，不启用智能分析", exact=False)).to_be_visible()
     expect(page.get_by_role("button", name="启动独立分析", exact=True)).to_have_count(0)
     assert page.evaluate("window.analysisCalls") == []
+
+
+def test_dataset_parallel_strategy_and_summary(browser_page):
+    page, url, _ = browser_page
+    page.route("**/api/**", lambda route: route.fulfill(json={"data": [], "next_offset": None}))
+    page.goto(url + "/#console")
+    table = page.locator(".planning-table")
+    checkboxes = table.get_by_role("checkbox")
+    checkboxes.first.check()
+    table.get_by_role("button", name="全选", exact=True).click()
+    expect(table.get_by_role("checkbox", checked=True)).to_have_count(4)
+    table.get_by_role("button", name="取消全选", exact=True).click()
+    expect(table.get_by_role("checkbox", checked=False)).to_have_count(4)
+    table.get_by_role("button", name="全选", exact=True).click()
+
+    card = page.get_by_role("region", name="数据集执行设置")
+    summary = page.get_by_role("complementary", name="任务摘要")
+    count = card.get_by_label("数据集同时运行数")
+    card.get_by_role("button", name="并行执行").click()
+    expect(count).to_have_value("4")
+    expect(card.get_by_text("并行运行计划")).to_be_visible()
+    expect(card.get_by_role("list", name="并行数据集").get_by_role("listitem")).to_have_count(4)
+    expect(card.get_by_role("button", name="前移")).to_have_count(0)
+    expect(summary).to_contain_text("最多 4 个")
+
+    count.select_option("2")
+    expect(card.get_by_text("启动优先级")).to_be_visible()
+    card.get_by_role("button", name="MMMU-Pro 前移").click()
+    card.get_by_role("button", name="串行执行").click()
+    expect(card.get_by_text("执行顺序")).to_be_visible()
+    expect(card.get_by_role("listitem").first).to_contain_text("MMMU-Pro")
+
+    card.get_by_role("button", name="并行执行").click()
+    page.get_by_role("checkbox", name="启用 AutomationBench").uncheck()
+    expect(count).to_have_value("3")
+    expect(count.locator("option")).to_have_count(2)
+    expect(summary).to_contain_text("最多 3 个")
+
+
+@pytest.mark.parametrize(
+    ("snapshot", "label"),
+    [({"dataset_concurrency": 3}, "并行"), ({"dataset_concurrency": 1}, "串行"), ({}, "待确认")],
+)
+def test_task_detail_shows_frozen_dataset_strategy(browser_page, snapshot, label):
+    page, url, _ = browser_page
+    page.route("**/api/**", lambda route: route.fulfill(json={"data": [], "next_offset": None}))
+    task = {
+        "id": "strategy-task",
+        "state": "accepted",
+        "snapshot": snapshot,
+        "datasets": [
+            {"id": "gpqa", "dataset": "GPQA", "state": "accepted"},
+            {"id": "mmmu", "dataset": "MMMU-Pro", "state": "accepted"},
+        ],
+        "cleanup": {"state": "not_scheduled", "attempt_count": 0},
+    }
+    page.route("**/evaluation-tasks/strategy-task", lambda route: route.fulfill(json={"data": task}))
+    page.goto(url + "/#run/strategy-task")
+    expect(page.get_by_text(f"运行方式 {label} · 探索", exact=True)).to_be_visible()
+
+
+@pytest.mark.parametrize(
+    ("scopes", "label"),
+    [([], "Lite"), (["full", "full"], "全量"), (["full", "lite"], "全量与 Lite")],
+)
+def test_report_overview_shows_dataset_scope(browser_page, scopes, label):
+    page, url, _ = browser_page
+    page.add_init_script(path=Path(__file__).with_name("charts.js"))
+    page.add_init_script(
+        """document.addEventListener('DOMContentLoaded', () => {
+            const report = window.chartReport;
+            const scopes = JSON.parse(decodeURIComponent(location.search.slice(1)));
+            if (scopes.length) {
+                report.dataset_results = scopes.map((scope, index) => ({
+                    ...report,
+                    dataset_key: String(index),
+                    summary: {...report.summary, subset_scope: scope},
+                }));
+                delete report.summary.subset_scope;
+            }
+        });"""
+    )
+    page.goto(f"{url}/?{json.dumps(scopes, separators=(',', ':'))}#report/chart-fixture")
+    expect(page.get_by_text(f"范围 {label}", exact=True)).to_be_visible()

@@ -21,6 +21,12 @@ class EvaluationReport(Record, Base):
     object_key: Mapped[str] = mapped_column(String(256))
     sha256: Mapped[str] = mapped_column(String(64))
     execution_origin: Mapped[str] = mapped_column(String(16), server_default="unverified")
+    review_status: Mapped[str] = mapped_column(
+        String(16), server_default="pending", default="pending"
+    )
+    reviewed_by: Mapped[str | None] = mapped_column(String(256))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    review_note: Mapped[str | None] = mapped_column(String(1000))
     __table_args__ = (
         UniqueConstraint("run_id", "version", name="uq_evaluation_report_run_version"),
         Index(
@@ -32,6 +38,10 @@ class EvaluationReport(Record, Base):
         CheckConstraint(
             "execution_origin IN ('real','simulation','unverified')",
             name="ck_report_origin",
+        ),
+        CheckConstraint(
+            "review_status IN ('pending','approved','revoked')",
+            name="ck_evaluation_report_review_status",
         ),
     )
 
@@ -70,6 +80,20 @@ class CapacityLease(Record, Base):
     node_id: Mapped[str] = mapped_column(String(128), index=True)
     demand: Mapped[dict] = mapped_column(JSONB)
     released: Mapped[bool] = mapped_column(default=False)
+
+
+class DatasetExecutionEnvironment(Base):
+    __tablename__ = "dataset_execution_environment"
+
+    dataset_execution_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("dataset_execution.id"), primary_key=True
+    )
+    resource_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ssh_resource_binding.id"))
+    template: Mapped[dict] = mapped_column(JSONB)
+    container_id: Mapped[str | None] = mapped_column(String(64))
+    state: Mapped[str] = mapped_column(String(24), index=True)
+
+    cleanup_attempted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class ExecutionRound(Record, Base):
@@ -116,3 +140,16 @@ class ExecutionShard(Record, Base):
         UniqueConstraint("round_id", "position"),
         CheckConstraint("position >= 0"),
     )
+
+
+class ExecutionShardEnvironment(Base):
+    __tablename__ = "execution_shard_environment"
+
+    shard_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("evaluation_execution_shard.id"), primary_key=True
+    )
+    resource_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("ssh_resource_binding.id"))
+    template: Mapped[dict] = mapped_column(JSONB)
+    container_id: Mapped[str | None] = mapped_column(String(64))
+    state: Mapped[str] = mapped_column(String(24), index=True)
+    cleanup_attempted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -279,7 +279,7 @@ uv run pytest -q
 
 相关交付与验证：
 
-- [20 题流程展示录屏（9 分 08 秒）](https://github.com/llauren48/AutoEval-Platform/blob/1faf83a0d78d880324280f7d9e2656291ce00734/deliverables/live-e2e-gpqa20-20261116.mp4)、[原始片段拼接版（35 分 35 秒）](https://github.com/llauren48/AutoEval-Platform/blob/1faf83a0d78d880324280f7d9e2656291ce00734/deliverables/live-e2e-gpqa20-20261116-full.mp4)及[验收标识与哈希](evidence/live-e2e-gpqa20-20261116.json)。分段与等待删减方式见验收说明。
+- [20 题流程展示录屏（9 分 08 秒）](../deliverables/live-e2e-gpqa20-20261116.mp4)、[原始片段拼接版（35 分 35 秒）](../deliverables/live-e2e-gpqa20-20261116-full.mp4)及[验收标识与哈希](../deliverables/live-e2e-gpqa20-20261116.json)。分段与等待删减方式见验收说明。
 - 报告、报告图表及榜单按冻结样本来源识别 GPQA-Diamond，保留 GPQA 查询兼容；AutomationBench 等 Agent 结果的允许数据集名称从冻结适配器配置显式推导。
 - Langfuse 的[人工轨迹样例](../backend/tests/fixtures/langfuse/automationbench-artifact.json)与[平台归档验收脚本](../deploy/langfuse/acceptance-fixture.py)用于开发/测试环境，覆盖重复收集及缺失、损坏轨迹。脚本须在已配置的平台容器中手动运行：`python /path/to/acceptance-fixture.py /path/to/automationbench-artifact.json`。其任务明确标记 simulation，不调用模型，不代表 AutomationBench 真机测评通过，也不进入普通任务列表或有效榜单。
 - [平台到 Trace 的浏览器检查](../backend/tests/browser_checks/test_automationbench_langfuse_live.py)只查看已有任务，通过 `AE_LANGFUSE_PLATFORM_TEST=1` 与 `AE_LANGFUSE_PLATFORM_RUN_ID` 显式启用，登录信息从本地受保护文件读取；默认跳过，不创建测评。

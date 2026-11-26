@@ -1,0 +1,2 @@
+deploy/r13-harbor-entrypoint.sh text eol=lf
+deploy/r13-harbor-adaptor.sh text eol=lf

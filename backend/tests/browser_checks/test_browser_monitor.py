@@ -10,23 +10,6 @@ def open_run(page, url):
     page.goto(url + "/#run/fixture-run")
 
 
-def test_executor_files_open_directly_from_task_navigation(browser_page):
-    page, url, _ = browser_page
-    page.add_init_script("window.executorFilesEnabled = true")
-    open_run(page, url)
-    nav = page.get_by_role("group", name="任务详情视图")
-    expect(nav.get_by_role("button")).to_have_text(
-        ["运行概览", "执行日志", "执行器原始文件", "监控快照", "配置快照"]
-    )
-    nav.get_by_role("button", name="执行器原始文件").click()
-    files = page.get_by_role("region", name="执行器原始文件")
-    files.get_by_role("button", name="output/case.txt").click()
-    preview = files.get_by_role("dialog", name="文件预览")
-    expect(preview.get_by_label("文件内容")).to_have_text("sample")
-    preview.get_by_role("button", name="关闭预览").click()
-    expect(files.get_by_role("button", name="output/case.txt")).to_be_visible()
-
-
 def test_monitor_loading_is_not_reported_as_not_collected(browser_page):
     page, url, _ = browser_page
     page.add_init_script(path=FIXTURE)
@@ -145,8 +128,7 @@ def test_monitor_progress_unknown_zero_and_completed(browser_page):
 
 def test_case_list_refreshes_when_running_task_completes(browser_page):
     page, url, _ = browser_page
-    page.add_init_script(path=FIXTURE)
-    page.add_init_script("window.savedCases=window.cases;window.cases=[];window.detail.report=null")
+    page.add_init_script(FIXTURE.read_text(encoding="utf-8") + "\nwindow.savedCases=window.cases;window.cases=[];window.detail.report=null")
     page.goto(url + "/#run/fixture-run")
     expect(page.get_by_role("status").filter(has_text="该运行暂无 case 执行记录。")).to_be_visible()
     page.evaluate("window.cases=window.savedCases;window.detail.state='completed'")
@@ -206,3 +188,20 @@ def test_native_prediction_progress_updates_before_report_exists(browser_page):
     page.evaluate("window.monitor.finish_count=5;window.monitor.snapshot_kind='final'")
     expect(bar).to_have_attribute("aria-valuenow", "100", timeout=7000)
     expect(page.get_by_text("5 / 5 · 100%", exact=True)).to_be_visible()
+
+
+def test_executor_files_open_directly_from_task_navigation(browser_page):
+    page, url, _ = browser_page
+    page.add_init_script("window.executorFilesEnabled = true")
+    open_run(page, url)
+    nav = page.get_by_role("group", name="任务详情视图")
+    expect(nav.get_by_role("button")).to_have_text(
+        ["运行概览", "执行日志", "执行器原始文件", "监控快照", "配置快照"]
+    )
+    nav.get_by_role("button", name="执行器原始文件").click()
+    files = page.get_by_role("region", name="执行器原始文件")
+    files.get_by_role("button", name="output/case.txt").click()
+    preview = files.get_by_role("dialog", name="文件预览")
+    expect(preview.get_by_label("文件内容")).to_have_text("sample")
+    preview.get_by_role("button", name="关闭预览").click()
+    expect(files.get_by_role("button", name="output/case.txt")).to_be_visible()

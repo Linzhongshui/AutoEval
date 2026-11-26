@@ -44,3 +44,17 @@ reports and local editor/share files are ignored; JavaScript fixtures and reusab
 tracked. Fixtures are synthetic UI inputs, never evidence of real scores or resource access.
 
 Mock checks do not replace SSH, model correctness, object durability, or real-report acceptance.
+
+### 执行器文件与容器重建
+
+启动本地 Vite 后，从 backend 目录运行以下专项。使用本机 Docker 的 `python:3.12-slim`、可创建临时数据库的 PostgreSQL 连接及 Playwright Chromium（或 `AE_CHROME_PATH`）。测试为每条路径创建专用卷、断网执行容器和数据库。SSH 用固定主机指纹的回环测试服务控制同一 Docker，测试结束时回收夹具。
+
+```powershell
+$env:AE_DOCKER_TEST = '1'
+$env:AE_SSH_SIM_TEST = '1'
+$env:AE_INFRA_TEST = '1'
+$env:AE_BROWSER_URL = 'http://127.0.0.1:5173'
+uv run pytest -q tests/test_executor_files_live.py
+```
+
+浏览器请求交给测试数据库对应的真实 FastAPI 应用。固定产物覆盖运行中读取、终态清理、密钥脱敏、重建后从原任务回看和挂错卷提示。仅设置 Docker 标志时运行本地传输测试。

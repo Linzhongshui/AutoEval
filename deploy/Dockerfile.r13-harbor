@@ -1,0 +1,52 @@
+FROM autoeval/aisbench-harbor:d97a8e7-f59cb89-agent-container-fix AS harbor
+FROM autoeval/r13-harbor:locked-cli-runtime-path
+
+# Preserve the deployed runner and its private Docker daemon entrypoint.
+COPY --from=harbor /opt/autoeval-harbor-f59cb89/src /opt/autoeval-harbor-f59cb89/src
+ENV PYTHONPATH=/opt/adapter/src:/opt/autoeval-harbor-f59cb89/src
+
+# Each private daemon receives the digest-verified probe through the R13 helper.
+RUN sed -i 's|alpine:3.23.4@sha256:5b10f432ef3da1b8d4c7eb6c487f2f5a8f096bc91145e68878dd4a5019afde11|autoeval/harbor-kernel-probe:alpine-3.23.4|' \
+    /opt/autoeval-harbor-f59cb89/src/harbor/environments/docker/docker.py
+
+# Keep the original exception visible through the pinned AISLogger.
+RUN runner=/benchmark/ais_bench/benchmark/runners/harbor_runner.py \
+    && grep -q 'self.logger.exception(' "$runner" \
+    && sed -i 's/self\.logger\.exception(/self.logger.error(__import__("traceback").format_exc() + /g' "$runner"
+
+RUN /opt/venvs/harbor/bin/python -c 'import harbor; from automationbench_adapter.agent import AutomationBenchOfficialAgent; from harbor.environments.docker.docker import DockerEnvironment; assert harbor.__file__.startswith("/opt/autoeval-harbor-f59cb89/src/")'
+
+# The private rootless runner executes as the SSH user against this pinned checkout.
+RUN git config --system --add safe.directory /benchmark
+
+# Supply the remote rootless daemon owner's numeric IDs when building its runner.
+ARG RUNNER_UID
+ARG RUNNER_GID
+RUN if [ -n "$RUNNER_UID$RUNNER_GID" ]; then \
+      test -n "$RUNNER_UID" && test -n "$RUNNER_GID" && \
+      (getent group "$RUNNER_GID" || groupadd --gid "$RUNNER_GID" harbor-runner) && \
+      (getent passwd "$RUNNER_UID" || useradd --no-create-home --home-dir /tmp \
+        --shell /bin/sh --uid "$RUNNER_UID" --gid "$RUNNER_GID" harbor-runner); \
+    fi
+
+# BFCL initializes these writable caches when AISBench imports its dataset registry.
+ENV BFCL_PROJECT_ROOT=/tmp/bfcl
+
+COPY deepswe_offline_agent.py /opt/autoeval-harbor-f59cb89/src/harbor/agents/installed/
+RUN factory=/opt/autoeval-harbor-f59cb89/src/harbor/agents/factory.py \
+    && grep -q 'harbor.agents.installed.mini_swe_agent:MiniSweAgent' "$factory" \
+    && sed -i 's/harbor.agents.installed.mini_swe_agent:MiniSweAgent/harbor.agents.installed.deepswe_offline_agent:OfflineMiniSweAgent/g' "$factory"
+
+COPY harbor_model_network.py /opt/autoeval-harbor-f59cb89/src/harbor/
+ARG DEEPSWE_MODEL_ORIGIN=""
+ENV AE_DEEPSWE_MODEL_ORIGIN=$DEEPSWE_MODEL_ORIGIN
+RUN task=/benchmark/ais_bench/benchmark/tasks/custom_tasks/harbor_agent_task.py \
+    && grep -Fq '"extra_allowed_hosts": list(model_cfg.get("extra_allowed_hosts") or []),' "$task" \
+    && sed -i '/^        model_names = model_cfg.get("model_names")/i\        from harbor.harbor_model_network import agent_phase_model_hosts' "$task" \
+    && sed -i 's/list(model_cfg.get("extra_allowed_hosts") or \[\])/agent_phase_model_hosts(model_cfg, agent_name, env)/' "$task"
+
+RUN docker_env=/opt/autoeval-harbor-f59cb89/src/harbor/environments/docker/docker.py \
+    && grep -Fq 'self._host_network = host_network' "$docker_env" \
+    && grep -Fq 'self._egress_control_services_compose_temp_dir = tempfile.TemporaryDirectory()' "$docker_env" \
+    && sed -i '/self._host_network = host_network/a\        self._model_phase_policies = tuple(phase_network_policies)' "$docker_env" \
+    && sed -i '/self._egress_control_services_compose_temp_dir = tempfile.TemporaryDirectory()/i\        from harbor.harbor_model_network import model_host_mapping\n        if mapping := model_host_mapping(self._model_phase_policies):\n            services[self._EGRESS_CONTROL_SERVICE_NAME] = {"extra_hosts": mapping}\n' "$docker_env"

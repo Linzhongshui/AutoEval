@@ -2,12 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowUp, FileCode2, RefreshCw, X } from "lucide-react";
 import { apiGet } from "../../shared/api";
 
-type Attempt = { id: string; dataset: string; round: number };
-type FileEntry = { name: string; directory: boolean; metadata_only: boolean; size: number; mtime: number };
-type Result =
-  | { state: "directory"; entries: FileEntry[]; more: boolean }
-  | { state: "text"; content: string; start: number; end: number; size: number }
-  | { state: "binary" | "pending" | "removed" | "missing_file" | "unverified" | "unavailable" | "wrong_storage" | "protected"; size?: number | null };
+import type { components } from "../../shared/types/api";
+
+type Schema = components["schemas"];
+type Attempt = Schema["ExecutorAttempt"];
+type Result = Schema["ExecutorDirectory"] | Schema["ExecutorPreview"] | Schema["ExecutorFileStatus"];
 
 const messages: Record<string, string> = {
   pending: "尚未生成文件", removed: "原始文件已人工清理", missing_file: "文件已移动或删除，请刷新目录",
@@ -15,6 +14,8 @@ const messages: Record<string, string> = {
   wrong_storage: "当前挂载与任务记录不一致", binary: "二进制文件，仅展示元信息",
   protected: "无法安全预览此文件",
 };
+
+type FileEntry = Schema["ExecutorEntry"];
 
 function useFileResult(base: string, query: string, revision: number) {
   const [result, setResult] = useState<Result>();
@@ -29,8 +30,8 @@ function useFileResult(base: string, query: string, revision: number) {
   return result;
 }
 
-function PreviewContent({ base, path, revision }: { base: string; path: string; revision: number }) {
-  const result = useFileResult(base, new URLSearchParams({ path }).toString(), revision);
+function PreviewContent({ base, path, archived, revision }: { base: string; path: string; archived: boolean; revision: number }) {
+  const result = useFileResult(base, new URLSearchParams({ path, view: archived ? "archive" : "directory" }).toString(), revision);
   const preview = useRef<HTMLPreElement>(null);
   useEffect(() => {
     if (preview.current && path.toLowerCase().endsWith(".log")) {
@@ -48,17 +49,18 @@ function PreviewContent({ base, path, revision }: { base: string; path: string; 
 function Browser({ base }: { base: string }) {
   const [outputs, setOutputs] = useState(true);
   const [directory, setDirectory] = useState("");
+  const [archiveDirectory, setArchiveDirectory] = useState(false);
   const [offset, setOffset] = useState(0);
   const [revision, refresh] = useState(0);
   const [previewRevision, refreshPreview] = useState(0);
-  const [selected, select] = useState<FileEntry>();
+  const [selected, select] = useState<(FileEntry & { archived: boolean })>();
   const dialog = useRef<HTMLDialogElement>(null);
   const workspace = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const previewOpen = Boolean(selected);
   const selectedPath = selected && [directory, selected.name].filter(Boolean).join("/");
-  const query = new URLSearchParams({ path: directory, offset: String(offset), view: outputs ? "outputs" : "directory" });
+  const query = new URLSearchParams({ path: directory, offset: String(offset), view: outputs ? "outputs" : archiveDirectory ? "archive-directory" : "directory" });
   const result = useFileResult(base, query.toString(), revision);
   const metadata = result?.state === "directory" ? result.entries.find(entry => entry.name === selected?.name) : undefined;
 
@@ -86,9 +88,10 @@ function Browser({ base }: { base: string }) {
     trigger.current?.focus({ preventScroll: true });
   }
 
-  function navigate(next: string, page = 0) {
+  function navigate(next: string, page = 0, archived = result?.state === "directory" && result.archived === true) {
     select(undefined);
     setDirectory(next);
+    setArchiveDirectory(archived);
     setOffset(page);
     if (list.current) list.current.scrollTop = 0;
   }
@@ -96,8 +99,8 @@ function Browser({ base }: { base: string }) {
   return <>
     <div className="executor-file-controls">
       <div role="group" aria-label="文件列表视图" className="executor-file-modes">
-        <button aria-pressed={outputs} onClick={() => { if (!outputs) { setOutputs(true); navigate(""); } }}>全部原始输出文件</button>
-        <button aria-pressed={!outputs} onClick={() => { if (outputs) { setOutputs(false); navigate(""); } }}>作业目录</button>
+        <button aria-pressed={outputs} onClick={() => { if (!outputs) { setOutputs(true); navigate("", 0, false); } }}>全部原始输出文件</button>
+        <button aria-pressed={!outputs} onClick={() => { if (outputs) { setOutputs(false); navigate("", 0, false); } }}>作业目录</button>
       </div>
       <button className="executor-icon-button" aria-label="刷新文件" title="刷新文件" onClick={() => refresh(v => v + 1)}><RefreshCw size={16} /></button>
     </div>
@@ -110,13 +113,14 @@ function Browser({ base }: { base: string }) {
         <div className="executor-file-list" ref={list}>
           {!result ? <p role="status">正在读取执行器…</p> : result.state !== "directory" ? <p role="status">{messages[result.state] || "无法读取目录"}</p>
             : !result.entries.length ? <p>尚未生成文件</p> : <table>
-              <thead><tr><th>{outputs ? "文件路径（相对作业目录）" : "名称"}</th><th>大小</th><th>修改时间</th></tr></thead>
+              {result.archived && <caption>{outputs ? "当前显示此作业已归档的原始输出文件" : "归档目录 · 仅包含此作业已归档的输出"}</caption>}
+              <thead><tr><th>{outputs ? (result.archived ? "归档文件路径" : "文件路径（相对作业目录）") : "名称"}</th><th>大小</th><th>{result.archived ? "归档时间" : "修改时间"}</th></tr></thead>
               <tbody>{result.entries.map(entry => <tr key={entry.name} className={selected?.name === entry.name ? "selected-file" : undefined}>
                 <td>{entry.metadata_only ? <span>{entry.name} · 仅元信息</span>
                   : <button className="link" aria-pressed={entry.directory ? undefined : selected?.name === entry.name}
                     onClick={event => {
                       if (entry.directory) navigate([directory, entry.name].filter(Boolean).join("/"));
-                      else { trigger.current = event.currentTarget; select(entry); }
+                      else { trigger.current = event.currentTarget; select({ ...entry, archived: Boolean(result.archived) }); }
                     }}>
                     {entry.name}{entry.directory && "/"}
                   </button>}</td>
@@ -138,12 +142,12 @@ function Browser({ base }: { base: string }) {
           <FileCode2 size={18} aria-hidden="true" />
           <div className="executor-preview-title">
             <h4 title={selectedPath}>{selectedPath}</h4>
-            {metadata && <small>{metadata.size} B · 修改于 {new Date(metadata.mtime * 1000).toLocaleString()}</small>}
+            {metadata && <small>{metadata.size} B · {selected.archived ? "归档于" : "修改于"} {new Date(metadata.mtime * 1000).toLocaleString()}</small>}
           </div>
           <button className="executor-icon-button" title="刷新预览" aria-label="刷新预览" onClick={() => refreshPreview(v => v + 1)}><RefreshCw size={16} /></button>
           <button className="executor-icon-button" title="关闭预览" aria-label="关闭预览" onClick={closePreview}><X size={18} /></button>
         </header>
-        <PreviewContent key={selectedPath} base={base} path={selectedPath} revision={revision + previewRevision} />
+        <PreviewContent key={selectedPath} base={base} path={selectedPath} archived={selected.archived} revision={revision + previewRevision} />
       </dialog> : null}
     </div>
   </>;

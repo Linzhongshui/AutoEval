@@ -16,6 +16,7 @@ from sqlalchemy import select
 
 from autoeval.billing.ledger import BudgetBlocked, finish_request, recover_inflight, reserve_request
 from autoeval.billing.models import BudgetAccount, ModelPrice, TargetBilling
+from autoeval.billing.transport import authorized_scope
 from autoeval.infrastructure.config import get_settings
 from autoeval.infrastructure.db import create_database
 from autoeval.infrastructure.models import EvaluationRun
@@ -139,17 +140,8 @@ def create_gateway(config_path):
             if snapshot is None or digest(snapshot.canonical_body) != snapshot.sha256:
                 raise HTTPException(403, "snapshot_integrity_failed")
             inputs = snapshot.canonical_body.get("inputs", {})
-            expected = config.get("expected_scope")
-            if expected:
-                tasks = inputs.get("tasks", [])
-                if (
-                    {t["dataset"]: len(t.get("samples", [])) for t in tasks} != expected
-                    or any(
-                        t.get("concurrency") != 24 or t.get("subset_scope") != "full" for t in tasks
-                    )
-                    or snapshot.canonical_body.get("execution_origin") != "real"
-                ):
-                    raise HTTPException(403, "authorized_full_scope_mismatch")
+            if not authorized_scope(config, snapshot.canonical_body):
+                raise HTTPException(403, "authorized_full_scope_mismatch")
             if grant["section"] == "evaluation" and (
                 inputs.get("target_id") != grant["target_id"]
                 or grant["dataset"] not in {t["dataset"] for t in inputs.get("tasks", [])}

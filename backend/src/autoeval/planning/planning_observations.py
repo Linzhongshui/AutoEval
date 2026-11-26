@@ -62,6 +62,7 @@ async def publish(sessions, settings, run_id, child_id, progress):
     if not progress or progress.get("source") not in {
         "aisbench_native_predictions",
         "harbor_result_files",
+        "aisbench_performance",
     }:
         return
     if progress.get("job_id") != str(child_id):
@@ -84,6 +85,16 @@ async def publish(sessions, settings, run_id, child_id, progress):
         raise ValueError("Native prediction count regressed; retain last observation")
     final = progress.get("snapshot_kind") == "final"
     source = progress["source"]
+    if source == "aisbench_performance":
+        description = {
+            "collecting": "原生性能工具已退出，正在回收产物",
+            "native_summary": "AISBench 已写出原生性能摘要",
+            "replay_plan_ready": "AgentX 已写出轨迹回放计划",
+        }.get(progress.get("stage"), "原生性能工具运行中")
+    elif source == "harbor_result_files":
+        description = "Harbor 已写出终态 trial；评分结果独立归档"
+    else:
+        description = "已完成原生预测记录；评分结果独立归档"
     task = {
         "task_name": str(child_id),
         "status": ("failed" if progress.get("tool_exit_code") else "completed")
@@ -95,9 +106,7 @@ async def publish(sessions, settings, run_id, child_id, progress):
         "total_count": progress.get("total_count")
         if progress.get("total_count") is not None
         else (binding.latest or {}).get("total_count"),
-        "progress_description": "Harbor 已写出终态 trial；评分结果独立归档"
-        if source == "harbor_result_files"
-        else "已完成原生预测记录；评分结果独立归档",
+        "progress_description": description,
     }
     await save_observation(
         sessions,
@@ -241,11 +250,11 @@ async def publish_lifecycle(sessions, settings, run_id, child, state, *, final=F
     if not final and binding.latest and binding.latest.get("source") != "executor_lifecycle":
         return  # Keep a more precise native observation instead of replacing it.
     latest = binding.latest or {}
-    native = latest.get("source") in {"aisbench_native_predictions", "harbor_result_files"}
+    native = latest.get("source") in {"aisbench_native_predictions", "harbor_result_files", "aisbench_performance"}
     task = {
         "task_name": str(child.id),
         "status": state,
-        "total_count": len(child.payload["samples"]),
+        "total_count": None if child.payload.get("dataset") in {"Synthetic", "AgentX"} else len(child.payload["samples"]),
         "finish_count": latest.get("finish_count") if native else None,
         "process_id": latest.get("process_id") if native else None,
         "start_time": latest.get("tool_start_time") if native else None,

@@ -8,9 +8,9 @@ import subprocess
 
 import paramiko
 
-from autoeval.config import get_settings
-from autoeval.secrets import FileSecretStore
-from autoeval.ssh_executor import load_private_key
+from autoeval.infrastructure.config import get_settings
+from autoeval.infrastructure.secrets import FileSecretStore
+from autoeval.resources.ssh_executor import load_private_key
 
 
 def main():

@@ -9,6 +9,7 @@ export function SearchableSelect({ children, value, defaultValue, onChange, disa
   const [local, setLocal] = useState(String(defaultValue || ""));
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDetailsElement>(null);
+  const trigger = useRef<HTMLElement>(null);
   const search = useRef<HTMLInputElement>(null);
   const select = useRef<HTMLSelectElement>(null);
   const navigating = useRef(false);
@@ -16,7 +17,22 @@ export function SearchableSelect({ children, value, defaultValue, onChange, disa
   const selected = String(value ?? local);
   const filtered = options.filter((option) => String(option.props.value ?? text(option.props.children)) !== "" && text(option.props.children).toLowerCase().includes(query.trim().toLowerCase()));
   const label = options.find((option) => String(option.props.value ?? text(option.props.children)) === selected);
-  useEffect(() => { if (open) search.current?.focus(); }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    search.current?.focus();
+    const dismissOutside = (event: Event) => {
+      const element = root.current;
+      if (element && event.target instanceof Node && !element.contains(event.target)) {
+        element.open = false;
+      }
+    };
+    document.addEventListener("pointerdown", dismissOutside);
+    document.addEventListener("focusin", dismissOutside);
+    return () => {
+      document.removeEventListener("pointerdown", dismissOutside);
+      document.removeEventListener("focusin", dismissOutside);
+    };
+  }, [open]);
   useEffect(() => {
     const element = select.current;
     if (!element) return;
@@ -28,18 +44,25 @@ export function SearchableSelect({ children, value, defaultValue, onChange, disa
     element.addEventListener("wheel", scroll, { passive: false });
     return () => element.removeEventListener("wheel", scroll);
   }, [disabled]);
-  const close = () => { if (root.current) root.current.open = false; };
+  const close = () => {
+    if (root.current) root.current.open = false;
+    trigger.current?.focus();
+  };
   const onSelectKeyDown = (event: KeyboardEvent<HTMLSelectElement>) => {
     if (event.key === "ArrowUp" || event.key === "ArrowDown") navigating.current = true;
-    if (event.key === "Enter" || event.key === "Escape") { event.stopPropagation(); close(); }
+    if (event.key === "Enter" || event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); }
   };
   return <details className="searchable-select" ref={root} onToggle={(event) => {
     const next = event.currentTarget.open;
     setOpen(next);
     if (!next) { setQuery(""); setCount(20); navigating.current = false; }
   }}>
-    <summary aria-disabled={disabled} onClick={(event) => { if (disabled) event.preventDefault(); }}><span>{label ? text(label.props.children) : "请选择"}</span><ChevronDown size={16} aria-hidden="true" /></summary>
-    {!disabled && <div className="searchable-select-panel"><input ref={search} aria-label={`${props["aria-label"] || "选项"}搜索`} placeholder="输入名称或标识搜索" value={query} onChange={(event) => { setQuery(event.target.value); setCount(20); }} onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); close(); } }} />
+    <summary className="select-trigger" ref={trigger} aria-disabled={disabled} tabIndex={disabled ? -1 : 0}
+      onClick={event => { if (disabled) event.preventDefault(); }}>
+      <span className="select-value">{label ? text(label.props.children) : "请选择"}</span>
+      <ChevronDown className="select-chevron" size={18} aria-hidden="true" />
+    </summary>
+    {!disabled && <div className="searchable-select-panel"><input ref={search} aria-label={`${props["aria-label"] || "选项"}搜索`} placeholder="输入名称或标识搜索" value={query} onChange={(event) => { setQuery(event.target.value); setCount(20); }} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); close(); } }} />
       <select {...props} ref={select} value={selected} size={Math.min(8, Math.max(2, filtered.length))} onKeyDown={onSelectKeyDown} onChange={(event) => {
         setLocal(event.target.value); onChange?.(event);
         if (navigating.current) navigating.current = false; else close();

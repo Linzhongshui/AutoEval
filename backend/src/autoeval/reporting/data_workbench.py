@@ -1,8 +1,11 @@
 """Development curation, independent of immutable evaluation reports."""
 
+import asyncio
 import hashlib
 import json
 import uuid
+from collections import OrderedDict
+from time import monotonic, perf_counter
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -102,7 +105,57 @@ def audit(session, request, row, action, reason):
     )
 
 
-async def validate_report(request, session, entry):
+class PublishedEvidenceCache:
+    """Short-lived evidence projections for the public read path."""
+
+    def __init__(self):
+        self.verified = OrderedDict()
+        self.pending = {}
+        self.capacity = asyncio.Semaphore(8)
+
+    async def get(self, settings, report, run, snapshot):
+        key = (report.id, report.object_key, report.sha256, snapshot.sha256)
+        cached = self.verified.get(key)
+        if cached is not None:
+            if cached[0] > monotonic():
+                self.verified.move_to_end(key)
+                return "verified", cached[1]
+            del self.verified[key]
+
+        if key not in self.pending:
+
+            async def check():
+                try:
+                    async with self.capacity:
+                        status, body = await verified_report_body(settings, report, run, snapshot)
+                    if status == "verified" and body is not None:
+                        body = {
+                            "schema_version": body["schema_version"],
+                            "datasets": [
+                                {
+                                    "context": dataset["context"],
+                                    "validity": dataset["validity"],
+                                    "summary": {"accuracy": dataset["summary"].get("accuracy")},
+                                }
+                                for dataset in body.get("datasets", [])
+                            ],
+                        }
+                        self.verified[key] = (monotonic() + 30, body)
+                        while len(self.verified) > 64:
+                            self.verified.popitem(last=False)
+                    return status, body
+                finally:
+                    self.pending.pop(key, None)
+
+            self.pending[key] = asyncio.create_task(check())
+            # If all waiting requests disconnect, still retrieve any task exception.
+            self.pending[key].add_done_callback(
+                lambda task: None if task.cancelled() else task.exception()
+            )
+        return await asyncio.shield(self.pending[key])
+
+
+async def validate_report(request, session, entry, *, evidence_cache=None):
     if entry.source_type != "report":
         return
     from autoeval.infrastructure.models import EvaluationRun
@@ -121,7 +174,8 @@ async def validate_report(request, session, entry):
         raise HTTPException(409, "Report is incomplete or original evidence is unavailable")
     frozen = snapshot.canonical_body
     source_key = "report-" + str(report.id)
-    status, body = await verified_report_body(request.app.state.settings, report, run, snapshot)
+    check_evidence = evidence_cache.get if evidence_cache is not None else verified_report_body
+    status, body = await check_evidence(request.app.state.settings, report, run, snapshot)
     if status != "verified" or body is None:
         raise HTTPException(409, "Report is incomplete or original evidence is unavailable")
     if body.get("schema_version") == "task-report.v2":
@@ -293,64 +347,82 @@ async def published(
                 .order_by(LeaderboardRecord.created_at.desc(), LeaderboardRecord.id.desc())
             )
         ).all()
-        groups = {}
-        for row in rows:
-            entry = EntryInput.model_validate(row.payload)
-            frozen = None
-            if entry.source_type == "report":
-                try:
-                    frozen = await validate_report(request, session, entry)
-                except HTTPException:
-                    continue
-            identity = {
-                key: row.payload[key]
-                for key in (
-                    "dataset",
-                    "metric",
-                    "unit",
-                    "direction",
-                    "scope",
-                    "conditions",
-                    "source_type",
-                    "source_name",
-                    "source_version",
+
+    entries = [EntryInput.model_validate(row.payload) for row in rows]
+    semaphore = asyncio.Semaphore(4)
+    state = request.app.state
+    if not hasattr(state, "published_evidence_cache"):
+        state.published_evidence_cache = PublishedEvidenceCache()
+
+    async def validate_published(entry):
+        async with semaphore, request.app.state.sessions() as session:
+            try:
+                return await validate_report(
+                    request, session, entry, evidence_cache=state.published_evidence_cache
                 )
-            }
-            # Report IDs are provenance, not comparison groups.
-            if entry.source_type == "report":
-                identity.pop("source_version")
-                identity["dataset"] = report_dataset(frozen)
-                identity["config_version_id"] = frozen.get("config_version_id") if frozen else None
-            if any(
-                value is None
-                or str(value).strip().lower() in {"unknown", "未知", "未提供", "待确认"}
-                for value in entry.conditions.values()
-            ):
-                identity["unconfirmed_condition_record"] = str(row.id)
-            digest = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
-            group = groups.setdefault(digest, {"id": digest, "comparison": identity, "entries": []})
-            item = view(row)
-            item["model_id"] = frozen.get("model_version_id") if frozen else entry.model_name
-            item["config_version_id"] = frozen.get("config_version_id") if frozen else None
-            group["entries"].append(item)
-        for group in groups.values():
-            group["total_records"] = len(group["entries"])
-            if selection == "best":
-                group["entries"] = best_per_model(
-                    group["entries"], group["comparison"]["direction"]
-                )
-            group["entries"].sort(
-                key=lambda v: v["entry"]["value"],
-                reverse=group["comparison"]["direction"] == "higher_is_better",
+            except HTTPException:
+                return None
+
+    report_positions = [
+        index for index, entry in enumerate(entries) if entry.source_type == "report"
+    ]
+    validation_started = perf_counter()
+    validated = await asyncio.gather(
+        *(validate_published(entries[index]) for index in report_positions)
+    )
+    request.state.report_validation_ms = (perf_counter() - validation_started) * 1000
+    frozen_by_position = dict(zip(report_positions, validated, strict=True))
+    groups = {}
+    for index, (row, entry) in enumerate(zip(rows, entries, strict=True)):
+        frozen = frozen_by_position.get(index)
+        if entry.source_type == "report" and frozen is None:
+            continue
+        identity = {
+            key: row.payload[key]
+            for key in (
+                "dataset",
+                "metric",
+                "unit",
+                "direction",
+                "scope",
+                "conditions",
+                "source_type",
+                "source_name",
+                "source_version",
             )
-            previous, rank = None, 0
-            for position, item in enumerate(group["entries"], 1):
-                if item["entry"]["value"] != previous:
-                    rank = position
-                item["rank"] = rank
-                previous = item["entry"]["value"]
-        if compact:
-            for group in groups.values():
-                # Entry conditions remain available in the test method drawer.
-                group["comparison"].pop("conditions")
-        return {"data": list(groups.values())}
+        }
+        # Report IDs are provenance, not comparison groups.
+        if entry.source_type == "report":
+            identity.pop("source_version")
+            identity["dataset"] = report_dataset(frozen)
+            identity["config_version_id"] = frozen.get("config_version_id") if frozen else None
+        if any(
+            value is None or str(value).strip().lower() in {"unknown", "未知", "未提供", "待确认"}
+            for value in entry.conditions.values()
+        ):
+            identity["unconfirmed_condition_record"] = str(row.id)
+        digest = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
+        group = groups.setdefault(digest, {"id": digest, "comparison": identity, "entries": []})
+        item = view(row)
+        item["model_id"] = frozen.get("model_version_id") if frozen else entry.model_name
+        item["config_version_id"] = frozen.get("config_version_id") if frozen else None
+        group["entries"].append(item)
+    for group in groups.values():
+        group["total_records"] = len(group["entries"])
+        if selection == "best":
+            group["entries"] = best_per_model(group["entries"], group["comparison"]["direction"])
+        group["entries"].sort(
+            key=lambda v: v["entry"]["value"],
+            reverse=group["comparison"]["direction"] == "higher_is_better",
+        )
+        previous, rank = None, 0
+        for position, item in enumerate(group["entries"], 1):
+            if item["entry"]["value"] != previous:
+                rank = position
+            item["rank"] = rank
+            previous = item["entry"]["value"]
+    if compact:
+        for group in groups.values():
+            # Entry conditions remain available in the test method drawer.
+            group["comparison"].pop("conditions")
+    return {"data": list(groups.values())}

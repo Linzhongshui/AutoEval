@@ -21,6 +21,7 @@ from autoeval.catalog.registry import router as registry_router
 from autoeval.catalog.standard_inputs import router as standard_inputs_router
 from autoeval.evaluation.evaluation_tasks import router as evaluation_tasks_router
 from autoeval.evaluation.evaluations import router as evaluations_router
+from autoeval.evaluation.executor_files import router as executor_files_router
 from autoeval.evaluation.fixture_pipeline import router as fixture_pipeline_router
 from autoeval.evaluation.monitored_execution import router as monitored_router
 from autoeval.evaluation.runs import router as runs_router
@@ -29,6 +30,8 @@ from autoeval.infrastructure.audit import router as audit_router
 from autoeval.infrastructure.config import Settings, get_settings
 from autoeval.infrastructure.db import create_database
 from autoeval.planning.routes import router as planning_router
+from autoeval.reporting.badcase_export import router as badcase_export_router
+from autoeval.reporting.badcases import router as badcase_router
 from autoeval.reporting.case_history import router as case_history_router
 from autoeval.reporting.data_workbench import router as data_workbench_router
 from autoeval.reporting.langfuse_integration import router as langfuse_router
@@ -61,6 +64,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(monitored_router)
     app.include_router(planning_router)
     app.include_router(evaluation_tasks_router)
+    app.include_router(executor_files_router)
     app.include_router(configuration_router)
     app.include_router(case_history_router)
     app.include_router(langfuse_router)
@@ -76,6 +80,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(analysis_router)
     app.include_router(audit_router)
     app.include_router(reports_router)
+    app.include_router(badcase_router)
+    app.include_router(badcase_export_router)
 
     @app.middleware('http')
     async def budget_entrypoints(request: Request, call_next):
@@ -93,6 +99,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         response = await call_next(request)
         response.headers["X-Request-ID"] = request.state.request_id
         response.headers["Server-Timing"] = f"app;dur={(perf_counter() - started) * 1000:.1f}"
+        validation_ms = getattr(request.state, "report_validation_ms", None)
+        if validation_ms is not None:
+            response.headers["Server-Timing"] += f", report_validation;dur={validation_ms:.1f}"
         # One line per request; credentials, prompts and model payloads never appear here.
         request_log.info(
             "request_id=%s method=%s path=%s status=%s",
@@ -193,6 +202,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "planning_datasets": ["GPQA", "MMMU-Pro", "DeepSWE"],
                 "planned_execution_requires_resource_preflight": True,
                 "analysis_enabled": analysis_is_configured(settings),
+                "executor_files_enabled": settings.environment in {"development", "test"},
                 "data_workbench_enabled": settings.environment in {"development", "test"},
                 "aurora_enabled": False,
                 "customer_ssh_enabled": True,

@@ -9,6 +9,35 @@ from autoeval.planning.planning_transport import runtime_files
 from autoeval_runtime.planning_runtime import validate_spec
 
 
+async def test_queued_plan_with_expired_preflight_fails_before_submission(monkeypatch):
+    from contextlib import asynccontextmanager
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from autoeval.planning import planning_worker as worker
+
+    job = SimpleNamespace(
+        kind="plan", state="pending", cancel_requested=False, payload={"throughput_profile_id": "curve"}
+    )
+    session = AsyncMock()
+    session.get.side_effect = [job, SimpleNamespace()]
+
+    @asynccontextmanager
+    async def sessions():
+        yield session
+
+    adapter = AsyncMock()
+    update = AsyncMock()
+    monkeypatch.setattr(worker, "transport", AsyncMock(return_value=adapter))
+    monkeypatch.setattr(worker, "current_preflight", AsyncMock(return_value=None))
+    monkeypatch.setattr(worker, "set_job", update)
+    await worker.execute_job(sessions, None, "queued-plan")
+    update.assert_awaited_once()
+    assert update.await_args.kwargs["state"] == "failed"
+    assert update.await_args.kwargs["result"]["error_code"] == "plan_preflight_required"
+    adapter.submit.assert_not_awaited()
+
+
 def test_transports_ship_the_standalone_runtime_after_package_refactor():
     import ast
     from types import SimpleNamespace
@@ -102,3 +131,28 @@ def test_probe_reports_real_level_boundaries_without_network(tmp_path, monkeypat
     assert result["progress"]["job_id"] == tmp_path.name
     assert probe._run_level is original
     assert not (tmp_path / "credential.json").exists()
+
+
+def test_operator_aisbench_acceptance_can_disable_warmup(tmp_path):
+    from autoeval_runtime.planning_runtime import ADAPTOR_REVISION, aisbench_without_warmup
+
+    spec = {
+        "kind": "adaptor",
+        "compilation": {
+            "adaptor_revision": ADAPTOR_REVISION,
+            "config": {"subcommand": "llm_accuracy"},
+        },
+        "tool": {},
+        "credential": "test",
+        "skip_aisbench_warmup": True,
+    }
+    validate_spec(spec)
+    spec["compilation"]["config"]["subcommand"] = "harbor_agent"
+    with pytest.raises(ValueError, match="requires AISBench"):
+        validate_spec(spec)
+    wrapper = tmp_path / "aisbench-python-no-warmup"
+    assert aisbench_without_warmup(tmp_path, "/path with spaces/python3") == str(wrapper)
+    content = wrapper.read_text(encoding="utf-8")
+    assert "'/path with spaces/python3'" in content
+    assert "ais_bench.benchmark.cli.main" in content
+    assert "--num-warmups 0" in content

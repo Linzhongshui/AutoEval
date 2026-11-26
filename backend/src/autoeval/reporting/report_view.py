@@ -3,6 +3,32 @@
 from autoeval.catalog.benchmarks import compare_baseline
 from autoeval.catalog.dataset_identity import report_dataset
 
+ACCURACY_DATASETS = {"GPQA", "GPQA_Diamond", "gpqa-diamond", "DeepSWE", "AutomationBench", "MMMU-Pro"}
+
+
+def report_task_type(frozen):
+    if "task_type" in frozen:
+        kind = frozen["task_type"]
+        return kind if kind in ("accuracy", "performance") else "other"
+    inputs = frozen.get("inputs")
+    tasks = inputs.get("tasks") if isinstance(inputs, dict) else None
+    if tasks is not None and not isinstance(tasks, list):
+        return "other"
+    if tasks:
+        if not all(isinstance(task, dict) for task in tasks):
+            return "other"
+        commands = []
+        for task in tasks:
+            compilation = task.get("compilation")
+            config = compilation.get("config") if isinstance(compilation, dict) else None
+            commands.append(config.get("subcommand") if isinstance(config, dict) else None)
+        if all(command in ("llm_perf", "agentx") for command in commands):
+            return "performance"
+        datasets = [task.get("dataset") for task in tasks]
+    else:
+        datasets = [frozen.get("dataset_key")]
+    return "accuracy" if all(isinstance(d, str) and d in ACCURACY_DATASETS for d in datasets) else "other"
+
 
 def report_data(
     row,
@@ -33,8 +59,10 @@ def report_data(
         }
 
     return {
+        "task_type": report_task_type(snapshot.canonical_body),
         "id": str(row.id),
         "run_id": str(row.run_id),
+        "dataset_concurrency": (snapshot.canonical_body.get("inputs") or {}).get("dataset_concurrency", 1),
         "execution_kind": "planned"
         if snapshot.canonical_body.get("schema_version") == "planned-run.v1"
         else "evaluation",
@@ -42,7 +70,11 @@ def report_data(
         "validity": row.validity,
         "evidence_status": evidence_status,
         "summary": row.summary,
-        "dataset_key": "多个数据集" if aggregate else report_dataset(snapshot.canonical_body),
+        "dataset_key": (
+            ", ".join(t["dataset"] for t in snapshot.canonical_body["inputs"]["tasks"])
+            if snapshot.canonical_body.get("task_type") == "performance"
+            else "多个数据集" if aggregate else report_dataset(snapshot.canonical_body)
+        ),
         "sha256": row.sha256,
         "snapshot_sha256": row.snapshot_sha256,
         "run_mode": run.run_mode,
@@ -59,4 +91,12 @@ def report_data(
         "analysis_status": analysis_status,
         "analysis_id": str(analysis_id) if analysis_id else None,
         "baseline_comparison": comparison,
+        "review_status": getattr(row, "review_status", "pending"),
+        "reviewed_by": getattr(row, "reviewed_by", None),
+        "reviewed_at": (
+            row.reviewed_at.isoformat()
+            if getattr(row, "reviewed_at", None)
+            else None
+        ),
+        "review_note": getattr(row, "review_note", None),
     }

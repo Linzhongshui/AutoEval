@@ -7,6 +7,27 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 
+def authorized_scope(config, snapshot):
+    expected = config.get("expected_scope")
+    if not expected:
+        return True
+    concurrency = config.get("expected_concurrency", 24)
+    subset = config.get("expected_subset_scope", "full")
+    tasks = snapshot.get("inputs", {}).get("tasks", [])
+    return (
+        type(concurrency) is int
+        and concurrency >= 1
+        and subset in {"lite", "full"}
+        and len(tasks) == len(expected)
+        and {task["dataset"]: len(task.get("samples", [])) for task in tasks} == expected
+        and all(
+            task.get("concurrency") == concurrency and task.get("subset_scope") == subset
+            for task in tasks
+        )
+        and snapshot.get("execution_origin") == "real"
+    )
+
+
 def execution_route(settings, run_id, target_id, dataset, section="evaluation", *, ignore_budget=False):
     if ignore_budget:
         return None
@@ -46,7 +67,7 @@ def execution_route(settings, run_id, target_id, dataset, section="evaluation", 
 def route_compilation(compilation, route):
     result = copy.deepcopy(compilation)
     params = result["config"]["params"]
-    field = "url" if result["config"]["subcommand"] == "llm_accuracy" else "api_base"
+    field = "url" if result["config"]["subcommand"] in {"llm_accuracy", "llm_perf", "agentx"} else "api_base"
     if field == "api_base":
         upstream = urlsplit(params.get("api_base") or "").hostname
         gateway = urlsplit(route["base_url"]).hostname
@@ -54,7 +75,7 @@ def route_compilation(compilation, route):
         if gateway and gateway not in {host.lower() for host in hosts}:
             hosts.append(gateway)
         params["extra_allowed_hosts"] = hosts
-    params[field] = route["base_url"]
+    params[field] = route["base_url"].removesuffix("/v1") if result["config"]["subcommand"] == "llm_accuracy" else route["base_url"]
     if any(key in params for key in ("host_ip", "host_port", "model_overrides")):
         raise ValueError("Alternate model routing must be removed for budgeted execution")
     return result

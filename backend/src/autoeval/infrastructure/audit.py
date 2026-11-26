@@ -30,9 +30,10 @@ class AuditEvent(Record, Base):
 
 
 def record_audit(session, *, action: str, resource_id: str, run_id: uuid.UUID | None,
-                 outcome: str, request_id: str, details: dict):
+                 outcome: str, request_id: str, details: dict,
+                 resource_type: str = "evaluation_run"):
     session.add(AuditEvent(
-        actor="local-operator", action=action, resource_type="evaluation_run",
+        actor="local-operator", action=action, resource_type=resource_type,
         resource_id=resource_id, run_id=run_id, outcome=outcome,
         request_id=request_id, details=details,
     ))

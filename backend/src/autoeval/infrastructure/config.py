@@ -96,13 +96,17 @@ class Settings(BaseSettings):
                 "Production OAuth requires at least one fully configured provider "
                 "(GitHub or GitCode application credentials)"
             )
+        if not (self.superadmin_accounts or self.admin_accounts):
+            raise ValueError(
+                "Production requires at least one bootstrap account "
+                "(AE_SUPERADMIN_ACCOUNTS or AE_ADMIN_ACCOUNTS with provider:provider_uid), "
+                "otherwise the platform could end up with no privileged account"
+            )
         loopback = ("http://localhost", "http://127.0.0.1")
         if self.oauth_redirect_base.startswith(loopback) or self.frontend_origin.startswith(
             loopback
         ):
-            raise ValueError(
-                "Production requires a public frontend origin and OAuth redirect base"
-            )
+            raise ValueError("Production requires a public frontend origin and OAuth redirect base")
         return self
 
 

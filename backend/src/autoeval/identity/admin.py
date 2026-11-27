@@ -77,20 +77,13 @@ def _audit(
     )
 
 
-async def _ensure_not_last_superadmin(session, user_id, action: str) -> None:
-    """处置超级管理员前校验：必须存在另一位未停用的超级管理员。"""
-    others = (
-        await session.execute(
-            select(func.count())
-            .select_from(PlatformUser)
-            .where(
-                PlatformUser.role == "superadmin",
-                PlatformUser.suspended_at.is_(None),
-                PlatformUser.id != user_id,
-            )
-        )
-    ).scalar_one()
-    if others == 0:
+def _ensure_not_last_superadmin(locked_superadmins, user_id, action: str) -> None:
+    """处置超级管理员前校验：必须存在另一位未停用的超级管理员。
+
+    调用方已用单一 ``SELECT ... FOR UPDATE``（按 id 排序）锁定全部有效超管行，
+    此处只数锁内行，保证并发请求串行化后校验无法被竞态绕过。
+    """
+    if not any(row.id != user_id for row in locked_superadmins):
         raise HTTPException(409, f"最后一个有效超级管理员不可{action}")
 
 
@@ -154,13 +147,26 @@ async def update_user(
         raise HTTPException(422, "没有需要更新的字段")
     try:
         async with request.app.state.sessions() as session:
+            # 单一查询、按 id 排序锁定全部有效超管行：并发角色/停用操作在此串行化，
+            # 后续“最后一位有效超管”校验读的是锁内行，不会被 TOCTOU 竞态绕过。
+            locked_superadmins = list(
+                await session.scalars(
+                    select(PlatformUser)
+                    .where(
+                        PlatformUser.role == "superadmin",
+                        PlatformUser.suspended_at.is_(None),
+                    )
+                    .order_by(PlatformUser.id)
+                    .with_for_update()
+                )
+            )
             target = await session.get(PlatformUser, user_id)
             if target is None:
                 raise HTTPException(404, "用户不存在")
             changes: dict[str, Any] = {}
             if patch.role is not None and patch.role != target.role:
                 # 角色调整收归超管；唯一例外：管理员可以把自己降级为普通用户
-                #（不能提拔任何人、不能动其他管理员、不能动超管）。
+                # （不能提拔任何人、不能动其他管理员、不能动超管）。
                 self_demotion = (
                     principal.role == "admin"
                     and str(target.id) == principal.id
@@ -169,7 +175,7 @@ async def update_user(
                 if principal.role != "superadmin" and not self_demotion:
                     raise HTTPException(403, "仅超级管理员可以调整角色")
                 if target.role == "superadmin" and patch.role != "superadmin":
-                    await _ensure_not_last_superadmin(session, target.id, action="降级")
+                    _ensure_not_last_superadmin(locked_superadmins, target.id, action="降级")
                 changes["role"] = {"from": target.role, "to": patch.role}
                 target.role = patch.role
             if patch.suspended is not None and (target.suspended_at is not None) != patch.suspended:
@@ -177,7 +183,7 @@ async def update_user(
                     # 管理员只能停用/恢复普通用户，不能互相停用，不能动超管
                     raise HTTPException(403, "仅超级管理员可以停用管理员或超级管理员")
                 if patch.suspended and target.role == "superadmin":
-                    await _ensure_not_last_superadmin(session, target.id, action="停用")
+                    _ensure_not_last_superadmin(locked_superadmins, target.id, action="停用")
                 if patch.suspended:
                     # 停用即吊销该用户全部会话，已登录会话立刻失效
                     revoked = (

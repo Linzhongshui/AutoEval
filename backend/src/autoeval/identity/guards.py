@@ -48,6 +48,8 @@ class Principal:
 
 
 def local_principal() -> Principal:
+    # 本地免登录开发流使用 superadmin 身份，保证角色管理、停用等
+    # 超管专属操作在本地模式下同样可以验证（无需搭建 OAuth 环境）。
     return Principal(
         id="local-operator",
         provider="local",
@@ -55,7 +57,7 @@ def local_principal() -> Principal:
         display_name="本地操作员",
         email=None,
         avatar_url=None,
-        role="admin",
+        role="superadmin",
     )
 
 

@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from time import perf_counter
 from uuid import uuid4
 
@@ -25,6 +25,7 @@ from autoeval.evaluation.fixture_pipeline import router as fixture_pipeline_rout
 from autoeval.evaluation.monitored_execution import router as monitored_router
 from autoeval.evaluation.runs import router as runs_router
 from autoeval.evaluation.task_monitor import router as task_monitor_router
+from autoeval.identity import cleanup_expired_identity_rows
 from autoeval.identity import router as identity_router
 from autoeval.identity.admin import router as admin_router
 from autoeval.identity.guards import require_admin, require_user
@@ -47,6 +48,15 @@ from autoeval.resources.targets import router as targets_router
 
 request_log = logging.getLogger("autoeval.request")
 
+IDENTITY_CLEANUP_INTERVAL_SECONDS = 3600
+
+
+async def _identity_cleanup_loop(app: FastAPI) -> None:
+    """每小时清理一次过期的 OAuth state 与用户会话行。"""
+    while True:
+        await asyncio.sleep(IDENTITY_CLEANUP_INTERVAL_SECONDS)
+        await cleanup_expired_identity_rows(app.state.sessions)
+
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
@@ -57,7 +67,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         app.state.engine, app.state.sessions = create_database(settings)
         # 管理员保存的平台配置在启动时叠加到运行时设置（预算开关、归档清单、Langfuse 链接）
         await load_config_overlay(app.state.sessions, settings)
-        yield
+        # 过期登录 state 与会话行：启动即清理一次，此后每小时一轮
+        await cleanup_expired_identity_rows(app.state.sessions)
+        cleanup_task = asyncio.create_task(_identity_cleanup_loop(app))
+        try:
+            yield
+        finally:
+            cleanup_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await cleanup_task
         await app.state.engine.dispose()
 
     app = FastAPI(title="AutoEval Backend", version="0.1.0", lifespan=lifespan)

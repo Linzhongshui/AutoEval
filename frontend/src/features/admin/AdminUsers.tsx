@@ -34,6 +34,8 @@ export function AdminUsers({
   const [appliedQuery, setAppliedQuery] = useState("");
   const [rows, setRows] = useState<AdminUser[]>([]);
   const [total, setTotal] = useState(0);
+  const [nextOffset, setNextOffset] = useState<number | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [message, setMessage] = useState("正在读取用户…");
   const [attempt, setAttempt] = useState(0);
   const [busyId, setBusyId] = useState("");
@@ -47,15 +49,33 @@ export function AdminUsers({
         if (controller.signal.aborted) return;
         setRows(page.data);
         setTotal(page.total ?? page.data.length);
+        setNextOffset(page.next_offset);
         setMessage(page.data.length ? "" : "没有匹配的用户。");
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
         setRows([]);
+        setNextOffset(null);
         setMessage(error instanceof ApiError ? `用户列表读取失败：${error.message}` : "用户列表读取失败，请重试。");
       });
     return () => controller.abort();
   }, [appliedQuery, attempt]);
+
+  const loadMore = async () => {
+    if (nextOffset === null || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const params = new URLSearchParams({ offset: String(nextOffset), limit: "100" });
+      if (appliedQuery.trim()) params.set("q", appliedQuery.trim());
+      const page = await apiGetPage<AdminUser[]>(`/admin/users?${params.toString()}`);
+      setRows((value) => [...value, ...page.data]);
+      setNextOffset(page.next_offset);
+    } catch (error: unknown) {
+      notify(error instanceof ApiError ? `加载更多失败：${error.message}` : "加载更多失败，请重试。");
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   const mutate = async (id: string, body: object, okMessage: string, needConfirm?: string) => {
     if (busyId) return;
@@ -203,6 +223,13 @@ export function AdminUsers({
               })}
             </tbody>
           </table>
+          {nextOffset !== null && (
+            <div className="admin-more">
+              <button type="button" disabled={loadingMore} onClick={loadMore}>
+                {loadingMore ? "加载中…" : "加载更多"}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

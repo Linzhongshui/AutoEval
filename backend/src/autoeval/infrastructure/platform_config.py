@@ -93,21 +93,29 @@ async def load_config_overlay(sessions, settings: Settings) -> None:
 
 
 async def save_config_values(sessions, settings: Settings, updates: dict, actor: str) -> dict:
-    """Validate, persist and apply updates; returns the JSON-safe applied values."""
+    """Validate, persist and apply updates; returns the JSON-safe applied values.
+
+    校验与转换在写库前完成，提交成功后才把新值应用到运行中的 ``Settings``：
+    任一键校验失败（422）或提交失败（503）时，内存与存储都不会部分生效。
+    """
+    converted: dict[str, Any] = {}
+    for key, raw in updates.items():
+        if key not in MANAGED_KEYS:
+            raise ValueError(f"未知配置项: {key}")
+        converted[key] = MANAGED_KEYS[key](raw)  # raises TypeError/ValueError before any write
     applied: dict[str, Any] = {}
     async with sessions() as session:
-        for key, raw in updates.items():
-            if key not in MANAGED_KEYS:
-                raise ValueError(f"未知配置项: {key}")
-            converted = apply_value(settings, key, raw)  # raises ValueError
+        for key, value in converted.items():
             stored = (
                 await session.execute(select(PlatformConfig).where(PlatformConfig.key == key))
             ).scalar_one_or_none()
             if stored is None:
-                session.add(PlatformConfig(key=key, value={"value": converted}, updated_by=actor))
+                session.add(PlatformConfig(key=key, value={"value": value}, updated_by=actor))
             else:
-                stored.value = {"value": converted}
+                stored.value = {"value": value}
                 stored.updated_by = actor
-            applied[key] = converted
+            applied[key] = value
         await session.commit()
+    for key, value in converted.items():
+        setattr(settings, key, value)
     return applied

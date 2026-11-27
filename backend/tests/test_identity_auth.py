@@ -72,6 +72,15 @@ def test_production_identity_config():
             github_client_id="gid",
             github_client_secret="gsec",
         )  # frontend_origin / redirect 默认仍是本机地址
+    with pytest.raises(ValueError):
+        _settings(
+            environment="production",
+            auth_mode="oauth",
+            github_client_id="gid",
+            github_client_secret="gsec",
+            oauth_redirect_base="https://api.example.com",
+            frontend_origin="https://app.example.com",
+        )  # 无任何引导白名单：生产环境不允许建成无特权账号的平台
     configured = _settings(
         environment="production",
         auth_mode="oauth",
@@ -79,6 +88,7 @@ def test_production_identity_config():
         github_client_secret="gsec",
         oauth_redirect_base="https://api.example.com",
         frontend_origin="https://app.example.com",
+        superadmin_accounts=["gitcode:1"],
     )
     assert configured.auth_mode == "oauth"
 
@@ -206,7 +216,7 @@ async def test_me_local_mode_returns_local_operator():
         "display_name": "本地操作员",
         "email": None,
         "avatar_url": None,
-        "role": "admin",
+        "role": "superadmin",
     }
 
 

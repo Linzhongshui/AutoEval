@@ -390,6 +390,7 @@ async def test_production_maintenance_endpoints_stay_guarded_live():
         github_client_secret="gsec",
         oauth_redirect_base="https://api.example.com",
         frontend_origin="https://app.example.com",
+        superadmin_accounts=["gitcode:1"],
         database_url=DATABASE_URL,
     )
     app = _make_app(settings)

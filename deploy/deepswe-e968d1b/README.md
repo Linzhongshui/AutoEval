@@ -25,6 +25,10 @@ docker run --rm --network none -e LITELLM_LOCAL_MODEL_COST_MAP=True \
   -v "$PWD/verify.py:/tmp/verify.py:ro" --entrypoint python "$image_id" /tmp/verify.py
 ```
 
+## 平台派发配置
+
+使用平台派发任务时，请同步更新携带 `autoeval_runtime/planning_runtime.py` 的执行 Worker。Worker 向 SSH 执行环境传送该运行时代码。对标准 DeepSWE v1.1 的内置 Mini-SWE 和显式 API Base，运行时会在调用适配器前将裸模型名转换成 `openai/<服务模型名>`，并为作业和 Agent 设置 `LITELLM_LOCAL_MODEL_COST_MAP=True`。配置快照仍保留登记的服务模型名。下一次新作业的 Harbor Job Config 应能直接看到带前缀的 `model_name`。已启动的作业继续使用其启动时的配置。
+
 ## 从源码重建与验证
 
 在固定基础镜像已加载的 AMD64 构建机，从本目录复制 Dockerfile、offline_agent.py、patch_runner.py 到空构建目录，并将已核验的 Mini-SWE 2.4.6 / Python 3.12 Linux wheelhouse 放入其 wheels 子目录。Dockerfile 会核对清单及文件摘要。执行：

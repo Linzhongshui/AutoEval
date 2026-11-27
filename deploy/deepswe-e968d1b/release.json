@@ -1,0 +1,8 @@
+{
+  "platform": "linux/amd64",
+  "tag": "autoeval/deepswe:offline-e968d1b-issue38-v1",
+  "image_id": "sha256:31bd3acc6fdb13a9893b7570a511e4bdc9e4b6aed66a1dc674c1113cf72b0d17",
+  "uri": "obs://aisbench/images/autoeval/datasets/20261127-deepswe-issue38/78c34c03a063/deepswe-e968d1b-issue38.tar.gz",
+  "sha256": "78c34c03a06382b859ac4a543846b001d564f1a881eeba96f096865412b8ef00",
+  "bytes": 1421493240
+}

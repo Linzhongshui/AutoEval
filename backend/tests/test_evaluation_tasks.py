@@ -284,6 +284,7 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
             ) as c:
                 body = submission()
                 body.update(target_id=target_id, resource_id=resource_id)
+                body["dataset_concurrency"] = 2
 
                 async def send(key, value):
                     return await c.post(
@@ -338,6 +339,12 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                         headers={"Idempotency-Key": "new-legacy"},
                     )
                     assert blocked.status_code == 422 and "evaluation-tasks" in blocked.text
+                files = f"/api/autoeval/v1/evaluation-tasks/{rid}/executor-files"
+                jobs = (await c.get(files)).json()["data"]
+                assert {job["id"] for job in jobs} == {row["id"] for row in detail["datasets"]}
+                other_files = f"/api/autoeval/v1/evaluation-tasks/{second_run}/executor-files"
+                assert (await c.get(f"{other_files}/{jobs[0]['id']}")).status_code == 404
+                assert detail["snapshot"]["dataset_concurrency"] == 2
                 first = (await c.get("/api/autoeval/v1/evaluation-tasks?limit=1")).json()
                 assert first["statistics"]["total"] == 2 and first["next_offset"] == 1
                 second = (await c.get("/api/autoeval/v1/evaluation-tasks?limit=1&offset=1")).json()
@@ -738,6 +745,7 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                             state="failed", reason="native_unified_result_missing_or_ambiguous"
                         )
                     ),
+                    collect=AsyncMock(return_value={"result": {}}),
                     remove=AsyncMock(side_effect=remove_failed_child),
                 )
                 successful_adapter = SimpleNamespace(
@@ -814,6 +822,7 @@ async def test_unified_tasks_isolated_postgres(monkeypatch):
                         return True
 
                     return SimpleNamespace(ensure=ensure, remove=remove, submit=AsyncMock(),
+                                           collect=AsyncMock(return_value={"result": {}}),
                                            status=AsyncMock(return_value=SimpleNamespace(state="failed")))
 
                 monkeypatch.setattr(orchestration, "isolated_transport", AsyncMock(side_effect=owned_adapter))

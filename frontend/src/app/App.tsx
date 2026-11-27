@@ -1,7 +1,8 @@
-import { version } from "../../package.json";
 import { apiGetPage } from "../shared/api";
 import { BackendConnection } from "../shared/ui/BackendConnection";
 import { ManagementDrawer } from "../shared/ui/ManagementDrawer";
+import { AppearanceSettings } from "./AppearanceSettings";
+import { version } from "../../package.json";
 import { DataWorkbench, PublishedLeaderboard } from "../features/reporting/DataWorkbench";
 import { DatasetManifests } from "../features/catalog/DatasetManifests";
 import { ExecutionBindings } from "../features/catalog/ExecutionBindings";
@@ -9,7 +10,7 @@ import { StandardInputs } from "../features/catalog/StandardInputs";
 import { Configurations } from "../features/catalog/Configurations";
 import { useProfiles } from "../features/catalog/useProfiles";
 import { SSHResources } from "../features/resources/SSHResources";
-import { TaskPlanning } from "../features/planning/TaskPlanning";
+import { EvaluationConsoleTabs } from "../features/planning/EvaluationConsoleTabs";
 import { EvaluationRuns } from "../features/evaluation/EvaluationRuns";
 import { RealReports } from "../features/reporting/RealReports";
 import { RealLeaderboard } from "../features/reporting/RealLeaderboard";
@@ -63,12 +64,15 @@ const adminMenus = [
 const allMenus = [...menus, ...adminMenus];
 
 export function App() {
+  const [initialTarget, setInitialTarget] = useState("");
   const [page, setPage] = useState(location.hash.slice(1) || "console");
   const [profiles, setProfiles] = useProfiles(page === "config" || page.startsWith("config/"));
+  const [executorFilesEnabled, setExecutorFilesEnabled] = useState(false);
   const [workbenchEnabled, setWorkbenchEnabled] = useState(false);
   const [candidateScoresOpen, setCandidateScoresOpen] = useState(false);
   useEffect(() => { if (page !== "leaderboard") setCandidateScoresOpen(false); }, [page]);
-  const [poolReturn, setPoolReturn] = useState(false);
+  const [poolReturn, setPoolReturn] = useState<string | null>(() => history.state?.consoleReturn ?? null);
+  const consolePage = page === "console" || page === "console/performance";
   const [poolRevision, setPoolRevision] = useState(0);
   const poolPage = page === "config/ssh-pool" || page === "config/ssh-pool/add";
   const [toast, setToast] = useState("");
@@ -81,7 +85,6 @@ export function App() {
     refresh();
     reloadProviders();
   };
-  useEffect(() => { if (page !== "leaderboard") setCandidateScoresOpen(false); }, [page]);
   const evaluationPage = page === "tasks" || page.startsWith("run/") || page.startsWith("evaluate?");
   const go = (path: string) => {
     location.hash = path;
@@ -89,11 +92,28 @@ export function App() {
     window.scrollTo(0, 0);
   };
 
+  const openPool = (path: string, origin: string | null) => {
+    setPoolReturn(origin);
+    go(path);
+    history.replaceState({ ...history.state, consoleReturn: origin }, "");
+  };
+
   useEffect(() => {
-    const onHashChange = () => {
+    const onHashChange = (event?: HashChangeEvent) => {
       const hash = location.hash.slice(1) || "console";
+      if (hash === "config/ssh-pool" || hash === "config/ssh-pool/add") {
+        setPoolReturn(history.state?.consoleReturn ?? null);
+      } else if (event?.oldURL.split("#")[1]?.startsWith("config/ssh-pool")
+        && (hash === "console" || hash === "console/performance")) {
+        setPoolRevision(value => value + 1);
+      }
       if (hash.startsWith("planned-run/")) { location.replace(`#run/${hash.slice(12)}`); return; }
-      if (hash.startsWith("evaluate?")) { location.replace("#console"); return; }
+      if (hash.startsWith("evaluate?")) {
+        setInitialTarget(new URLSearchParams(hash.slice(9)).get("target") || "");
+        location.replace("#console");
+        return;
+      }
+      if (hash !== "console") setInitialTarget("");
       setPage(hash);
     };
     onHashChange();
@@ -117,6 +137,7 @@ export function App() {
             : allMenus.find((menu) => menu.id === page)?.label || "控制台";
   const descriptions: Record<string, string> = {
     home: "从一次测评开始，让模型能力与执行证据清晰可见。",
+    "console/performance": "选择模型服务与 SSH 节点，运行普通推理或 AgentX 轨迹回放。",
     console: "选择模型、数据集与执行资源，按当前参数发起测评；可选获取耗时估算和参数建议。",
     "config/ssh-pool": "维护测评使用的 SSH 节点，检查节点连接。",
     "config/ssh-pool/add": "登记节点连接信息与凭据。",
@@ -173,29 +194,30 @@ export function App() {
   // 管理员及以上（admin / superadmin）可见管理入口；具体操作权力由后端按角色裁决
   const isAdmin = user?.role === "admin" || user?.role === "superadmin";
 
+  const activeMenu = consolePage ? "console" : evaluationPage || page.startsWith("planned-run/") ? "tasks"
+    : page.startsWith("report/") ? "reports"
+    : page.startsWith("config/") ? "config"
+    : page;
+
   return (
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">
           <img className="brand-logo" src="/brand/autoeval-logo.svg" alt="AutoEval" />
+          <img className="brand-icon" src="/brand/autoeval-icon.svg" alt="AutoEval" />
         </div>
         <div className="workspace">工作空间：本地单工作空间</div>
-        <nav>
+        <nav aria-label="主菜单">
           {(isAdmin ? allMenus : menus).filter(menu => menu.id !== "data-workbench" || (workbenchEnabled && isAdmin)).map((menu) => (
             <a
               key={menu.id}
+              aria-label={menu.label}
               href={`#${menu.id}`}
-              className={
-                page === menu.id ||
-                ((evaluationPage || page.startsWith("planned-run/")) && menu.id === "tasks") ||
-                (page.startsWith("report/") && menu.id === "reports") ||
-                (page.startsWith("config/") && menu.id === "config")
-                  ? "selected"
-                  : ""
-              }
+              aria-current={activeMenu === menu.id ? "page" : undefined}
+              className={activeMenu === menu.id ? "selected" : ""}
             >
               <menu.icon size={22} />
-              {menu.label}
+              <span className="menu-label">{menu.label}</span>
             </a>
           ))}
         </nav>
@@ -204,7 +226,7 @@ export function App() {
         </div>
       </aside>
       <main className="main">
-        <BackendConnection onWorkbenchEnabled={setWorkbenchEnabled} />
+        <BackendConnection onExecutorFilesEnabled={setExecutorFilesEnabled} onWorkbenchEnabled={setWorkbenchEnabled} />
         <div className="breadcrumb">
           {page.startsWith("report/") ? (
             <button onClick={() => go("reports")}>报告管理</button>
@@ -222,6 +244,7 @@ export function App() {
               <UserArea user={user} onLoggedOut={refresh} notify={setToast} />
             </>
           )}
+          <AppearanceSettings />
         </div>
         <header className="page-heading">
           <div>
@@ -231,21 +254,20 @@ export function App() {
         </header>
 
         {page === "home" && <Overview go={go} />}
-        {(page === "console" || (poolPage && poolReturn)) && <div hidden={page !== "console"}>
-          <TaskPlanning poolRevision={poolRevision} onManagePool={(add) => {
-            setPoolReturn(true);
-            go(add ? "config/ssh-pool/add" : "config/ssh-pool");
+        {(consolePage || (poolPage && poolReturn)) && <div hidden={!consolePage}>
+          <EvaluationConsoleTabs initialTarget={initialTarget} page={consolePage ? page : poolReturn!} go={go} poolRevision={poolRevision} onManagePool={(add) => {
+            openPool(add ? "config/ssh-pool/add" : "config/ssh-pool", page);
           }} />
         </div>}
         {poolPage && <SSHResources
           adding={page.endsWith("/add")}
-          onAdd={() => go("config/ssh-pool/add")}
-          onCancel={() => go("config/ssh-pool")}
-          onSaved={() => { setPoolRevision(value => value + 1); go(poolReturn ? "console" : "config/ssh-pool"); }}
-          onBack={poolReturn ? () => go("console") : undefined}
+          onAdd={() => openPool("config/ssh-pool/add", poolReturn)}
+          onCancel={() => openPool("config/ssh-pool", poolReturn)}
+          onSaved={() => poolReturn ? go(poolReturn) : openPool("config/ssh-pool", null)}
+          onBack={poolReturn ? () => go(poolReturn) : undefined}
         />}
         {page === "config" && <div className="management-toolbar">
-          <button onClick={() => { setPoolReturn(false); go("config/ssh-pool"); }}>SSH 资源池</button>
+          <button onClick={() => openPool("config/ssh-pool", null)}>SSH 资源池</button>
           <ManagementDrawer title="管理样本清单"><DatasetManifests /></ManagementDrawer>
           <ManagementDrawer title="执行规则与绑定"><ExecutionBindings /></ManagementDrawer>
           {import.meta.env.DEV && <ManagementDrawer title="标准仓输入与版本"><StandardInputs /></ManagementDrawer>}
@@ -256,6 +278,7 @@ export function App() {
         {evaluationPage && (
           <div className="stack evaluation-tasks">
             <EvaluationRuns
+              debugEnabled={executorFilesEnabled}
               runId={page.startsWith("run/") ? page.slice(4) : undefined}
               initialTarget={
                 page.startsWith("evaluate?")

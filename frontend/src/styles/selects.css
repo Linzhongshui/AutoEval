@@ -1,0 +1,182 @@
+/* Keep the native select's form, keyboard and accessibility behavior. */
+:root {
+  --select-height: 40px;
+  --select-border: #d3d7e8;
+  --select-radius: 7px;
+  --select-panel-shadow: 0 8px 24px #18204820;
+}
+
+:is(select:not([size]):not([multiple]), .planning-select-trigger, .resource-multi-trigger, .searchable-select > summary) {
+  min-width: 0;
+  height: var(--select-height);
+  min-height: var(--select-height);
+  padding: 7px 12px;
+  border: 1px solid var(--select-border);
+  border-radius: var(--select-radius);
+  background-color: white;
+  color: #15182c;
+  font-size: var(--text-secondary);
+  font-weight: 400;
+  line-height: 1.5;
+  align-items: center;
+  text-align: start;
+  cursor: pointer;
+}
+:is(select:not([size]):not([multiple]), .planning-select-trigger, .resource-multi-trigger, .searchable-select > summary):hover:not(:disabled, [aria-disabled="true"]) {
+  border-color: var(--primary);
+}
+:is(select:not([size]):not([multiple]), .planning-select-trigger, .resource-multi-trigger, .searchable-select > summary):focus-visible,
+.searchable-select[open] > summary,
+:is(.planning-select-trigger, .resource-multi-trigger)[aria-expanded="true"] {
+  border-color: var(--primary);
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+select:not([size]):not([multiple]):disabled, .searchable-select > summary[aria-disabled="true"] {
+  background-color: #f1f2f6;
+  color: #626a7d;
+  cursor: not-allowed;
+}
+:is(.planning-select-trigger, .searchable-select > summary) > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+:is(.planning-select-trigger, .resource-multi-trigger, .searchable-select > summary) > svg {
+  width: 16px;
+  height: 16px;
+  color: #626a7d;
+}
+.searchable-select[open] > summary > svg,
+:is(.planning-select-trigger, .resource-multi-trigger)[aria-expanded="true"] > svg {
+  transform: rotate(180deg);
+}
+
+.planning-select-menu, .resource-multi-menu, .searchable-select-panel {
+  top: calc(100% + 4px);
+  margin-top: 0;
+  padding: 5px;
+  background: white;
+  border: 1px solid var(--select-border);
+  border-radius: var(--select-radius);
+  box-shadow: var(--select-panel-shadow);
+}
+.searchable-select-panel { min-width: 0; }
+.searchable-select-panel select[size] { border: 0; background: white; }
+select option, .planning-select-options > button, .resource-multi-options label {
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: var(--text-secondary);
+  line-height: 1.5;
+}
+select option:is(:hover, :focus-visible):not(:disabled),
+.planning-select-options > button:is(:hover, :focus-visible),
+.resource-multi-options label:is(:hover, :focus-within) {
+  background-color: var(--accent-hover);
+  color: var(--primary);
+}
+select option:checked, .planning-select-options > button[aria-pressed="true"],
+.resource-multi-options label:has(input:checked) {
+  background-color: var(--accent-soft);
+  color: var(--primary);
+  font-weight: 600;
+}
+select option:disabled { color: #626a7d; }
+
+@supports (appearance: base-select) and selector(::picker(select)) {
+  select:not([size]):not([multiple]), select::picker(select) {
+    appearance: base-select;
+  }
+  select:not([size]):not([multiple]) { display: flex; justify-content: space-between; gap: 8px; }
+  select::picker-icon {
+    content: "";
+    width: 8px;
+    height: 8px;
+    margin-inline: 4px;
+    border: solid #626a7d;
+    border-width: 0 1.5px 1.5px 0;
+    rotate: 45deg;
+    flex: none;
+    align-self: center;
+  }
+  select:open::picker-icon { rotate: 225deg; }
+
+  /* In fixed-width table cells, truncate the value independently of the arrow. */
+  .planning-table select > button {
+    display: block;
+    min-width: 0;
+    flex: 1;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    text-align: start;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  select::picker(select) {
+    inline-size: anchor-size(width);
+    max-inline-size: calc(100vw - 16px);
+    max-block-size: min(320px, 50dvh);
+    margin-block: 4px;
+    padding: 5px;
+    overflow: auto;
+    overscroll-behavior: contain;
+    border: 1px solid var(--select-border);
+    border-radius: var(--select-radius);
+    background: white;
+    box-shadow: var(--select-panel-shadow);
+  }
+  select:not([size]):not([multiple]) option {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  select option::checkmark { order: 1; margin-inline-start: auto; color: var(--primary); }
+}
+
+@supports not ((appearance: base-select) and selector(::picker(select))) {
+  select:not([multiple]):is(:not([size]), [size="1"]) {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2357617d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-size: 18px 18px;
+    background-position: right 12px center;
+    padding-inline-end: 38px;
+    text-overflow: ellipsis;
+    cursor: pointer;
+
+    &:open {
+      border-color: var(--primary);
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236545ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 15 6-6 6 6'/%3E%3C/svg%3E");
+    }
+
+    @media (forced-colors: active) {
+      appearance: auto;
+      background-image: none;
+      padding-inline-end: 12px;
+      &:open { background-image: none; }
+    }
+  }
+}
+
+.select-trigger .select-value {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.select-trigger > .select-chevron { flex: none; color: #57617d; }
+
+:is(.select-trigger[aria-expanded="true"], details[open] > .select-trigger) {
+  border-color: var(--primary);
+}
+:is(.select-trigger[aria-expanded="true"], details[open] > .select-trigger) > .select-chevron {
+  transform: rotate(180deg);
+  color: var(--primary);
+}
+
+@media (forced-colors: active) {
+  select:not([multiple]):not([size]), select::picker(select) { appearance: auto; background-image: none; }
+}

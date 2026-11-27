@@ -114,8 +114,9 @@ async def test_nonzero_slice_uses_original_ids_for_intent_and_results(tmp_path, 
     assert unified["cases"] == [{"case_id": "4", "native_case_id": "0"}]
 
 
+@pytest.mark.parametrize("has_predictions", [True, False])
 def test_runtime_publishes_observed_counts_and_archives_native_files_without_models(
-    tmp_path, monkeypatch
+    tmp_path, monkeypatch, has_predictions
 ):
     import sys
     import time
@@ -142,7 +143,8 @@ def test_runtime_publishes_observed_counts_and_archives_native_files_without_mod
             self.calls += 1
             path = output / "predictions/model-run/tmp/current.jsonl"
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text("\n".join(json.dumps(row(i)) for i in range(min(self.calls, 3))))
+            if has_predictions:
+                path.write_text("\n".join(json.dumps(row(i)) for i in range(min(self.calls, 3))))
             if self.calls == 4:
                 (output / "unified_result.json").write_text("{}")
                 self.returncode = 0
@@ -165,12 +167,18 @@ def test_runtime_publishes_observed_counts_and_archives_native_files_without_mod
             },
         },
     )
-    assert [p["finish_count"] for p in seen] == [1, 2, 3]
+    assert [p["finish_count"] for p in seen] == ([1, 2, 3] if has_predictions else [0, 0, 0])
     final = json.loads((tmp_path / "progress.json").read_text())
     assert (
-        final["finish_count"] == 3
+        final["finish_count"] == (3 if has_predictions else 0)
         and final["total_count"] == 3
         and final["snapshot_kind"] == "final"
     )
-    assert final["process_id"] == 1234 and result["native_files"]
+    assert final["process_id"] == 1234
+    assert bool(result["native_files"]) is has_predictions
+    assert result["tool_exit_code"] == 0
+    if has_predictions:
+        assert result["diagnostic"] is None
+    else:
+        assert "produced no unified cases" in result["diagnostic"]
     assert not (tmp_path / "credential.json").exists()

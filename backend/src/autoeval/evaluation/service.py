@@ -153,6 +153,7 @@ async def evaluation_run_detail(sessions, settings, run_id):
             if row is None or row.trigger_scope not in {
                 "local-operator:evaluation",
                 "local-operator:orchestration",
+                "local-operator:unified-fixture",
             }:
                 raise HTTPException(404, "Evaluation run not found")
             events = (

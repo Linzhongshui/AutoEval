@@ -1,0 +1,20 @@
+.service-methods { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr)); gap: 10px; }
+.service-methods button { justify-content: flex-start; gap: 10px; text-align: left; padding: 12px; white-space: normal; }
+.service-methods button[aria-pressed="true"] {
+  color: var(--primary);
+  border-color: var(--primary);
+  background: var(--accent-soft);
+}
+.service-methods svg { flex-shrink: 0; }
+.service-methods small { display: block; color: #586378; margin-top: 3px; font-size: 12px; }
+.service-kind { display: inline-block; padding: 3px 7px; border-radius: 5px; color: #544575; background: #f1eef8; white-space: nowrap; font-size: 12px; }
+.service-filter { display: flex; flex-wrap: wrap; gap: 12px; }
+.service-filter label { display: grid; gap: 5px; flex: 1 1 150px; font-size: 13px; }
+.pf-node-label .management-trigger, .pf-node-label > button { font-size: 12px; padding: 0; background: transparent; border: 0; color: var(--primary); }
+
+.saved-service-list .saved-service-row { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 16px; }
+.saved-service-row > div:first-child { min-width: 0; overflow-wrap: anywhere; }
+.saved-service-row .service-kind { margin-left: 4px; }
+.saved-service-list .saved-service-row p { margin: 4px 0 0; }
+.saved-service-list .saved-service-row .inline { gap: 8px; }
+body:has(dialog.management-drawer[open]) { overflow: hidden; }

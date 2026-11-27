@@ -7,8 +7,8 @@ restricted to superadmins at the API layer.
 
 from alembic import op
 
-revision = "0044_role_superadmin"
-down_revision = "0043_platform_config"
+revision = "0047_role_superadmin"
+down_revision = "0046_platform_config"
 branch_labels = depends_on = None
 
 ROLE_CHECK = "ck_platform_user_role"

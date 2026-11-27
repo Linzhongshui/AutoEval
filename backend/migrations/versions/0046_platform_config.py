@@ -4,8 +4,8 @@ from alembic import op
 
 from autoeval.infrastructure.platform_config import PlatformConfig
 
-revision = "0043_platform_config"
-down_revision = "0042_merge_identity_heads"
+revision = "0046_platform_config"
+down_revision = "0045_merge_identity_heads"
 branch_labels = depends_on = None
 
 

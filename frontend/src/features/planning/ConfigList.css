@@ -1,0 +1,20 @@
+.config-list { container-type: inline-size; min-width: 0; }
+.config-list-toolbar { display: flex; justify-content: flex-end; margin-bottom: 12px; }
+.config-list-toolbar > button.link { padding: 8px 14px; border-radius: 7px; background: var(--accent); color: var(--on-accent); }
+.config-list table { width: 100%; table-layout: fixed; }
+.config-list th:first-child { width: 44%; }
+.config-list th:nth-child(2) { width: 20%; }
+.config-list td { vertical-align: middle; overflow-wrap: anywhere; }
+.config-list td strong { display: block; font-weight: 600; }
+.config-list td small { display: block; margin-top: 4px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.config-list-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 12px; }
+.config-list-actions > button.link { white-space: nowrap; min-height: 32px; padding: 3px 0; }
+.config-list-actions > button.link:hover { text-decoration: underline; }
+@container (max-width: 520px) {
+  .config-list table, .config-list tbody { display: block; min-width: 0; }
+  .config-list thead { position: absolute; clip-path: inset(50%); width: 1px; height: 1px; overflow: hidden; }
+  .config-list tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 4px 8px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .config-list tbody td { display: block; padding: 0; border: 0; white-space: normal; }
+  .config-list tbody td:last-child { grid-column: 1 / -1; }
+  .config-list-dataset { font-size: 12px; color: var(--muted); }
+}

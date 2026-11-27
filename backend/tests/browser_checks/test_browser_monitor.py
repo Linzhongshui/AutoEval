@@ -5,10 +5,9 @@ from playwright.sync_api import expect
 FIXTURE = Path(__file__).with_name("monitor.js")
 
 
-def open_monitor(page, url):
+def open_run(page, url):
     page.add_init_script(path=FIXTURE)
     page.goto(url + "/#run/fixture-run")
-    page.get_by_role("button", name="监控", exact=True).click()
 
 
 def test_monitor_loading_is_not_reported_as_not_collected(browser_page):
@@ -18,17 +17,24 @@ def test_monitor_loading_is_not_reported_as_not_collected(browser_page):
         "window.monitorDelay=500; window.monitor={collection_status:'not_collected',stale:false}"
     )
     page.goto(url + "/#run/fixture-run")
-    page.get_by_role("button", name="监控", exact=True).click()
+    page.get_by_text("工具运行详情", exact=True).click()
     expect(page.get_by_text("正在读取工具监控…", exact=True)).to_be_visible()
     expect(page.get_by_text("本次运行未采集工具监控。", exact=True)).to_have_count(0)
     expect(page.get_by_text("本次运行未采集工具监控。", exact=True)).to_be_visible()
+    navigation = page.get_by_role("group", name="任务详情视图")
+    expect(navigation.get_by_role("button", name="运行概览")).to_have_attribute("aria-pressed", "true")
+    expect(navigation.get_by_role("button", name="执行器原始文件")).to_have_count(0)
+    navigation.get_by_role("button", name="监控快照").click()
+    expect(page.get_by_test_id("monitor-snapshots")).to_be_visible()
+    navigation.get_by_role("button", name="执行日志", exact=True).click()
+    expect(page.get_by_test_id("monitor-log")).to_contain_text("fixture archived log")
 
 
 def test_monitor_polling_visibility_stale_terminal_and_controlled_evidence(browser_page):
     page, url, _ = browser_page
-    open_monitor(page, url)
-    expect(page.get_by_role("heading", name="工具运行监控", exact=True)).to_be_visible()
-    expect(page.get_by_text("实时观测", exact=True)).to_be_visible()
+    open_run(page, url)
+    expect(page.get_by_text("工具运行详情", exact=True)).to_be_visible()
+    expect(page.get_by_role("button", name="运行概览")).to_have_attribute("aria-pressed", "true")
     page.wait_for_function("window.monitorCalls >= 3")
 
     page.evaluate("window.fixtureHidden=true")
@@ -39,26 +45,27 @@ def test_monitor_polling_visibility_stale_terminal_and_controlled_evidence(brows
     page.wait_for_function(f"window.monitorCalls > {hidden_calls}")
 
     page.evaluate("window.monitor.stale=true")
-    expect(page.get_by_text("数据已过期 / 不可达", exact=False)).to_be_visible()
+    expect(page.get_by_text("监控数据更新延迟，保留上次观测。", exact=True)).to_be_visible()
     expect(page.get_by_role("progressbar", name="工具执行进度")).to_have_attribute("aria-valuenow", "40")
 
     page.evaluate(
         "window.detail.state='completed'; window.monitor.stale=false; window.monitor.snapshot_kind='final'; window.monitor.tool_status='finish'; window.monitor.finish_count=5"
     )
+    expect(page.get_by_role("progressbar")).to_have_attribute("aria-valuenow", "100")
+    page.get_by_role("button", name="监控快照", exact=True).click()
     expect(page.get_by_text("终态已归档", exact=True)).to_be_visible()
     terminal_calls = page.evaluate("window.monitorCalls")
     page.wait_for_timeout(2200)
     assert page.evaluate("window.monitorCalls") == terminal_calls
 
-    page.get_by_role("button", name="归档快照", exact=True).click()
-    page.get_by_role("button", name="final", exact=False).click()
+    page.get_by_test_id("monitor-snapshots").get_by_role("button", name="终态快照", exact=False).click()
     expect(page.get_by_test_id("monitor-evidence")).to_contain_text('"snapshot_kind": "final"')
 
-    page.get_by_role("button", name="日志", exact=True).click()
+    page.get_by_role("button", name="执行日志", exact=True).click()
     expect(page.get_by_test_id("monitor-log")).to_contain_text("fixture archived log")
     page.evaluate("window.logFailure=true")
-    page.get_by_role("button", name="概览", exact=True).click()
-    page.get_by_role("button", name="日志", exact=True).click()
+    page.get_by_role("button", name="运行概览", exact=True).click()
+    page.get_by_role("button", name="执行日志", exact=True).click()
     expect(page.get_by_text("本次运行未归档执行日志，或日志校验未通过。", exact=True)).to_be_visible()
 
 
@@ -69,7 +76,7 @@ def test_monitor_last_observed_is_not_called_final(browser_page):
         "window.detail.state='completed'; window.monitor.snapshot_kind='last_observed'"
     )
     page.goto(url + "/#run/fixture-run")
-    page.get_by_role("button", name="监控", exact=True).click()
+    page.get_by_role("button", name="监控快照", exact=True).click()
     expect(page.get_by_text("仅最后观测（非终态）", exact=True)).to_be_visible()
     expect(page.get_by_text("终态已归档", exact=True)).to_have_count(0)
 
@@ -79,7 +86,7 @@ def test_case_detail_uses_server_state_filter_and_row_evidence(browser_page):
     page.add_init_script(path=FIXTURE)
     page.goto(url + "/#run/fixture-run")
     expect(page.get_by_text("判分准确率", exact=True)).to_be_visible()
-    expect(page.get_by_text("80%", exact=True)).to_be_visible()
+    expect(page.get_by_text("80.00%", exact=True)).to_be_visible()
     expect(page.get_by_test_id("run-progress")).to_be_visible()
     expect(page.get_by_role("progressbar")).to_have_attribute("aria-valuenow", "40")
 
@@ -108,21 +115,22 @@ def test_monitor_progress_unknown_zero_and_completed(browser_page):
     expect(page.get_by_text("未记录样本进度", exact=True)).to_be_visible()
     assert bar.get_attribute("aria-valuenow") is None
     page.evaluate("window.monitor.finish_count=0")
-    page.get_by_role("button", name="监控", exact=True).click()
+    page.get_by_role("button", name="配置快照", exact=True).click()
+    page.get_by_role("button", name="运行概览", exact=True).click()
     expect(bar).to_have_attribute("aria-valuenow", "0")
     expect(page.get_by_text("0 / 5 · 0%", exact=True)).to_be_visible()
     page.evaluate("window.monitor.finish_count=5;window.monitor.snapshot_kind='final'")
-    page.get_by_role("button", name="执行进度", exact=True).click()
+    page.get_by_role("button", name="配置快照", exact=True).click()
+    page.get_by_role("button", name="运行概览", exact=True).click()
     expect(bar).to_have_attribute("aria-valuenow", "100")
     expect(page.get_by_text("5 / 5 · 100%", exact=True)).to_be_visible()
 
 
 def test_case_list_refreshes_when_running_task_completes(browser_page):
     page, url, _ = browser_page
-    page.add_init_script(path=FIXTURE)
-    page.add_init_script("window.savedCases=window.cases;window.cases=[];window.detail.report=null")
+    page.add_init_script(FIXTURE.read_text(encoding="utf-8") + "\nwindow.savedCases=window.cases;window.cases=[];window.detail.report=null")
     page.goto(url + "/#run/fixture-run")
-    expect(page.get_by_text("该运行暂无 case 执行记录。", exact=True)).to_be_visible()
+    expect(page.get_by_role("status").filter(has_text="该运行暂无 case 执行记录。")).to_be_visible()
     page.evaluate("window.cases=window.savedCases;window.detail.state='completed'")
     expect(page.get_by_test_id("case-attempts")).to_be_visible(timeout=10000)
     expect(page.get_by_test_id("case-attempts")).to_contain_text("UPSTREAM_TIMEOUT")
@@ -180,3 +188,20 @@ def test_native_prediction_progress_updates_before_report_exists(browser_page):
     page.evaluate("window.monitor.finish_count=5;window.monitor.snapshot_kind='final'")
     expect(bar).to_have_attribute("aria-valuenow", "100", timeout=7000)
     expect(page.get_by_text("5 / 5 · 100%", exact=True)).to_be_visible()
+
+
+def test_executor_files_open_directly_from_task_navigation(browser_page):
+    page, url, _ = browser_page
+    page.add_init_script("window.executorFilesEnabled = true")
+    open_run(page, url)
+    nav = page.get_by_role("group", name="任务详情视图")
+    expect(nav.get_by_role("button")).to_have_text(
+        ["运行概览", "执行日志", "执行器原始文件", "监控快照", "配置快照"]
+    )
+    nav.get_by_role("button", name="执行器原始文件").click()
+    files = page.get_by_role("region", name="执行器原始文件")
+    files.get_by_role("button", name="output/case.txt").click()
+    preview = files.get_by_role("dialog", name="文件预览")
+    expect(preview.get_by_label("文件内容")).to_have_text("sample")
+    preview.get_by_role("button", name="关闭预览").click()
+    expect(files.get_by_role("button", name="output/case.txt")).to_be_visible()

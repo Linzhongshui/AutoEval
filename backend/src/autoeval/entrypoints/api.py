@@ -21,6 +21,7 @@ from autoeval.catalog.registry import router as registry_router
 from autoeval.catalog.standard_inputs import router as standard_inputs_router
 from autoeval.evaluation.evaluation_tasks import router as evaluation_tasks_router
 from autoeval.evaluation.evaluations import router as evaluations_router
+from autoeval.evaluation.executor_files import router as executor_files_router
 from autoeval.evaluation.fixture_pipeline import router as fixture_pipeline_router
 from autoeval.evaluation.monitored_execution import router as monitored_router
 from autoeval.evaluation.runs import router as runs_router
@@ -94,6 +95,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(monitored_router, dependencies=user_guard)
     app.include_router(planning_router, dependencies=user_guard)
     app.include_router(evaluation_tasks_router, dependencies=user_guard)
+    app.include_router(executor_files_router, dependencies=user_guard)
     app.include_router(configuration_router, dependencies=user_guard)
     app.include_router(case_history_router, dependencies=user_guard)
     app.include_router(langfuse_router, dependencies=admin_guard)
@@ -243,6 +245,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "planning_datasets": ["GPQA", "MMMU-Pro", "DeepSWE"],
                 "planned_execution_requires_resource_preflight": True,
                 "analysis_enabled": analysis_is_configured(settings),
+                "executor_files_enabled": settings.environment in {"development", "test"},
                 "data_workbench_enabled": settings.environment in {"development", "test"},
                 "aurora_enabled": False,
                 "customer_ssh_enabled": True,

@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    evaluation_follow_up_enabled: bool = False
+    evaluation_follow_up_enabled: bool = True
     enforce_task_budget: bool = False
     billing_execution_config: Path | None = None
     langfuse_host: str | None = None

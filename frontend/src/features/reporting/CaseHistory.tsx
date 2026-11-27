@@ -36,6 +36,9 @@ type Attempt = {
   finished_at: string | null;
   tool_metadata?: ToolMetadata | null;
 };
+type CaseTarget = components["schemas"]["CaseTarget"];
+const caseKey = (row: CaseTarget) => JSON.stringify([row.dataset_key, row.sample_id]);
+
 type Query = { run: string; sample: string; state: string; offset: number; size: number };
 
 const time = (value: string | null) => value && !Number.isNaN(Date.parse(value)) ? new Date(value).toLocaleString("zh-CN") : "—";
@@ -46,13 +49,15 @@ const STATUS: Record<string, { label: string; tone: string }> = {
 };
 const caseScore = (metadata?: ToolMetadata | null) => typeof metadata?.score === "number" && Number.isFinite(metadata.score) ? String(metadata.score) : "未提供评分";
 
-export function CaseHistory({ initialRun = "", datasets = [], selectedDataset, showPending, onRetry }: {
+export function CaseHistory({ initialRun = "", datasets = [], selectedDataset, showPending, onRetry, onBatchRetry }: {
   initialRun?: string;
   datasets?: string[];
   selectedDataset?: string;
   showPending?: boolean;
+  onBatchRetry?: (cases: CaseTarget[]) => void;
   onRetry?: (datasetKey: string, sampleId: string) => void;
 }) {
+  const [checked, setChecked] = useState<Map<string, CaseTarget>>(() => new Map());
   const [dataset, setDataset] = useState(selectedDataset ?? "");
   const [revision, setRevision] = useState("");
   const [revisions, setRevisions] = useState<{id: string; dataset_key: string; created_at: string}[]>([]);
@@ -122,6 +127,11 @@ export function CaseHistory({ initialRun = "", datasets = [], selectedDataset, s
     return () => controller.abort();
   }, [query, dataset, revision, selectedDataset]);
 
+  useEffect(() => {
+    setDataset(selectedDataset ?? "");
+    setQuery(current => current ? {...current, offset: 0} : current);
+  }, [selectedDataset]);
+
   const applyState = (value: string) => {
     setStateFilter(value);
     if (!initialRun) return;
@@ -157,6 +167,23 @@ export function CaseHistory({ initialRun = "", datasets = [], selectedDataset, s
     ? query.offset + query.size : next;
   const pages = combinedTotal !== null ? Math.max(1, Math.ceil(combinedTotal / (query?.size ?? pageSize))) : null;
 
+  const visibleCases = [...rows, ...pendingPage];
+  function selectCases(cases: CaseTarget[], include: boolean) {
+    setChecked(previous => {
+      const next = new Map(previous);
+      for (const {dataset_key, sample_id} of cases) {
+        const target = {dataset_key, sample_id};
+        if (include) next.set(caseKey(target), target);
+        else next.delete(caseKey(target));
+      }
+      return next;
+    });
+  }
+  function selectionCell(row: CaseTarget) {
+    return onBatchRetry && <td><input type="checkbox" aria-label={`选择 ${row.dataset_key} · ${row.sample_id}`}
+      checked={checked.has(caseKey(row))} onChange={event => selectCases([row], event.target.checked)} /></td>;
+  }
+
   const body = (
     <>
       <div className="case-history-heading">
@@ -181,15 +208,24 @@ export function CaseHistory({ initialRun = "", datasets = [], selectedDataset, s
         {!initialRun && <button type="button" disabled={!run.trim()} onClick={() => setQuery({ run: run.trim(), sample: sample.trim(), state: stateFilter, offset: 0, size: pageSize })}>查询case历史</button>}
         {initialRun && <button type="button" onClick={() => setQuery({ run: initialRun, sample: sample.trim(), state: stateFilter, offset: 0, size: pageSize })}>筛选</button>}
       </div>
+      {onBatchRetry && <div className="inline">
+        <button type="button" disabled={!checked.size} onClick={() => onBatchRetry([...checked.values()])}>
+          批量重试（{checked.size}）
+        </button>
+        {checked.size > 0 && <button type="button" onClick={() => setChecked(new Map())}>清空选择</button>}
+      </div>}
       <p className="case-history-message muted" role="status">{pendingPage.length ? `已加载 ${rows.length} 条执行记录 · ${pendingPage.length} 个无执行记录的样本` : message}<span>执行状态与评分分别记录，缺少评分不补零。</span></p>
       {(rows.length > 0 || pendingPage.length > 0) && (
         <TableWrap data-testid="case-attempts">
           <table className="case-attempt-table">
-            <thead><tr><th>数据集 / 样本</th><th>尝试</th><th>执行状态</th><th>得分</th><th>创建时间</th><th>耗时</th><th>Token（入 / 出）</th><th>证据与轨迹</th>{onRetry && <th>重试</th>}</tr></thead>
+            <thead><tr>{onBatchRetry && <th><input type="checkbox" aria-label="选择本页 Case"
+              checked={visibleCases.length > 0 && visibleCases.every(row => checked.has(caseKey(row)))}
+              onChange={event => selectCases(visibleCases, event.target.checked)} /></th>}<th>数据集 / 样本</th><th>尝试</th><th>执行状态</th><th>得分</th><th>创建时间</th><th>耗时</th><th>Token（入 / 出）</th><th>证据与轨迹</th>{onRetry && <th>重试</th>}</tr></thead>
             <tbody>{rows.map((row) => {
               const status = STATUS[row.state] ?? { label: "待确认", tone: "pending" };
               return (
                 <tr key={row.id}>
+                  {selectionCell(row)}
                   <td><b>{row.dataset_key}</b><small>{row.sample_id}</small></td>
                   <td>第 {row.attempt_no} 次</td>
                   <td>
@@ -211,7 +247,8 @@ export function CaseHistory({ initialRun = "", datasets = [], selectedDataset, s
                 </tr>
               );
             })}
-            {pendingPage.map(row => <tr key={JSON.stringify([row.dataset_key, row.sample_id])}>
+            {pendingPage.map(row => <tr key={caseKey(row)}>
+              {selectionCell(row)}
               <td><b>{row.dataset_key}</b><small>{row.sample_id}</small></td>
               <td>—</td>
               <td><span className="case-status pending">{row.category === "remaining" ? "待执行" : "待核对"}</span></td>

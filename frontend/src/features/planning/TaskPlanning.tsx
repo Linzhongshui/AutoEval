@@ -1,3 +1,4 @@
+import "./ConfigList.css";
 import { duration, ElapsedTime, PlanEstimate, type Report } from "./PlanEstimate";
 import { TableWrap } from "../../shared/ui/TableWrap";
 import { PlanningSelect } from "./PlanningSelect";
@@ -5,11 +6,12 @@ import { ServiceBindings } from "../resources/ServiceBindings";
 import { groupSshHosts } from "./sshHosts";
 import { PreflightNodes, type PreflightEvidence, type PreflightProgress } from "./PreflightNodes";
 import { ResourceMultiSelect } from "./ResourceMultiSelect";
+import { serviceLabel } from "../resources/serviceKind";
 import { ModelServices } from "../resources/ModelServices";
 import { ProbeProgress } from "../evaluation/ProbeProgress";
 import { Clock3, LoaderCircle } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { apiGet, apiGetPage, apiPost } from "../../shared/api";
+import { ApiError, apiGet, apiGetPage, apiPost } from "../../shared/api";
 import type { Resource, Target } from "../evaluation/types";
 import { useOptions } from "../evaluation/hooks";
 import { usePolling } from "../../shared/hooks/usePolling";
@@ -19,7 +21,7 @@ import { ExecutionBindings } from "../catalog/ExecutionBindings";
 import { DatasetManifests } from "../catalog/DatasetManifests";
 
 type Options = {
-  compilations: { adaptor_revision?: string; runtime_config?: Record<string, unknown>; id: string; label?: string; sha256: string; target_id: string; dataset: string; input_ready: boolean; config: { subcommand: string; params: Record<string, unknown> } }[];
+  compilations: { tool_revisions?: string[]; display_name?: string | null; adaptor_revision?: string; runtime_config?: Record<string, unknown>; id: string; label?: string; sha256: string; target_id: string; dataset: string; input_ready: boolean; config: { subcommand: string; params: Record<string, unknown> } }[];
   manifests: { id: string; dataset: string; scope: string; sample_count: number; sha256?: string }[];
   curves: { id: string; target_id: string; resource_id: string; resource_kind: string; measured_at: string }[];
 };
@@ -39,6 +41,23 @@ const preflightReasons: Record<string, string> = {
 const describePreflight = (reasons: string[]) =>
   reasons.map(reason => preflightReasons[reason] ?? reason).join("；");
 type Job = { id: string; state: string; created_at?: string; updated_at?: string; result?: { preflight_valid_until?: string; preflight_progress?: PreflightProgress; progress?: { stage: string; current_concurrency?: number | null; completed_levels: number; total_levels: number; observed_at?: string } | null; report?: Report; throughput_profile_id?: string; reason?: string; dispatch_blocked?: boolean; remote_check?: { state: string; checked_at: string }; execution_ready?: boolean; supported_datasets?: string[]; blocking_reasons?: string[]; dataset_checks?: DatasetCheck[]; tool_versions?: Record<string, { expected: string; actual: string | null }> } };
+function DatasetSelect({ label, value, disabled, placeholder, options, onChange }: {
+  label: string;
+  value: string;
+  disabled: boolean;
+  placeholder: string;
+  options: { id: string; label: string }[];
+  onChange: (value: string) => void;
+}) {
+  const selected = options.find(option => option.id === value)?.label ?? placeholder;
+  return <select aria-label={label} value={value} disabled={disabled}
+    onChange={event => onChange(event.target.value)}>
+    <button type="button">{selected}</button>
+    <option value="">{placeholder}</option>
+    {options.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+  </select>;
+}
+
 const datasets = ["GPQA", "MMMU-Pro", "DeepSWE", "AutomationBench"];
 function StrategyChoice({ label, parallel, disabled = false, onChange }: { label: string; parallel: boolean; disabled?: boolean; onChange: (parallel: boolean) => void }) {
   return <div className="strategy-choices" role="group" aria-label={label}>
@@ -47,12 +66,99 @@ function StrategyChoice({ label, parallel, disabled = false, onChange }: { label
   </div>;
 }
 
-export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: number; onManagePool: (add?: boolean) => void }) {
+type ListedConfig = Options["compilations"][number] & { name: string };
+
+function ConfigActions({ config: c, model, manifests, refresh }: {
+  config: ListedConfig; model: string; manifests: Options["manifests"]; refresh: () => Promise<void>;
+}) {
+  const agent = c.config.subcommand === "harbor_agent";
+  const values = { ...c.config.params, ...c.runtime_config };
+  const defaults = () => ({
+    name: `${c.name} · 副本`, execution: String(values.execution || "local"),
+    tool_root: String(values.ais_bench_root || ""), directory: String((agent ? values.path : values.datasets_dir) || ""),
+    concurrency: String(values[agent ? "n_concurrent_trials" : "batch_size"] ?? 1),
+  });
+  const [draft, setDraft] = useState(defaults);
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const set = (key: keyof typeof draft, value: string) => setDraft(old => ({ ...old, [key]: value }));
+  const bindings = c.runtime_config?.manifest_ids;
+  const available = manifests.filter(m => m.dataset === c.dataset && (!Array.isArray(bindings) || bindings.includes(m.id)));
+  return <>
+    <ManagementDrawer title="查看详情"><dl className="stack">
+      {Object.entries({配置名称: c.name, 数据集: c.dataset, 模型服务: model,
+        执行环境: values.execution === "docker" ? "Docker" : values.execution === "local" ? "执行服务器本机" : "未记录",
+        "AISBench 源码目录": values.ais_bench_root, [agent ? "任务目录" : "数据集目录"]: agent ? values.path : values.datasets_dir,
+        默认并发: values[agent ? "n_concurrent_trials" : "batch_size"] ?? 1,
+        工具版本: c.tool_revisions?.join("、"), 适配器版本: c.adaptor_revision, 配置指纹: c.sha256,
+        [Array.isArray(bindings) ? "绑定样本清单" : "可选样本清单"]: available.map(m => `${m.scope === "full" ? "全量" : "Lite"} · ${m.sample_count} 个样本 · ${m.id.slice(0, 8)}`).join("、") || "暂无",
+      }).map(([label, value]) => <div key={label}><dt>{label}</dt><dd style={{overflowWrap:"anywhere"}}>{String(value ?? "未记录")}</dd></div>)}
+    </dl></ManagementDrawer>
+    <ManagementDrawer title="复制并修改" open={open} onOpenChange={next => {
+      if (!busy) { setDraft(defaults()); setError(""); setOpen(next); }
+    }}>
+      <form className="stack" onSubmit={async e => {
+        e.preventDefault(); if (busy) return;
+        setBusy(true); setError("");
+        try {
+          await apiPost(`/planning/compilations/${c.id}/copy`, {...draft, name: draft.name.trim(), concurrency: Number(draft.concurrency)});
+          await refresh(); setOpen(false);
+        } catch (err) { setError(err instanceof Error ? err.message : "保存失败"); }
+        finally { setBusy(false); }
+      }}>
+        <label>新配置名称<input required maxLength={128} value={draft.name} onChange={e => set("name", e.target.value)} /></label>
+        <label>执行环境<select value={draft.execution} onChange={e => set("execution", e.target.value)}><option value="local">执行服务器本机</option><option value="docker">Docker</option></select></label>
+        <label>AISBench 源码目录<input required value={draft.tool_root} onChange={e => set("tool_root", e.target.value)} /></label>
+        <label>{agent ? "任务目录" : "数据集目录"}<input required={!agent} value={draft.directory} onChange={e => set("directory", e.target.value)} /></label>
+        <label>默认并发<input required type="number" min={1} max={256} value={draft.concurrency} onChange={e => set("concurrency", e.target.value)} /></label>
+        {error && <p role="alert">{error}</p>}
+        <button className="primary" disabled={busy || !draft.name.trim()}>保存为新配置</button>
+      </form>
+    </ManagementDrawer>
+  </>;
+}
+
+function ConfigNameEditor({ id, current, onSaved }: { id: string; current: string; onSaved: (name: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState(current);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  return <ManagementDrawer title="重命名" open={open} onOpenChange={next => {
+    if (saving) return;
+    setOpen(next); setName(current); setError("");
+  }}>
+    <form className="stack" onSubmit={async event => {
+      event.preventDefault();
+      if (saving || !name.trim()) return;
+      setSaving(true);
+      try {
+        const result = await apiPost<{display_name: string}>(`/planning/compilations/${id}/rename`, {name: name.trim()});
+        onSaved(result.display_name); setOpen(false);
+      } catch { setError("保存失败，请重试"); }
+      finally { setSaving(false); }
+    }}>
+      <label>执行配置名称<input autoFocus required maxLength={128} value={name} onChange={e => setName(e.target.value)} /></label>
+      {error && <p role="alert">{error}</p>}
+      <button className="primary" disabled={saving || !name.trim()}>保存名称</button>
+    </form>
+  </ManagementDrawer>;
+}
+
+export function TaskPlanning({ poolRevision, onManagePool, initialTarget = "" }: { initialTarget?: string; poolRevision: number; onManagePool: (add?: boolean) => void }) {
   const targets = useOptions<Target>("/target-bindings");
   const ssh = useOptions<Resource>("/ssh-resources");
   const retryResources = useRef(ssh.retry);
   useEffect(() => { if (poolRevision) retryResources.current(); }, [poolRevision]);
-  const [target, setTarget] = useState("");
+  const [target, setTarget] = useState(initialTarget);
+  const [managingServices, setManagingServices] = useState(false);
+  function useService(id: string) {
+    setTarget(id);
+    setSelection({});
+    setAddingService(false);
+    setManagingServices(false);
+    targets.retry();
+  }
   const [addingService, setAddingService] = useState(false);
   const resourceKind = "customer_ssh";
   const [resource, setResource] = useState("");
@@ -62,7 +168,7 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
   const [selection, setSelection] = useState<Record<string, { compilation: string; manifest: string }>>({});
   const [enabled, setEnabled] = useState<string[]>([]);
   const [curve, setCurve] = useState("");
-  const [requestedParallel, setParallel] = useState(1);
+  const [requestedParallel, setParallel] = useState(2);
   const [job, setJob] = useState<Job | null>(null);
   const [adviceJob, setAdviceJob] = useState<Job | null>(null);
   const [probeLookup, setProbeLookup] = useState(false);
@@ -71,6 +177,7 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
   const checkDetails = useRef<HTMLDetailsElement>(null);
   const firstBlocker = useRef<HTMLDetailsElement>(null);
   const [preflight, setPreflight] = useState<Job | null>(null);
+  const [checkError, setCheckError] = useState("");
   const [checkRequest, setCheckRequest] = useState(0);
   const [checkExpired, setCheckExpired] = useState(false);
   const [concurrency, setConcurrency] = useState<Record<string, number>>({});
@@ -111,7 +218,7 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
     const seen = new Set<string>();
     collected.compilations = collected.compilations.filter(c => {
       const params = Object.fromEntries(Object.entries(c.config.params).filter(([key]) => !["work_dir", "container_name"].includes(key)));
-      const key = stable({ target: c.target_id, dataset: c.dataset, subcommand: c.config.subcommand, adaptor: c.adaptor_revision, runtime: c.runtime_config, params });
+      const key = stable({ named: c.display_name ? c.id : undefined, target: c.target_id, dataset: c.dataset, subcommand: c.config.subcommand, adaptor: c.adaptor_revision, runtime: c.runtime_config, params });
       if (seen.has(key)) return false;
       seen.add(key); return true;
     });
@@ -134,7 +241,7 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
       task_id: d.replaceAll("-", "_"), dataset: d, concurrency: concurrency[d] ?? null, compilation_id: selection[d].compilation, manifest_id: selection[d].manifest,
     })) };
   const fingerprint = JSON.stringify(payload);
-  useEffect(() => { setParallel(v => Math.min(v, maxParallel)); }, [maxParallel]);
+  const requestedCheck = useRef("");
   const preflightFingerprint = JSON.stringify({
     target_id: target, resource_id: resource, resource_kind: resourceKind, resource_ids: resourceIds,
     tasks: payload.tasks.map(({ task_id, dataset, compilation_id, manifest_id }) => ({
@@ -143,7 +250,6 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
   });
   useEffect(() => {
     generation.current++; if (job) setStaleEstimate(true); setJob(null); setAdviceJob(null);
-    if (checkExpired) setCheckRequest(n => n + 1);
   }, [fingerprint]);
   useEffect(() => { setProbeReview(false); setCurve(""); }, [target, resource, resourceKind]);
   const validUntil = preflight?.result?.preflight_valid_until;
@@ -217,14 +323,15 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
     : null;
   const probeBlocked = !!probe && ["pending", "running", "unresolved"].includes(probe.state);
   const checking = !!preflight && ["pending", "running"].includes(preflight.state);
-  const preflightLabel = !preflight ? (checkExpired ? "已过期" : "未检查") : ({ pending: "排队中", running: "检查中", completed: preflight.result?.execution_ready ? "检查通过" : "存在阻塞", failed: "检查失败", cancelled: "已取消" } as Record<string, string>)[preflight.state] || "状态待确认";
+  const preflightLabel = !preflight ? (checkError ? "请求失败" : checkExpired ? "已过期" : "未检查") : ({ pending: "排队中", running: "检查中", completed: preflight.result?.execution_ready ? "检查通过" : "存在阻塞", failed: "检查失败", cancelled: "已取消" } as Record<string, string>)[preflight.state] || "状态待确认";
   const preflightTone = checking ? "checking" : preflight?.result?.execution_ready ? "passed" : "blocked";
   const autoFillDataset = (dataset: string, active: boolean) => {
     setEnabled(rows => active ? [...new Set([...rows, dataset])] : rows.filter(row => row !== dataset));
     if (!active) { setSelection(rows => ({ ...rows, [dataset]: { compilation: "", manifest: "" } })); return; }
     const candidates = options.compilations.filter(c => c.target_id === target && c.input_ready && c.dataset === dataset && (!Array.isArray(c.runtime_config?.resource_ids) || (c.runtime_config.resource_ids as string[]).some(id => resources.rows.some(r => r.id === id))));
     const chosen = candidates[0];
-    const full = options.manifests.filter(m => m.dataset === dataset && m.scope === "full");
+    const allowed = chosen?.runtime_config?.manifest_ids;
+    const full = options.manifests.filter(m => m.dataset === dataset && m.scope === "full" && (!Array.isArray(allowed) || allowed.includes(m.id)));
     setSelection(rows => ({ ...rows, [dataset]: { compilation: chosen?.id || "", manifest: full.length === 1 ? full[0].id : "" } }));
     const bound = chosen?.runtime_config?.resource_ids;
     if (!manualNodeSelection.current && Array.isArray(bound)) {
@@ -251,7 +358,7 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
     for (const dataset of enabled) {
       const candidates = options.compilations.filter(c => c.target_id === target && c.input_ready && c.dataset === dataset && (!Array.isArray(c.runtime_config?.resource_ids) || (c.runtime_config.resource_ids as string[]).some(id => resources.rows.some(r => r.id === id))));
       const current = candidates.find(c => c.id === selection[dataset]?.compilation);
-      const chosen = current || candidates[0];
+      const chosen = current ?? candidates[0];
       if (!chosen) continue;
       const allowed = chosen.runtime_config?.manifest_ids;
       const manifests = options.manifests.filter(m => m.dataset === dataset && (!Array.isArray(allowed) || allowed.includes(m.id)));
@@ -285,7 +392,7 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
   const missingInput = !target ? "请选择模型服务" : !enabled.length ? "请启用至少一个数据集"
     : incomplete ? `请补全 ${enabled.filter(d => !selection[d]?.compilation || !selection[d]?.manifest).join("、")} 的配置或样本范围`
     : !resource ? "请选择 SSH 节点" : "";
-  const blocker = missingInput || (checkExpired ? "环境检查已过期，请重新检查。" : blocked ? failureReason : "");
+  const blocker = missingInput || checkError || (checkExpired ? "环境检查已过期，请重新检查。" : blocked ? failureReason : "");
   function revealBlocker() {
     const details = checkDetails.current;
     if (!details) return;
@@ -316,24 +423,49 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
   useEffect(() => {
     setPreflight(null);
     setCheckExpired(false);
+    setCheckError("");
     setMessage("");
-    if (!ready) return;
+    if (!ready || !requestedCheck.current || requestedCheck.current !== preflightFingerprint) return;
     let stopped = false;
-    const timer = setTimeout(() => { void apiPost<Job>("/planning/resources/preflight", JSON.parse(preflightFingerprint))
+    const timer = setTimeout(() => { requestedCheck.current = ""; void apiPost<Job>("/planning/resources/preflight", JSON.parse(preflightFingerprint))
       .then(result => { if (!stopped) setPreflight(result); })
-      .catch(() => { if (!stopped) setMessage("自动环境检查失败，请点击环境检查重试。"); }); }, 350);
+      .catch(error => {
+        if (!stopped) setCheckError(error instanceof ApiError
+          ? `环境检查请求失败（${error.status}）：${error.message}`
+          : "无法获取环境检查结果，请检查网络或服务连接。");
+      }); }, 350);
     return () => { stopped = true; clearTimeout(timer); };
   // Resource checks follow execution selection, independently of optional estimation inputs.
   }, [preflightFingerprint, ready, checkRequest]);
+  const groups = datasets.map(d => {
+    const rows = options.compilations.filter(c => c.target_id === target && c.input_ready && c.dataset === d && (!Array.isArray(c.runtime_config?.resource_ids) || resources.rows.some(r => (c.runtime_config!.resource_ids as string[]).includes(r.id))));
+    return {dataset: d, configs: rows.map((c, index) => ({
+      ...c, name: c.display_name || `${d} · ${c.config.subcommand === "llm_accuracy" ? "精度测评" : "Agent 测评"}${rows.length > 1 ? ` · 方案 ${index + 1}` : ""}`,
+    }))};
+  });
+  const listedConfigs = groups.flatMap(group => group.configs);
   return <div className="planning-layout"><section className="card stack planning-card" aria-label="发起测评">
     <h2>1. 模型服务</h2>
     <p className="planning-intro">支持 GPQA、MMMU-Pro、DeepSWE、AutomationBench 的全量或已绑定 Lite 清单。Agent 工作流通过 AISBench Harbor 执行，需绑定配置与清单并通过环境检查。</p>
     <div className="planning-fields">
-      <div className="planning-service-field"><div className="planning-service-heading"><label htmlFor="planning-service">模型服务</label><ManagementDrawer title="管理服务" onDismiss={targets.retry}><ModelServices /></ManagementDrawer></div><PlanningSelect id="planning-service" label="规划模型服务" value={target} options={targets.rows.map(t => ({ id: t.id, label: t.service_name || t.remote_model, detail: `${t.remote_model} · ${t.base_url} · ${t.id.slice(0, 8)}` }))} onChange={id => { setTarget(id); setSelection({}); }} onAdd={() => setAddingService(true)} /><ManagementDrawer title="新增模型服务" hideTrigger open={addingService} onOpenChange={setAddingService} onDismiss={targets.retry}><ServiceBindings /></ManagementDrawer></div>
+      <div className="planning-service-field"><div className="planning-service-heading"><label htmlFor="planning-service">模型服务</label><ManagementDrawer title="管理服务" open={managingServices} onOpenChange={setManagingServices} onDismiss={targets.retry}><ModelServices onUse={useService} /></ManagementDrawer></div><PlanningSelect id="planning-service" label="规划模型服务" value={target} options={targets.rows.map(t => ({ id: t.id, label: t.service_name || t.remote_model, detail: `${serviceLabel(t.service_kind)} · ${t.remote_model} · ${t.base_url} · ${t.id.slice(0, 8)}` }))} onChange={id => { setTarget(id); setSelection({}); }} onAdd={() => setAddingService(true)} /><ManagementDrawer title="新增模型服务" hideTrigger open={addingService} onOpenChange={setAddingService} onDismiss={targets.retry}><ServiceBindings onUse={useService} /></ManagementDrawer></div>
     </div>
     {targets.error && <p role="alert">{targets.error}</p>}
-    <h2>2. 数据集与样本范围</h2>
-    <p className="muted">勾选后默认选择第一个可用配置。只有一个 SSH 节点时会自动选中。配置齐备后自动检查环境。</p>
+    <div className="spread"><h2>2. 数据集与样本范围</h2>
+      <ManagementDrawer title="执行配置列表">
+        <section className="config-list"><div className="config-list-toolbar"><ManagementDrawer title="新增执行配置" onDismiss={() => void action(refresh)}><StandardInputs /></ManagementDrawer></div>
+        {listedConfigs.length ? <div className="table-wrap"><table>
+          <thead><tr><th>配置名称</th><th>数据集</th><th>操作</th></tr></thead>
+          <tbody>{listedConfigs.map(c => <tr key={c.id}>
+            <td><strong>{c.name}</strong><small title={c.id}>配置标识 · {c.id.slice(0, 8)}</small></td><td className="config-list-dataset">{c.dataset}</td>
+            <td><div className="config-list-actions"><ConfigActions config={c} model={targets.rows.find(t => t.id === c.target_id)?.remote_model || c.target_id} manifests={options.manifests} refresh={refresh} /><ConfigNameEditor id={c.id} current={c.name} onSaved={name =>
+              setOptions(previous => ({ ...previous, compilations: previous.compilations.map(row =>
+                row.id === c.id ? { ...row, display_name: name } : row) }))} /></div></td>
+          </tr>)}</tbody>
+        </table></div> : <p>{target ? "当前模型服务暂无可用执行配置。" : "请先在控制台选择模型服务。"}</p>}</section>
+      </ManagementDrawer>
+    </div>
+    <p className="muted">勾选后默认选择第一项可用执行配置，并填入绑定资源和唯一的全量清单。可手动更改配置和样本范围。</p>
     <div className="dataset-select-all-mobile">{selectAllButton}</div>
     <TableWrap><table className="planning-table"><thead><tr><th scope="col">{selectAllButton}</th><th>数据集</th><th>执行配置</th><th>样本范围</th><th>状态</th></tr></thead><tbody>{datasets.map(d => {
       const active = enabled.includes(d);
@@ -343,8 +475,27 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
         manifest.dataset === d && (!Array.isArray(allowedManifests) || allowedManifests.includes(manifest.id)));
       const check = preflight?.result?.dataset_checks?.find(row => row.dataset === d);
       const assigned = resources.rows.find(r => r.id === check?.assigned_resource_id);
-      const configs = options.compilations.filter(c => c.target_id === target && c.input_ready && c.dataset === d && (!Array.isArray(c.runtime_config?.resource_ids) || resources.rows.some(r => (c.runtime_config!.resource_ids as string[]).includes(r.id))));
-      return <tr key={d}><td><input type="checkbox" aria-label={`启用 ${d}`} checked={active} onChange={e => { autoFillDataset(d, e.target.checked); }} /></td><td>{d}</td><td data-label="执行配置"><select disabled={!active || !target} aria-label={`${d} 执行配置`} value={selection[d]?.compilation || ""} onChange={e => setSelection(rows => ({ ...rows, [d]: { ...rows[d], compilation: e.target.value } }))}><option value="">{!target ? "先选择模型服务" : !configs.length ? "暂无可用配置" : "请选择执行配置"}</option>{configs.map((c, index) => <option key={c.id} value={c.id}>{d} · {c.config.subcommand === "llm_accuracy" ? "精度测评" : "Agent 测评"}{configs.length > 1 ? ` · 方案 ${index + 1}` : ""}</option>)}</select>{active && chosenConfig && assigned && <small className="muted">{check?.tool_revision && `${chosenConfig.config.subcommand === "harbor_agent" ? "Harbor" : "AISBench"} ${check.tool_revision.slice(0, 12)}`}</small>}</td><td data-label="样本范围"><select disabled={!active || !selection[d]?.compilation} aria-label={`${d} 样本范围`} value={selection[d]?.manifest || ""} onChange={e => setSelection(rows => ({ ...rows, [d]: { ...rows[d], manifest: e.target.value } }))}><option value="">请选择已绑定清单</option>{availableManifests.map(m => <option key={m.id} value={m.id}>{m.scope === "full" ? "全量" : "Lite"} · {m.sample_count} 个样本 · {m.id.slice(0, 8)}</option>)}</select></td><td><span className="planning-row-state">{!active ? "未启用" : !configs.length ? "需配置" : selection[d]?.compilation && selection[d]?.manifest ? "已配置" : "待补全"}</span></td></tr>;
+      const configs = groups.find(group => group.dataset === d)!.configs;
+      return <tr key={d}>
+        <td><input type="checkbox" aria-label={`启用 ${d}`} checked={active}
+          onChange={event => autoFillDataset(d, event.target.checked)} /></td>
+        <td>{d}</td>
+        <td data-label="执行配置">
+          <DatasetSelect label={`${d} 执行配置`} disabled={!active || !target}
+            value={selection[d]?.compilation || ""}
+            placeholder={!target ? "先选择模型服务" : !configs.length ? "暂无可用配置" : "请选择执行配置"}
+            options={configs.map(c => ({ id: c.id, label: c.name }))}
+            onChange={compilation => setSelection(rows => ({ ...rows, [d]: { ...rows[d], compilation } }))} />
+          {active && chosenConfig && assigned && <small className="muted">{check?.tool_revision && `${chosenConfig.config.subcommand === "harbor_agent" ? "Harbor" : "AISBench"} ${check.tool_revision.slice(0, 12)}`}</small>}
+        </td>
+        <td data-label="样本范围">
+          <DatasetSelect label={`${d} 样本范围`} disabled={!active || !selection[d]?.compilation}
+            value={selection[d]?.manifest || ""} placeholder="请选择已绑定清单"
+            options={availableManifests.map(m => ({ id: m.id, label: `${m.scope === "full" ? "全量" : "Lite"} · ${m.sample_count} 个样本 · ${m.id.slice(0, 8)}` }))}
+            onChange={manifest => setSelection(rows => ({ ...rows, [d]: { ...rows[d], manifest } }))} />
+        </td>
+        <td><span className="planning-row-state">{!active ? "未启用" : !configs.length ? "需配置" : selection[d]?.compilation && selection[d]?.manifest ? "已配置" : "待补全"}</span></td>
+      </tr>;
     })}</tbody></table></TableWrap>
     {enabled.map(dataset => {
       const bound = options.compilations.filter(c => c.target_id === target && c.input_ready && c.dataset === dataset);
@@ -360,7 +511,7 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
     <div className="spread"><h2>3. SSH 执行资源</h2><button type="button" onClick={() => onManagePool()}>管理 SSH 资源池</button></div>
     {resources.loading ? <p role="status">正在加载 SSH 节点…</p> : resources.error ? <div className="inline"><p role="alert">{resources.error}</p><button onClick={resources.retry}>重新加载</button></div> : !resources.rows.length ? <div className="notice"><p>资源池暂无可用的 SSH 节点。</p><button type="button" onClick={() => onManagePool(true)}>添加 SSH 节点</button></div> : <ResourceMultiSelect hosts={hosts} showChips={!preflight || (checking && !result?.preflight_progress && !checks.length)} value={resourceIds} onChange={ids => { manualNodeSelection.current = true; setResourceIds(ids); setResource(ids[0] || ""); }} />}
     <div className="planning-actions">
-      <button disabled={busy || !ready || checking} onClick={() => setCheckRequest(n => n + 1)}>{checking ? "正在检查…" : preflight || checkExpired ? "重新检查" : "环境检查"}</button>
+      <button disabled={busy || !ready || checking} onClick={() => { requestedCheck.current = preflightFingerprint; setCheckRequest(n => n + 1); }}>{checking ? "正在检查…" : preflight || checkExpired || checkError ? "重新检查" : "环境检查"}</button>
       <p className="muted">仅检查环境，不发起测评。</p>
     </div>
     {preflight && <PreflightNodes hosts={hosts} selectedIds={resourceIds} datasets={enabled} job={preflight} />}
@@ -388,7 +539,7 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
       <section className="strategy-card strategy-datasets" aria-label="数据集执行设置">
         <div className="strategy-card-heading"><h3>数据集之间</h3><span>已选 {enabled.length} 个数据集</span></div>
         <div className="strategy-controls">
-          <div><span className="strategy-field-label">执行方式</span><StrategyChoice label="数据集执行策略" parallel={parallel > 1} disabled={enabled.length < 2} onChange={value => setParallel(value ? maxParallel : 1)} /></div>
+          <div><span className="strategy-field-label">执行方式</span><StrategyChoice label="数据集执行策略" parallel={parallel > 1} disabled={enabled.length < 2} onChange={value => setParallel(value ? Math.min(2, maxParallel) : 1)} /></div>
           <label>同时运行的数据集上限
             <select aria-label="数据集同时运行数" value={parallel} disabled={parallel === 1} onChange={e => setParallel(Number(e.target.value))}>
               {parallel === 1 ? <option value={1}>1 个</option> : Array.from({ length: maxParallel - 1 }, (_, index) => index + 2).map(count =>
@@ -455,7 +606,7 @@ export function TaskPlanning({ poolRevision, onManagePool }: { poolRevision: num
       <div><dt>数据集并行</dt><dd>{enabled.length ? `最多 ${parallel} 个` : "待选择"}</dd></div>
       {payload.tasks.length > 0 && <div><dt>样本并行</dt><dd>{payload.tasks.map(({ dataset }) => `${dataset} ${currentConcurrency(dataset)}`).join(" · ")}</dd></div>}
       <div><dt>环境检查</dt><dd className="preflight-summary">
-        <span role="status" className={`preflight-status ${preflight ? preflightTone : "idle"}`}>
+        <span role="status" className={`preflight-status ${checkError ? "blocked" : preflight ? preflightTone : "idle"}`}>
           {preflight?.state === "completed" && result?.execution_ready && checks.length ? `${passedCount}/${enabled.length} 通过` : preflightLabel}
         </span>
         {checking && preflight && <ElapsedTime key={preflight.id} label="环境检查已耗时" startedAt={preflight.created_at} />}

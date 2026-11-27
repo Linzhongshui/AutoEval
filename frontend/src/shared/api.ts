@@ -34,7 +34,7 @@ export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> 
   return (await apiGetPage<T>(path, signal)).data;
 }
 
-type Page<T> = { data: T; next_offset: number | null; total?: number | null; statistics?: TaskStatistics };
+type Page<T> = { data: T; next_offset: number | null; total?: number | null; statistics?: TaskStatistics; filters?: components["schemas"]["ReportFilters"] };
 // Share only in-flight reads. Completed responses are never cached, so polling and
 // reads after a mutation remain fresh. Caller-owned abort signals stay isolated.
 const pendingReads = new Map<string, Promise<Page<unknown>>>();
@@ -47,7 +47,7 @@ export async function apiGetPage<T>(path: string, signal?: AbortSignal): Promise
     });
     if (!response.ok) throw await readError(response);
     const body = await response.json();
-    return { data: body.data as T, next_offset: body.next_offset ?? null, total: body.total ?? null, statistics: body.statistics };
+    return { data: body.data as T, next_offset: body.next_offset ?? null, total: body.total ?? null, statistics: body.statistics, filters: body.filters };
   })();
   if (signal) return request;
   pendingReads.set(path, request);
@@ -107,6 +107,8 @@ export async function apiPostBlob(
 
 export interface BackendCapabilities {
   workspace_mode: "single";
+  executor_files_enabled?: boolean;
+  data_workbench_enabled?: boolean;
   subject: string;
   evaluation_enabled: boolean;
   analysis_enabled: boolean;

@@ -694,8 +694,6 @@ def execute(folder, spec):
         output.mkdir(exist_ok=True)
         config["params"]["work_dir"] = str(output)
         config_path = private / "private-config.json"
-        config_path.write_text(json.dumps(config))
-        config_path.chmod(0o600)
         command = ["autoeval-adaptor", "--config", str(config_path)]
         runtime = spec["compilation"].get("runtime_config", {})
         if set(runtime) - {"execution", "datasets_dir", "container_name"}:
@@ -730,6 +728,24 @@ def execute(folder, spec):
                     f"    install(GenInferencer, {str(folder / 'sample-dispatch')!r}, {contract!r})\n"
                 )
         if config.get("subcommand") == "harbor_agent":
+            params = config["params"]
+            if (
+                params.get("agent_name") == "mini-swe-agent"
+                and not params.get("agent_import_path")
+                and params.get("dataset_abbr") == "harbor_deepswe-v1.1"
+                and params.get("api_base")
+            ):
+                # Harbor also consumes the model name before constructing the installed agent.
+                if params.get("model_names"):
+                    params["model_names"] = [
+                        f"openai/{name}" if name and "/" not in name else name
+                        for name in params["model_names"]
+                    ]
+                environment["LITELLM_LOCAL_MODEL_COST_MAP"] = "True"
+                params["agent_env"] = {
+                    **(params.get("agent_env") or {}),
+                    "LITELLM_LOCAL_MODEL_COST_MAP": "True",
+                }
             harbor_contract = spec.get("harbor_dispatch_contract")
             if harbor_contract:
                 with (compatibility / "sitecustomize.py").open("a", encoding="utf-8") as stream:
@@ -755,7 +771,9 @@ def execute(folder, spec):
             if config.get("subcommand") == "harbor_agent":
                 agent_env = config["params"].setdefault("agent_env", {})
                 agent_env["NO_PROXY"] = agent_env["no_proxy"] = bypass
-                config_path.write_text(json.dumps(config))
+        with config_path.open("w", encoding="utf-8") as stream:
+            config_path.chmod(0o600)
+            json.dump(config, stream)
         environment["PYTHONPATH"] = (
             os.pathsep.join(
                 [str(compatibility), str(Path(__file__).parent), environment.get("PYTHONPATH", "")]
